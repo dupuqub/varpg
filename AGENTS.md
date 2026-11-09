@@ -66,7 +66,7 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 
 The user wants the smallest possible state. The state is a **photo** of how the game is now, not of what is done in it.
 
-- **Definitions (the "db"):** what the game *is*, and it never changes during a run. For each actor type: the fixed values (base speed, radius, max health, ...) and its **initial state**, the complete state of a new actor of that type. `createActor` only copies it, so no number about how an actor is born is hidden in code. It lives in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. A type without `move` in its initial state is static, like a trap. Implemented for the player.
+- **Definitions (the "db", now to be called the **library**, see "The library" below):** what the game *is*, and it never changes during a run. For each actor type: the fixed values (base speed, radius, max health, ...) and its **initial state**, the complete state of a new actor of that type. `createActor` only copies it, so no number about how an actor is born is hidden in code. It lives in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. A type without `move` in its initial state is static, like a trap. Implemented for the player.
 - **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition; if the player chose it before the run, it is the build.
 - **Build:** what the player chose for this run (allocated skill tree, equipped mecha parts). It is an **input** of the run, like the seed and the map, not a state: it does not evolve. It is kept with the run, not in the snaps. Only the avatar has a build; other actors read their definition directly. Implemented as an **empty** object: `createRun(id)` returns `{ id, build: {} }`, and nothing reads the build yet. (The agent first called this a "pre-run state" and proposed an avatar "already prepared" with the build applied. The user found it confusing and it was dropped: nothing is pre-resolved.)
 - **Effects: recipe versus result.** Take a torso that gives +1 armor per enemy within radius X. What it does (the recipe) is in the definitions, in the part. Whether the player uses it is in the build. How much armor it gives *now* is **not stored**: a function like `finalSpeed` (for example `finalArmor(actor)`) computes it every frame from the recipe, the build and the state (the enemy positions). Only something with memory goes into the state, such as "this buff lasts 3 more seconds". The terms of `(X + Y + Z) * W` in the damage trace each come from one part of the build.
@@ -74,6 +74,27 @@ The user wants the smallest possible state. The state is a **photo** of how the 
 - **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
 - The state carries the **version of the definitions** it was made with (`state.definitionsVersion`, from `DEFINITIONS_VERSION`, a number raised by hand on any change; nothing refuses a mismatched state yet), so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
 - **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale). Implemented: for now it only returns the base speed. When buffs arrive it will probably return the value and the steps of the calculation, which the audit page will want.
+
+### The library (names agreed with the user)
+
+The "db" is called the **library**, because it must be modular: content that comes from the base game, a DLC or an update has to plug in.
+
+```
+library
+  └─ shelf   one per pack: master (the base game), dlc1, ...
+       └─ book   one per kind of content: monsters, heroes, skills, parts, ...
+            └─ entry   goblin, a fire skill, a torso, ...
+```
+
+- A **shelf** is a pack. A DLC is a new shelf with its own books, and it does not touch `master`.
+- A **book** is a kind of content. Heroes and monsters are both actors, so their books use the same actor structure, in separate books.
+- The address of an entry is `shelf:book:entry`, for example `master:monsters:goblin`. Two packs can both have a goblin without a clash. Snaps and runs store this address.
+- "All the monsters of the game" are the `monsters` book of every shelf. The library does that lookup and joins them when it loads, so the rest of the code does not need to know.
+- The version is **per shelf** (not one number for the whole game). A snap made with a pack that is not installed must be refused with a clear message.
+- The library is deep-frozen **once**, after all shelves are joined.
+- Effects from pack content (for example a torso recipe) must be **data the game understands**, not loose code from the pack. With code, determinism and the synergy tests would be much harder to guarantee.
+- The user asked for `master` for the base shelf. The agent only noted that some people avoid that word in software.
+- **Not implemented yet.** The code still has a single flat object, `DEFINITIONS`, in `src/data.js`, with `actor.type` as a plain id (`"player"`) and `DEFINITIONS_VERSION` as a single number. Moving it to library, shelves and books (and `actor.type` to a full address) is a separate step.
 
 ### Run history (two logs)
 
@@ -192,6 +213,7 @@ They only become decisions when the user approves.
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
 - Where the dynamic speed comes from (the base value and the buffs).
+- Move `src/data.js` to the library structure (shelves, books, addresses, version per shelf). See "The library".
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
