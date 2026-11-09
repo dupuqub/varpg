@@ -21,12 +21,14 @@ function draw(context, state) {
 
   drawCollisionWindow(context, state.grid);
 
+  const radius = definitionOf(player).radius;
+
   context.fillStyle = PLAYER_COLOR;
   context.beginPath();
-  context.arc(width / 2, height / 2, player.radius, 0, Math.PI * 2);
+  context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
 
-  drawAimArrow(context, player.radius, player.aim);
+  drawAimArrow(context, radius, player.aim);
 }
 
 // Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.

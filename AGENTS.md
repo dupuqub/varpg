@@ -60,31 +60,29 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 - Physics is calculated once per frame: **one step per displayed frame**. Steps are never skipped and frames that are not shown are not calculated ("calculate and show, always"). If the machine cannot keep 60 fps, the game runs in slow motion.
 - **The game state is a single JSON object.**
 - **Frame debug:** be able to pause and have a button that advances one frame at a time, to understand what happens at each moment.
-- **Per-frame report (PARKED: the user dropped it for now; it was not specific enough. Damage is explained by the damage trace instead, see "Damage formula"):** a step is an ordered collection of functions, and information between frames does not always show *when* inside the frame something happened. So every frame generates a report with everything that happened, in order. The report is plain text: each thing that happens writes into it. There will be no internal intra-pause or intra-play tools: debugging uses only normal play and frame by frame.
+- There are no internal intra-pause or intra-play tools: debugging uses only normal play and frame by frame.
 
 ### State, definitions and rules
 
 The user wants the smallest possible state. The state is a **photo** of how the game is now, not of what is done in it.
 
-- **Definitions (the "db"):** values that never change during a run, such as the base speed of an actor type, its radius and its max health. They live in a read-only file, planned as `src/data.js` with a plain object (for example `const DEFINITIONS = {...}`), loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (for example `type: "player"`).
+- **Definitions (the "db"):** values that never change during a run, such as the base speed of an actor type, its radius and its max health. They live in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. An actor type without `baseSpeed` is static: it gets no `move`. Implemented for the player (name, max health, attack, defense, radius, base speed).
 - **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition.
 - **Run config:** a third kind of data, between definitions and state: what is chosen **before** the run and does not change during it, such as the player's build (allocated skill tree, equipped mecha parts). It is kept with the run (like the seed), not in the snaps, so a snap only carries what changes (current health, cooldowns, active buffs). Agreed with the user. Agent's warning: do not store derived values (such as `finalSpeed` or total damage) in actors for convenience, and keep an eye on lists of active effects (buffs, poison, slow), which are the fields that grow the most.
 - **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
-- The state carries the **version of the definitions** it was made with, so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
-- **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale); the per-frame report will record the value used and the steps of its calculation. Agreed with the user, **not implemented yet** (the code still uses `move.speed`).
+- The state carries the **version of the definitions** it was made with (`state.definitionsVersion`, from `DEFINITIONS_VERSION`, a number raised by hand on any change; nothing refuses a mismatched state yet), so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
+- **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale). Implemented: for now it only returns the base speed. When buffs arrive it will probably return the value and the steps of the calculation, which the audit page will want.
 
 ### Run history (two logs)
 
 Agreed with the user, **not implemented yet**.
 
-- **The per-frame report is parked (the user's decision).** Everything below that mentions reports is on hold. Snaps keep the `run + frame` key, so a report (or anything else tied to a frame) can be added later.
 - **Vocabulary:** a **snap** is a saved copy of the state at one frame (the user's word, because "json" is the file type used for many other things). "State" is the live one.
-- **Reports are stored too, outside the state** (the state is a photo; the report is what happened, so it does not go inside it). Each frame has one snap and one report, in two separate collections, and both carry the same **key** `run + frame`. The shared key links them in both directions without two pointers that could disagree. The snap only gains a `run` field (it already has `frame`). The frame number alone is not enough once a snap is exported to disk, because two runs both have a "frame 300". The goal is being able to open "that report of that snap 30 frames ago".
-- Agent's defaults, not yet confirmed: reports use the same 100-frame window as snaps (when a snap leaves, its report leaves), and going back and pressing play discards snaps, reports and inputs after that frame together.
+- Each snap carries `run` and `frame`, so a snap exported to disk can be identified (two runs both have a "frame 300").
+- Agent's default, not yet confirmed: going back and pressing play discards the snaps and inputs after that frame together.
 - The game keeps the **last 100 snaps** and the **last 100 inputs**, in two lists where index 0 is the oldest. Every step appends the new state and input, and if there are more than 100, the oldest (index 0) is removed.
 - **Cross-check:** take the oldest saved state, apply the saved inputs with `step`, and compare each result with the saved state of the same frame. A mismatch points to the exact frame and field (for example `actors[3].position.x`: expected 120.5, got 120.6) and means something is not deterministic. Run it continuously (for example every 100 frames), not only at the end.
 - It proves **consistency**, not **correctness**: a wrong rule replays equally wrong. Correctness is the job of the synergy tests and the damage audit page.
-- (On hold with the report.) The replay also regenerates the reports, so the cross-check can compare **report against report** too: the text differs on a single line, which shows which event changed.
 - No hashes: with full states the comparison is state against state, and the states stay readable JSON.
 - **Going back while paused:** the user can walk back through the 100 saved frames (about 1.7 s). Pressing play on a past frame discards the states **and inputs** after it, and the run continues from there with new inputs. Going back must load a **copy** of the saved state, because `step` changes the state in place.
 
@@ -134,7 +132,7 @@ HEALTH = HEALTH - DAMAGE
 - The first case to simulate is a hit without a weapon, with no buffs of any kind.
 - ATTACK and DEFENSE are not defined yet (what they are, where they come from).
 - The formula will be developed little by little, one piece at a time.
-- **Damage trace (the user's requirement):** any change to health must be explainable. The damage value is shown as a formula such as `(X + Y + Z) * W`, and every term says where it came from (which skill, part or buff). This is the way to know *why* health changed, and it replaces the per-frame report for that purpose. It feeds the damage audit page. The structure of the trace is not defined yet (see the "damage pipeline with recorded stages" idea).
+- **Damage trace (the user's requirement):** any change to health must be explainable. The damage value is shown as a formula such as `(X + Y + Z) * W`, and every term says where it came from (which skill, part or buff). This is the way to know *why* health changed. It feeds the damage audit page. The structure of the trace is not defined yet (see the "damage pipeline with recorded stages" idea).
 
 ### Actor
 
@@ -142,30 +140,33 @@ An actor is any entity that can act in combat. It includes traps, which are stat
 
 Format (provisional, it will change, for example once the mecha parts are defined):
 
+Format of an actor **in the state** (provisional, it will change, for example once the mecha parts are defined). It only holds what changes. The fixed values come from the definitions by `type`:
+
 ```json
 {
   "id": "player_1",
-  "name": "Player",
-  "health": { "current": 100, "max": 100 },
-  "attack": 10,
-  "defense": 3,
+  "type": "player",
+  "health": { "current": 100 },
   "position": { "x": 0, "y": 0 },
-  "radius": 16,
-  "move": {
-    "speed": 3,
-    "direction": { "x": 0, "y": 0 }
-  },
   "aim": { "x": 1, "y": 0 },
-  "cell": { "x": 0, "y": 0 }
+  "cell": { "x": 0, "y": 0 },
+  "move": { "direction": { "x": 0, "y": 0 } }
 }
 ```
 
-Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `speed` is in pixels per frame. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid").
+Its definition, in `src/data.js`:
+
+```js
+player: { name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3 }
+```
+
+Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is in pixels per frame, and the speed used in a frame comes from `finalSpeed(actor)`. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid").
 
 ## Code layout
 
 - `index.html`, `style.css`: the screens.
-- `src/sim.js`: the rules. No DOM access. `createChamber1State()`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen.
+- `src/sim.js`: the rules. No DOM access. `createChamber1State()`, `createActor`, `definitionOf`, `finalSpeed`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
 - `src/render.js`: draws the state (reference grid, collision window overlay, player and aim arrow). It never changes it.
 - `src/main.js`: screen navigation and the Chamber 1 loop.
@@ -177,9 +178,7 @@ They only become decisions when the user approves.
 
 - **Damage pipeline with recorded stages:** each stage notes what it did. It serves the audit page and testing synergies.
 - **Step as a list of named phases**, for example: inputs, spawn, movement, collision, damage, remove the dead. No phase calls another, and the order is written in one place only.
-- **(Parked with the report.) Content of the frame report:** one line of text per event, in the order it happens, in a regular and readable format. Each line carries the frame number, the actors involved and the values before and after (for example, health 100 to 93), so the state can be rebuilt at any point of the frame. Damage lines carry the full calculation, which feeds the damage audit page. A strict format lets code read the report later: one line per event (no line breaks), the event type right at the start, the frame number on every line and stable ids for actors, so it can be filtered with text tools such as `grep`.
-- **(Parked with the report.) The report is only written, never read by the simulation.** A test can check that the final state is identical with the report on or off. If generating a report every frame gets heavy, this allows turning it off without changing the run.
-- **The text report is for humans and agents to debug; for machine learning, the source is the collection of states (the user's decision).** The JSON state is already structured. Agent proposal: a separate export module that only reads the state and produces numeric data (for example, a CSV with one row per actor per frame: frame, id, position, health and so on, or a fixed-size numeric vector), and that, like the report, never changes the simulation. Values ML will want (damage dealt in the frame, kills) should be numeric counters in the state, instead of having to be extracted from text. The reward definition and the observation format are left for when ML enters the project.
+- **Machine learning:** the source is the collection of snaps (the user's decision). The JSON state is already structured. Agent proposal: a separate export module that only reads the state and produces numeric data (for example, a CSV with one row per actor per frame: frame, id, position, health and so on, or a fixed-size numeric vector), and that never changes the simulation. Values ML will want (damage dealt in the frame, kills) should be numeric counters in the state, instead of having to be extracted from text. The reward definition and the observation format are left for when ML enters the project.
 - **Practical requirements for determinism:** a pseudo-random generator with its seed stored in the state (`Math.random` cannot be seeded); no `Date.now` or `performance.now` inside the simulation; actors always processed in a fixed order; avoid `Math.sin`, `Math.cos` and `Math.pow` if replays must match across different browsers; state without `NaN`, `Infinity` or `undefined` (JSON cannot represent them).
 - **One run = seed + map + inputs per frame.** A test can play the same run twice and compare the final states.
 
@@ -188,11 +187,11 @@ They only become decisions when the user approves.
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
 - Where the dynamic speed comes from (the base value and the buffs).
-- Apply `baseSpeed` / `finalSpeed`, the definitions file and the 100-frame history in code (decided, see "State, definitions and rules" and "Run history"). The user has not asked for the code yet.
+- The 100-frame history in code (decided, see "Run history"). Not implemented. `baseSpeed`, `finalSpeed` and the definitions file already are.
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
-- Next steps suggested by the agent: pause and advance one frame (the per-frame report is parked).
+- Next steps suggested by the agent: pause and advance one frame.
 - Folder structure beyond what already exists.
 
 ## How to run

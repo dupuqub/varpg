@@ -4,11 +4,50 @@
 
 const PLAYER_ID = "player_1";
 
+// The fixed values of an actor (radius, base speed, ...) live in DEFINITIONS
+// (src/data.js). The actor only keeps its type, and what changes.
+function definitionOf(actor) {
+  const definition = DEFINITIONS.actors[actor.type];
+  if (!definition) throw new Error("Unknown actor type: " + actor.type);
+  return definition;
+}
+
+// A new actor, standing at the center of the world. It only holds what changes
+// during a run. An actor type without baseSpeed is static: it gets no "move".
+function createActor(id, type) {
+  const definition = DEFINITIONS.actors[type];
+  if (!definition) throw new Error("Unknown actor type: " + type);
+
+  const actor = {
+    id,
+    type,
+    health: { current: definition.maxHealth },
+    position: { x: 0, y: 0 },
+    aim: { x: 1, y: 0 }, // vector with length 1
+    cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
+  };
+  if (definition.baseSpeed !== undefined) {
+    actor.move = { direction: { x: 0, y: 0 } }; // vector with length 0 to 1
+  }
+  return actor;
+}
+
+// The speed an actor uses in the current frame, in pixels per frame.
+// It is a function, not a stored value, so buffs, mecha parts, etc. can be
+// applied here, in order, later. For now it is only the base speed.
+// It must stay pure: the result depends only on the actor and the definitions.
+function finalSpeed(actor) {
+  return definitionOf(actor).baseSpeed;
+}
+
 // Initial state of Chamber 1: only the player, standing at the center of the world.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 function createChamber1State() {
   const state = {
     frame: 0,
+
+    // Version of the definitions this state was made with (see src/data.js).
+    definitionsVersion: DEFINITIONS_VERSION,
 
     // Collision grid. These are dev settings. They live in the state so a run
     // can be reproduced exactly, and so they can be changed in one place.
@@ -20,23 +59,7 @@ function createChamber1State() {
     //   Collision is only tested inside this window.
     grid: { cellSize: 64, windowSize: 3 },
 
-    actors: [
-      {
-        id: PLAYER_ID,
-        name: "Player",
-        health: { current: 100, max: 100 },
-        attack: 10,
-        defense: 3,
-        position: { x: 0, y: 0 },
-        radius: 16,
-        move: {
-          speed: 3, // pixels per frame (3 x 60 = 180 pixels per second)
-          direction: { x: 0, y: 0 }, // vector with length 0 to 1
-        },
-        aim: { x: 1, y: 0 }, // vector with length 1
-        cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
-      },
-    ],
+    actors: [createActor(PLAYER_ID, "player")],
   };
 
   assertValidGrid(state.grid);
@@ -78,11 +101,12 @@ function step(state, input) {
   player.aim.y = input.aim.y;
 
   // 2. Movement: every actor that has "move" walks, in list order.
-  // Speed is read every frame, because it can change from one frame to the next.
+  // The speed is asked every frame, because it can change from one frame to the next.
   for (const actor of state.actors) {
     if (!actor.move) continue;
-    actor.position.x += actor.move.direction.x * actor.move.speed;
-    actor.position.y += actor.move.direction.y * actor.move.speed;
+    const speed = finalSpeed(actor);
+    actor.position.x += actor.move.direction.x * speed;
+    actor.position.y += actor.move.direction.y * speed;
   }
 
   // 3. Cells: where every actor is, relative to the player.
