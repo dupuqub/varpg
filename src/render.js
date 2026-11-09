@@ -65,11 +65,13 @@ function drawCollisionWindow(context, grid) {
   const centerX = context.canvas.width / 2;
   const centerY = context.canvas.height / 2;
   const half = grid.cellSize / 2;
-  const reach = (grid.windowSize - 1) / 2;
+  const reachX = (grid.windowWidth - 1) / 2;
+  const reachY = (grid.windowHeight - 1) / 2;
 
-  const left = Math.round(centerX - half - reach * grid.cellSize);
-  const top = Math.round(centerY - half - reach * grid.cellSize);
-  const side = grid.windowSize * grid.cellSize;
+  const left = Math.round(centerX - half - reachX * grid.cellSize);
+  const top = Math.round(centerY - half - reachY * grid.cellSize);
+  const width = grid.windowWidth * grid.cellSize;
+  const height = grid.windowHeight * grid.cellSize;
 
   // Tint the center cell (the one the player is in).
   context.fillStyle = WINDOW_CENTER_COLOR;
@@ -78,12 +80,15 @@ function drawCollisionWindow(context, grid) {
   context.strokeStyle = WINDOW_LINE_COLOR;
   context.lineWidth = 1;
   context.beginPath();
-  for (let i = 0; i <= grid.windowSize; i++) {
+  for (let i = 0; i <= grid.windowWidth; i++) {
     const offset = Math.round(i * grid.cellSize) + 0.5;
     context.moveTo(left + offset, top);
-    context.lineTo(left + offset, top + side);
+    context.lineTo(left + offset, top + height);
+  }
+  for (let i = 0; i <= grid.windowHeight; i++) {
+    const offset = Math.round(i * grid.cellSize) + 0.5;
     context.moveTo(left, top + offset);
-    context.lineTo(left + side, top + offset);
+    context.lineTo(left + width, top + offset);
   }
   context.stroke();
 }

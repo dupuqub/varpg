@@ -80,8 +80,11 @@ textarea {
   resize: vertical;
 }
 
+/* The canvas is 1920 x 1080 inside. On a smaller window it is shown smaller,
+   keeping its shape, and it never grows taller than the window. */
 canvas {
   max-width: 100%;
+  max-height: calc(100vh - 220px);
   height: auto;
   background: #000;
   border: 1px solid var(--fg);

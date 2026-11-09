@@ -57,10 +57,17 @@ function createChamber1State(runId = 1) {
     // - cellSize: side of a cell, in pixels. It must be at least
     //   2 x (largest radius + largest speed). Then two actors that can touch
     //   in one frame are always in the same cell or in adjacent cells.
-    // - windowSize: cells per side of the square window around the player.
-    //   Odd, 3 or more (3, 5, ... 11, ...). The player is in the center cell.
-    //   Collision is only tested inside this window.
-    grid: { cellSize: 64, windowSize: 3 },
+    // - windowWidth, windowHeight: cells across and down in the window around
+    //   the player. Each is odd, 3 or more. The player is in the center cell.
+    //   Collision is only tested inside this window, so it must cover all the
+    //   ground where an actor can be, and some actors are off screen. The
+    //   window is twice the screen (1920 x 1080), so 3840 x 2160 pixels: half
+    //   of it is 1920 x 1080, and the center cell already covers 32. So 30 cells
+    //   on each side across (61 columns) and 17 up and down (35 rows).
+    //   How far outside the screen actors can be is not decided yet (it depends
+    //   on where they spawn). A bigger window costs almost nothing: what costs
+    //   is the number of actors tested, not the area.
+    grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
     actors: [createActor(PLAYER_ID, "player")],
   };
@@ -74,8 +81,11 @@ function assertValidGrid(grid) {
   if (!(grid.cellSize > 0)) {
     throw new Error("grid.cellSize must be greater than 0");
   }
-  if (!Number.isInteger(grid.windowSize) || grid.windowSize < 3 || grid.windowSize % 2 === 0) {
-    throw new Error("grid.windowSize must be an odd integer, 3 or more");
+  for (const name of ["windowWidth", "windowHeight"]) {
+    const cells = grid[name];
+    if (!Number.isInteger(cells) || cells < 3 || cells % 2 === 0) {
+      throw new Error("grid." + name + " must be an odd integer, 3 or more");
+    }
   }
 }
 
@@ -88,8 +98,9 @@ function cellIndex(offset, cellSize) {
 
 // True if the cell is inside the window around the player.
 function isInWindow(grid, cell) {
-  const reach = (grid.windowSize - 1) / 2;
-  return Math.abs(cell.x) <= reach && Math.abs(cell.y) <= reach;
+  const reachX = (grid.windowWidth - 1) / 2;
+  const reachY = (grid.windowHeight - 1) / 2;
+  return Math.abs(cell.x) <= reachX && Math.abs(cell.y) <= reachY;
 }
 
 // Advances the state by one frame. Changes the state in place.

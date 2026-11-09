@@ -115,6 +115,7 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 The user approved this and noted that everything may change.
 
+- The canvas is **1920 x 1080** (the user's requirement), and world units are canvas pixels. When the browser window is smaller, CSS shows the canvas smaller, keeping its shape (it never grows taller than the window), and the mouse position is scaled back to canvas pixels. At 1:1 it needs a full 1080-pixel-tall window.
 - The player is always at the center of the screen (the camera follows the player).
 - Move with WASD or the left analog stick. Aim with the mouse or the right analog stick.
 - The player is drawn as a white circle plus a minimal arrow showing where it looks.
@@ -136,14 +137,15 @@ The user approved this and noted that everything may change.
 ### Collision grid
 
 - Collision is only tested inside a **window** of cells around the avatar. Nothing outside the window needs a collision test (the user's decision).
-- The window is `windowSize` x `windowSize` cells: odd, at least 3x3, and it can grow (for example 11x11), with the avatar in the center cell.
-- Cell size and window size are **dev settings**, kept in `state.grid` (`cellSize`, `windowSize`) so a run is reproducible. Do not hard-code them elsewhere. Current values: 64 and 3.
+- The cells come out of the avatar (the avatar is in the center cell), but the window must cover **all the ground where an actor can be**, including actors that are off screen (the user's requirement: at least twice the screen). It is a rectangle: `windowWidth` x `windowHeight` cells, each odd and at least 3.
+- Current window: **61 x 35** cells of 64 px, which is 3904 x 2240 px, a little more than twice the 1920 x 1080 screen. How far outside the screen actors can be depends on where they spawn, which is not decided, so the size is a dev setting to adjust. Agent's note: a bigger window costs almost nothing, because what costs is the number of actors tested, not the area; too small a window makes actors overlap; so err on the larger side.
+- Cell size and window size are **dev settings**, kept in `state.grid` (`cellSize`, `windowWidth`, `windowHeight`) so a run is reproducible. Do not hard-code them elsewhere. Current values: 64, 61 and 35.
 - Every actor **stores its cell** in `actor.cell` (`{ x, y }`), recalculated every frame, after movement.
 - Agent's choices, not yet confirmed by the user:
   - Cells are counted **relative to the avatar**. The avatar is always in cell `{ 0, 0 }`, and that cell covers `-cellSize / 2` up to `+cellSize / 2` around it. So the window stays fixed on screen while the world moves under it.
   - `cell` is always a pair of integers, even outside the window. `isInWindow(grid, cell)` says whether it is inside.
   - `cellSize` must be at least 2 x (largest radius + largest speed). Then two actors that can touch in a frame are in the same cell or in adjacent cells, so checking the 3x3 block around an actor is enough. Speed is dynamic, so this must be rechecked when speeds change. The code does not enforce it yet.
-- Side effect to know: actors outside the window do not collide at all. If the window is smaller than the screen, actors near the screen edges can overlap each other until they enter the window.
+- Side effect to know: actors outside the window do not collide at all. If the window were smaller than the area where actors live, they could overlap each other until they enter the window.
 - Collision itself is not implemented yet. Chamber 1 draws the window as an amber overlay fixed on the player. The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated.
 
 ### Damage formula (initial version, no buffs)
@@ -218,7 +220,6 @@ They only become decisions when the user approves.
 - Where the dynamic speed comes from (the base value and the buffs).
 - Move `src/data.js` to the library structure (shelves, books, addresses, version per shelf). See "The library".
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
-- Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
 - Next steps suggested by the agent: pause, advance one frame and go back (the history already exists, there are no buttons yet); running the cross-check automatically.
 - Folder structure beyond what already exists.
