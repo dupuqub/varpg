@@ -1,9 +1,11 @@
 // Rendering: turns the state into an image. It only reads the state, never changes it.
 // The camera is always on the player, who stays at the center of the canvas.
 
-const GRID_CELL = 64;
-const GRID_COLOR = "#1d232b";
+const REFERENCE_GRID_CELL = 64;
+const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
+const WINDOW_LINE_COLOR = "rgba(201, 162, 74, 0.5)";
+const WINDOW_CENTER_COLOR = "rgba(201, 162, 74, 0.15)";
 
 function draw(context, state) {
   const { width, height } = context.canvas;
@@ -13,8 +15,11 @@ function draw(context, state) {
   context.fillRect(0, 0, width, height);
 
   // Without something fixed on the ground you cannot tell that the player is
-  // moving, because it is the world that moves on screen. The grid is a reference.
-  drawGrid(context, player.position.x, player.position.y);
+  // moving, because it is the world that moves on screen. This grid is only
+  // a reference for that. It has nothing to do with the collision grid.
+  drawReferenceGrid(context, player.position.x, player.position.y);
+
+  drawCollisionWindow(context, state.grid);
 
   context.fillStyle = PLAYER_COLOR;
   context.beginPath();
@@ -24,30 +29,60 @@ function draw(context, state) {
   drawAimArrow(context, player.radius, player.aim);
 }
 
-// Lines every GRID_CELL world pixels, shifted by the camera position.
-function drawGrid(context, cameraX, cameraY) {
+// Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.
+function drawReferenceGrid(context, cameraX, cameraY) {
   const { width, height } = context.canvas;
   const left = cameraX - width / 2; // world x at the left edge of the screen
   const top = cameraY - height / 2; // world y at the top edge of the screen
 
-  context.strokeStyle = GRID_COLOR;
+  context.strokeStyle = REFERENCE_GRID_COLOR;
   context.lineWidth = 1;
   context.beginPath();
 
-  const firstX = Math.floor(left / GRID_CELL) * GRID_CELL;
-  for (let worldX = firstX; worldX <= left + width; worldX += GRID_CELL) {
+  const firstX = Math.floor(left / REFERENCE_GRID_CELL) * REFERENCE_GRID_CELL;
+  for (let worldX = firstX; worldX <= left + width; worldX += REFERENCE_GRID_CELL) {
     const screenX = Math.round(worldX - left) + 0.5; // +0.5 keeps the line crisp
     context.moveTo(screenX, 0);
     context.lineTo(screenX, height);
   }
 
-  const firstY = Math.floor(top / GRID_CELL) * GRID_CELL;
-  for (let worldY = firstY; worldY <= top + height; worldY += GRID_CELL) {
+  const firstY = Math.floor(top / REFERENCE_GRID_CELL) * REFERENCE_GRID_CELL;
+  for (let worldY = firstY; worldY <= top + height; worldY += REFERENCE_GRID_CELL) {
     const screenY = Math.round(worldY - top) + 0.5;
     context.moveTo(0, screenY);
     context.lineTo(width, screenY);
   }
 
+  context.stroke();
+}
+
+// The collision window: the cells around the player where collision is tested.
+// The player is at the center of the center cell, so the window stays fixed on
+// screen while the world moves under it.
+function drawCollisionWindow(context, grid) {
+  const centerX = context.canvas.width / 2;
+  const centerY = context.canvas.height / 2;
+  const half = grid.cellSize / 2;
+  const reach = (grid.windowSize - 1) / 2;
+
+  const left = Math.round(centerX - half - reach * grid.cellSize);
+  const top = Math.round(centerY - half - reach * grid.cellSize);
+  const side = grid.windowSize * grid.cellSize;
+
+  // Tint the center cell (the one the player is in).
+  context.fillStyle = WINDOW_CENTER_COLOR;
+  context.fillRect(centerX - half, centerY - half, grid.cellSize, grid.cellSize);
+
+  context.strokeStyle = WINDOW_LINE_COLOR;
+  context.lineWidth = 1;
+  context.beginPath();
+  for (let i = 0; i <= grid.windowSize; i++) {
+    const offset = Math.round(i * grid.cellSize) + 0.5;
+    context.moveTo(left + offset, top);
+    context.lineTo(left + offset, top + side);
+    context.moveTo(left, top + offset);
+    context.lineTo(left + side, top + offset);
+  }
   context.stroke();
 }
 

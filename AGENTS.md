@@ -6,7 +6,7 @@ Guide for any agent continuing this project. Everything needed to continue shoul
 
 A 2D top-down action RPG in the vein of Diablo and Path of Exile, running in the browser. The theme is **mechas** (see Decisions).
 
-Repository state: screen navigation (main menu, test chambers list, Chamber 1) and the first movement test in Chamber 1: a player that is always at the center of the screen, moves and aims. There is no combat yet. See "Code layout".
+Repository state: screen navigation (main menu, test chambers list, Chamber 1) and the first movement test in Chamber 1: a player that is always at the center of the screen, moves and aims. The collision grid (cells and window) exists, but collision itself and combat are not implemented yet. See "Code layout".
 
 ## Concept
 
@@ -51,7 +51,7 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 
 - JavaScript, HTML and CSS for the UI; canvas 2D for sprites and tiles. The canvas only draws.
 - Maximum simplicity: no game engine or library. Plain JavaScript (the user feared TypeScript would complicate the project).
-- Own simple collision: every actor is a circle; scenery uses rectangles.
+- Own simple collision: absolutely everything is a circle for collision. There are no walls. If scenery is ever needed, it is made of static circle actors.
 
 ### Simulation
 
@@ -82,7 +82,20 @@ The user approved this and noted that everything may change.
 - Every X time, Y spawn. For each map, exactly what appears and when is known in advance.
 - At first, all actors want to attack the player.
 - An actor that leaves the screen reappears on the opposite side. So there is a limited number of actors always present, almost all on screen.
-- No spatial grid for now. If the FPS drops too much, divide the environment into a grid relative to the center (the player).
+- Where collision is tested is limited by the collision grid (see "Collision grid").
+
+### Collision grid
+
+- Collision is only tested inside a **window** of cells around the avatar. Nothing outside the window needs a collision test (the user's decision).
+- The window is `windowSize` x `windowSize` cells: odd, at least 3x3, and it can grow (for example 11x11), with the avatar in the center cell.
+- Cell size and window size are **dev settings**, kept in `state.grid` (`cellSize`, `windowSize`) so a run is reproducible. Do not hard-code them elsewhere. Current values: 64 and 3.
+- Every actor **stores its cell** in `actor.cell` (`{ x, y }`), recalculated every frame, after movement.
+- Agent's choices, not yet confirmed by the user:
+  - Cells are counted **relative to the avatar**. The avatar is always in cell `{ 0, 0 }`, and that cell covers `-cellSize / 2` up to `+cellSize / 2` around it. So the window stays fixed on screen while the world moves under it.
+  - `cell` is always a pair of integers, even outside the window. `isInWindow(grid, cell)` says whether it is inside.
+  - `cellSize` must be at least 2 x (largest radius + largest speed). Then two actors that can touch in a frame are in the same cell or in adjacent cells, so checking the 3x3 block around an actor is enough. Speed is dynamic, so this must be rechecked when speeds change. The code does not enforce it yet.
+- Side effect to know: actors outside the window do not collide at all. If the window is smaller than the screen, actors near the screen edges can overlap each other until they enter the window.
+- Collision itself is not implemented yet. Chamber 1 draws the window as an amber overlay fixed on the player. The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated.
 
 ### Damage formula (initial version, no buffs)
 
@@ -115,18 +128,19 @@ Format (provisional, it will change, for example once the mecha parts are define
     "speed": 3,
     "direction": { "x": 0, "y": 0 }
   },
-  "aim": { "x": 1, "y": 0 }
+  "aim": { "x": 1, "y": 0 },
+  "cell": { "x": 0, "y": 0 }
 }
 ```
 
-Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `speed` is in pixels per frame. `radius` exists because every actor is a circle.
+Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `speed` is in pixels per frame. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid").
 
 ## Code layout
 
 - `index.html`, `style.css`: the screens.
-- `src/sim.js`: the rules. No DOM access. `createChamber1State()` and `step(state, input)`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/sim.js`: the rules. No DOM access. `createChamber1State()`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
-- `src/render.js`: draws the state. It never changes it.
+- `src/render.js`: draws the state (reference grid, collision window overlay, player and aim arrow). It never changes it.
 - `src/main.js`: screen navigation and the Chamber 1 loop.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
@@ -149,6 +163,8 @@ They only become decisions when the user approves.
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
 - Where the dynamic speed comes from.
+- Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
+- Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
 - Next steps suggested by the agent: the per-frame report; pause and advance one frame.
 - Folder structure beyond what already exists.
