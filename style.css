@@ -25,7 +25,7 @@ body {
   gap: 16px;
 }
 
-/* Sem esta regra, o display: flex acima anularia o atributo hidden. */
+/* Without this rule, the display: flex above would override the hidden attribute. */
 .screen[hidden] {
   display: none;
 }
@@ -54,6 +54,12 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.hint {
+  margin: 0;
+  opacity: 0.6;
+  letter-spacing: 0.1em;
 }
 
 canvas {

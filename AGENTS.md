@@ -1,135 +1,169 @@
 # AGENTS.md
 
-Guia para qualquer agente que continue este projeto. Tudo o que importa para dar continuidade deve estar aqui, não em conversas.
+Guide for any agent continuing this project. Everything needed to continue should be here, not in conversations.
 
-## O que é
+## What this is
 
-Action RPG 2D top-down na linha de Diablo e Path of Exile, que roda no navegador.
+A 2D top-down action RPG in the vein of Diablo and Path of Exile, running in the browser. The theme is **mechas** (see Decisions).
 
-Estado do repositório: tem só a navegação entre telas (menu inicial, seleção de test chambers e a tela vazia da Chamber 1), em `index.html`, `style.css` e `src/main.js`. Ainda não há simulação nem jogo.
+Repository state: screen navigation (main menu, test chambers list, Chamber 1) and the first movement test in Chamber 1: a player that is always at the center of the screen, moves and aims. There is no combat yet. See "Code layout".
 
-## Conceito
+## Concept
 
-O jogo é uma crítica construtiva aos métodos de alguns jogos. Eixos, em ordem de prioridade:
+The game is a constructive critique of the methods of some games. Axes, in priority order:
 
-1. **Respeito ao tempo do jogador.**
-2. **Transparência de dados** (contra a obfuscação).
-3. **Reprodutibilidade:** uma run deve poder ser repetida de forma idêntica, inclusive para machine learning.
+1. **Respect for the player's time.**
+2. **Data transparency** (against data obfuscation).
+3. **Reproducibility:** a run must be repeatable identically, including for machine learning.
 
-O jogo é sobre **build**: skill tree massiva, mas também testar uma coisa de cada vez. A estrutura do projeto e do processo deve permitir que novas skills apareçam sem grandes problemas, com testes automatizados que garantam que as sinergias funcionam.
+The game is about **builds**: a massive skill tree, but also testing one thing at a time. The structure of the project and its process must let new skills appear without major problems, with automated tests that guarantee the synergies work.
 
-### Loop de jogo
+### Game loop
 
-Entra num mapa (estilo Vampire Survivors), roda a build, coleta recurso, sai do mapa, melhora a build, próximo mapa.
+Enter a map (Vampire Survivors style), run the build, collect resources, leave the map, improve the build, next map.
 
-### Respeito ao tempo (regras de design)
+### Respect for time (design rules)
 
-- Mapas de 10 minutos.
-- Respec da skill tree sempre gratuito, sem limite.
-- O jogador deve sempre poder pivotar de build entre runs.
+- 10-minute maps.
+- Skill tree respec is always free and unlimited.
+- The player must always be able to pivot builds between runs.
 
-### Transparência (regras de design)
+### Transparency (design rules)
 
-- Deve existir uma página que mostra detalhadamente como cada dano foi calculado: uma fórmula comentada que diz onde e quando cada buff é aplicado, e em que ordem.
-- Não é didática. É auditoria: o jogador precisa ter ciência completa do desempenho real da build, para melhorá-la com eficácia e para dar feedback sobre a lógica do jogo.
+- There must be a page that shows in detail how each hit of damage was calculated: an annotated formula that says where and when each buff is applied, and in what order.
+- It is not didactic. It is an audit: the player needs full awareness of the build's real performance, to improve it effectively and to give feedback on the game's logic.
 
-## Decisões
+## Decisions
 
-### Telas
+### Theme: mechas
 
-Mantenha tudo simples. As telas são HTML e CSS, e só uma aparece por vez.
+- The game is about mechas. Instead of armor, as in Path of Exile and Diablo, the character has parts: left arm, right arm, left leg, right leg, etc.
+- The user will provide the full list of parts later. Do not invent parts before that.
 
-- **Tela de entrada**, com 3 botões: NEW GAME, CONTINUE e TEST CHAMBERS. NEW GAME e CONTINUE ainda não fazem nada (estão desativados).
-- **TEST CHAMBERS** é outra tela, onde o usuário escolhe qual mapa de teste rodar. No futuro haverá outros testes; por ora só a **Chamber 1**, onde se testam os fundamentos de movimento etc.
+### Screens
+
+Keep everything simple. Screens are HTML and CSS, and only one is shown at a time.
+
+- **Entry screen** with 3 buttons: NEW GAME, CONTINUE and TEST CHAMBERS. NEW GAME and CONTINUE do nothing yet (they are disabled).
+- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come; for now there is only **Chamber 1**, where movement fundamentals etc. are tested.
 
 ### Stack
 
-- JavaScript, HTML e CSS para a UI; canvas 2D para sprites e tiles. O canvas só desenha.
-- Máxima simplicidade: sem engine ou biblioteca de jogo. JavaScript puro (o usuário temeu que TypeScript complicasse o projeto).
-- Colisão própria e simples: todo actor é um círculo; o cenário usa retângulos.
+- JavaScript, HTML and CSS for the UI; canvas 2D for sprites and tiles. The canvas only draws.
+- Maximum simplicity: no game engine or library. Plain JavaScript (the user feared TypeScript would complicate the project).
+- Own simple collision: every actor is a circle; scenery uses rectangles.
 
-### Simulação
+### Simulation
 
-- **Determinística:** mesmo estado inicial e mesmos inputs produzem uma run idêntica. Uma das metas é reproduzir runs para machine learning.
-- **60 steps por ciclo** (1 s no melhor caso). Todos os valores do jogo são baseados em 60 fps.
-- A física é calculada uma vez por frame: **um step por frame mostrado**. Steps nunca são pulados e frames não mostrados não são calculados ("calcula e mostra, sempre"). Se a máquina não aguenta 60 fps, o jogo roda em câmera lenta.
-- **O estado do jogo é um só, e é um JSON.**
-- **Debug de frame:** poder pausar e ter um botão que avança um frame por vez, para entender o que acontece a cada momento.
-- **Relatório por frame:** um step é uma coleção ordenada de funções, e a informação entre frames nem sempre mostra *quando* dentro do frame algo aconteceu. Por isso, cada frame gera um relatório com tudo que aconteceu, em ordem. O relatório é um texto simples (txt): cada coisa que acontece vai escrevendo nele. Não haverá ferramentas internas de intra-pause ou intra-play: o debug usa só o play normal e o frame a frame.
+- **Deterministic:** the same initial state and the same inputs produce an identical run. One of the goals is to reproduce runs for machine learning.
+- **60 steps per cycle** (1 s in the best case). All game values are based on 60 fps.
+- Physics is calculated once per frame: **one step per displayed frame**. Steps are never skipped and frames that are not shown are not calculated ("calculate and show, always"). If the machine cannot keep 60 fps, the game runs in slow motion.
+- **The game state is a single JSON object.**
+- **Frame debug:** be able to pause and have a button that advances one frame at a time, to understand what happens at each moment.
+- **Per-frame report:** a step is an ordered collection of functions, and information between frames does not always show *when* inside the frame something happened. So every frame generates a report with everything that happened, in order. The report is plain text: each thing that happens writes into it. There will be no internal intra-pause or intra-play tools: debugging uses only normal play and frame by frame.
+
+### Movement and input (first test, Chamber 1)
+
+The user approved this and noted that everything may change.
+
+- The player is always at the center of the screen (the camera follows the player).
+- Move with WASD or the left analog stick. Aim with the mouse or the right analog stick.
+- The player is drawn as a white circle plus a minimal arrow showing where it looks.
+- `move.direction` is a vector with length 0 to 1. On the keyboard, diagonals are normalized so they are not faster.
+- `aim` is a unit vector, not an angle, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
+- Movement stops instantly when input stops (no inertia for now).
+- **Speed is dynamic** (the user's requirement): the actor's current `move.speed` is stored in the actor and read again every frame. Where it comes from is not defined yet.
+- Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
+- Gamepad: the browser only exposes it after a button is pressed. Sticks have a radial dead zone of 0.15.
+- The loop in `src/main.js` runs at most one step per browser callback. On monitors above 60 Hz the extra callbacks are ignored (no step, no drawing), so the game does not speed up. On slow machines it runs in slow motion.
 
 ### Spawn
 
-- A cada X tempo, Y spawn. Cada mapa tem o que aparece e quando conhecido exatamente.
-- A princípio, todos os actors querem atacar o jogador.
-- Actor que sai da tela reaparece do lado oposto. Assim há um número limitado de actors sempre presentes, quase todos na tela.
-- Sem grade espacial por ora. Se o FPS cair demais, subdividir o ambiente numa grade em relação ao centro (o jogador).
+- Every X time, Y spawn. For each map, exactly what appears and when is known in advance.
+- At first, all actors want to attack the player.
+- An actor that leaves the screen reappears on the opposite side. So there is a limited number of actors always present, almost all on screen.
+- No spatial grid for now. If the FPS drops too much, divide the environment into a grid relative to the center (the player).
 
-### Fórmula de dano (versão inicial, sem buffs)
+### Damage formula (initial version, no buffs)
 
 ```
 DAMAGE = max(0, ATTACK - DEFENSE)
 HEALTH = HEALTH - DAMAGE
 ```
 
-- Se DEFENSE >= ATTACK, o dano é 0. Defender nunca cura o alvo.
-- O primeiro caso a simular é um golpe sem arma, sem buffs de nenhum tipo.
-- ATTACK e DEFENSE ainda não estão definidos (o que são, de onde vêm). Esse é o próximo passo.
-- A fórmula será desenvolvida aos poucos, uma peça de cada vez.
+- If DEFENSE >= ATTACK, damage is 0. Defending never heals the target.
+- The first case to simulate is a hit without a weapon, with no buffs of any kind.
+- ATTACK and DEFENSE are not defined yet (what they are, where they come from).
+- The formula will be developed little by little, one piece at a time.
 
 ### Actor
 
-Actor é qualquer entidade que pode atuar em combate. Inclui armadilhas, que são actors estáticos.
+An actor is any entity that can act in combat. It includes traps, which are static actors. A static actor is simply an actor without `move`.
 
-Rascunho do formato (provisório, vai mudar):
+Format (provisional, it will change, for example once the mecha parts are defined):
 
 ```json
 {
   "id": "player_1",
-  "name": "Jogador",
+  "name": "Player",
   "health": { "current": 100, "max": 100 },
   "attack": 10,
   "defense": 3,
   "position": { "x": 0, "y": 0 },
-  "is_static": false
+  "radius": 16,
+  "move": {
+    "speed": 3,
+    "direction": { "x": 0, "y": 0 }
+  },
+  "aim": { "x": 1, "y": 0 }
 }
 ```
 
-Notas sobre o rascunho: `attack` e `defense` são números soltos porque ainda não foram definidos; não há skills nem buffs porque ainda não existem; `is_static` distingue actor móvel de armadilha e pode ser removido se não fizer sentido.
+Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `speed` is in pixels per frame. `radius` exists because every actor is a circle.
 
-## Ideias registradas (propostas do agente, não decididas)
+## Code layout
 
-Só viram decisão quando o usuário aprovar.
+- `index.html`, `style.css`: the screens.
+- `src/sim.js`: the rules. No DOM access. `createChamber1State()` and `step(state, input)`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
+- `src/render.js`: draws the state. It never changes it.
+- `src/main.js`: screen navigation and the Chamber 1 loop.
+- These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
-- **Pipeline de dano com etapas registradas:** cada etapa anota o que fez. Serve para a página de auditoria e para testar sinergias.
-- **Step como lista de fases nomeadas**, por exemplo: inputs, spawn, movimento, colisão, dano, remover mortos. Nenhuma fase chama outra, e a ordem fica escrita num só lugar.
-- **Conteúdo do relatório de frame:** uma linha de texto por acontecimento, na ordem em que acontece, em formato regular e legível. Cada linha traz o número do frame, os actors envolvidos e os valores antes e depois (por exemplo, vida 100 para 93), para dar para reconstruir o estado em qualquer ponto do frame. As linhas de dano trazem o cálculo completo, o que alimenta a página de auditoria do dano. Manter o formato estrito permite ler o relatório por código depois: uma linha por acontecimento (sem quebra de linha), tipo do evento logo no começo, número do frame em toda linha e ids estáveis para os actors, para dar para filtrar com ferramentas de texto como `grep`.
-- **Onde o relatório mora:** como um campo do estado, substituído a cada frame (mantém a regra do JSON único). Como a run é determinística, os relatórios antigos podem ser regerados a partir da semente e dos inputs, então não precisam ser guardados.
-- **O relatório só é escrito, nunca lido pela simulação.** Um teste pode garantir que o estado final é idêntico com o relatório ligado ou desligado. Se gerar um relatório por frame pesar, isso permite desligá-lo sem alterar a run.
-- **O relatório de texto é para humanos e agentes depurarem; para machine learning, a fonte é a coleção de estados (decisão do usuário).** O estado JSON já é estruturado. Proposta do agente: um módulo de exportação separado, que só lê o estado e gera dados numéricos (por exemplo, um CSV com uma linha por actor por frame: frame, id, posição, vida e assim por diante, ou um vetor numérico de tamanho fixo), e que, como o relatório, nunca altera a simulação. Valores que o ML vai querer (dano causado no frame, mortes) devem ser contadores numéricos no estado, em vez de ter de ser extraídos do texto. A definição de recompensa e do formato de observação fica para quando o ML entrar no projeto.
-- **Requisitos práticos do determinismo:** gerador pseudoaleatório com semente guardada no estado (`Math.random` não aceita semente); nada de `Date.now` ou `performance.now` dentro da simulação; actors processados sempre em ordem fixa; evitar `Math.sin`, `Math.cos` e `Math.pow` se replays precisarem coincidir entre navegadores diferentes; estado sem `NaN`, `Infinity` ou `undefined` (o JSON não os representa).
-- **Limite de ritmo em monitores acima de 60 Hz:** ignorar os chamados do navegador que chegam antes de ~16,7 ms do último frame (sem step e sem desenho), para o jogo não acelerar.
-- **Uma run = semente + mapa + inputs por frame.** Um teste pode rodar a mesma run duas vezes e comparar um hash do estado final.
-- Salvar o estado em qualquer frame e voltar no tempo recarregando um estado salvo e reaplicando inputs.
+## Ideas (agent proposals, not decided)
 
-## Em aberto
+They only become decisions when the user approves.
 
-- Definir ATTACK e DEFENSE. Primeiro passo de código sugerido pelo agente: rodar a fórmula num teste simples, sem tela.
-- Testes: Node só para testes (`node --test`, sem dependências npm) ou uma página de testes no navegador. O agente não consegue executar páginas no navegador por conta própria, e o usuário questionou a segurança do npm.
-- Visual: formas geométricas como placeholder? (sugerido, não confirmado)
-- Controles: WASD + mouse, ou clique para mover? (não decidido)
-- Estrutura de pastas além do que já existe (`index.html`, `style.css`, `src/main.js`).
+- **Damage pipeline with recorded stages:** each stage notes what it did. It serves the audit page and testing synergies.
+- **Step as a list of named phases**, for example: inputs, spawn, movement, collision, damage, remove the dead. No phase calls another, and the order is written in one place only.
+- **Content of the frame report:** one line of text per event, in the order it happens, in a regular and readable format. Each line carries the frame number, the actors involved and the values before and after (for example, health 100 to 93), so the state can be rebuilt at any point of the frame. Damage lines carry the full calculation, which feeds the damage audit page. A strict format lets code read the report later: one line per event (no line breaks), the event type right at the start, the frame number on every line and stable ids for actors, so it can be filtered with text tools such as `grep`.
+- **Where the report lives:** as a field of the state, replaced every frame (keeps the single JSON rule). Since the run is deterministic, old reports can be regenerated from the seed and the inputs, so they do not need to be stored.
+- **The report is only written, never read by the simulation.** A test can check that the final state is identical with the report on or off. If generating a report every frame gets heavy, this allows turning it off without changing the run.
+- **The text report is for humans and agents to debug; for machine learning, the source is the collection of states (the user's decision).** The JSON state is already structured. Agent proposal: a separate export module that only reads the state and produces numeric data (for example, a CSV with one row per actor per frame: frame, id, position, health and so on, or a fixed-size numeric vector), and that, like the report, never changes the simulation. Values ML will want (damage dealt in the frame, kills) should be numeric counters in the state, instead of having to be extracted from text. The reward definition and the observation format are left for when ML enters the project.
+- **Practical requirements for determinism:** a pseudo-random generator with its seed stored in the state (`Math.random` cannot be seeded); no `Date.now` or `performance.now` inside the simulation; actors always processed in a fixed order; avoid `Math.sin`, `Math.cos` and `Math.pow` if replays must match across different browsers; state without `NaN`, `Infinity` or `undefined` (JSON cannot represent them).
+- **One run = seed + map + inputs per frame.** A test can play the same run twice and compare a hash of the final state.
+- Save the state at any frame and go back in time by reloading a saved state and replaying inputs.
 
-## Como rodar
+## Open items
 
-Abrir `index.html` no navegador. Por ora o script é simples (sem módulos), então não precisa de servidor. Quando a lógica da simulação virar módulos, para rodar também no Node, passará a ser preciso um servidor estático local, por exemplo `python3 -m http.server`.
+- Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
+- The full list of mecha parts (the user will provide it).
+- Where the dynamic speed comes from.
+- Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
+- Next steps suggested by the agent: the per-frame report; pause and advance one frame.
+- Folder structure beyond what already exists.
 
-## Como trabalhar neste projeto
+## How to run
 
-- Resolver um problema de cada vez. Respostas curtas.
-- Não escrever código nem publicar nada sem o usuário pedir. O usuário explica o conceito e define as decisões; o agente propõe e confirma.
-- Não assumir o óbvio: se uma pergunta já tem resposta evidente, decidir e seguir, e reservar perguntas para decisões de design reais.
-- Código com foco em legibilidade e transparência: nomes claros, sem esperteza desnecessária.
-- Idioma da conversa: português do Brasil. Identificadores no código em inglês.
-- Registrar neste arquivo toda decisão nova que afete a direção do projeto.
-- Sempre comentar brevemente se gosta ou não de algo que o usuário propõe ou que o agente fez. É importante para o usuário.
-- O agente não vê a tela. Depois de mexer em algo visual, pedir ao usuário que abra e descreva o que aparece.
+Open `index.html` in the browser. For now the scripts are plain (no modules), so no server is needed. When the simulation logic becomes modules, to also run in Node, a local static server will be needed, for example `python3 -m http.server`.
+
+## How to work on this project
+
+- Solve one problem at a time. Short replies.
+- Do not start work the user has not asked for. The user explains the concept and sets the decisions; the agent proposes and confirms.
+- Do not assume the obvious: if a question already has an evident answer, decide and move on, and keep questions for real design decisions.
+- Code prioritizes readability and transparency: clear names, no unnecessary cleverness.
+- Language: chat with the user in Brazilian Portuguese (more comfortable for them; they are fluent in English). Everything else is en-US: code, identifiers, comments, docs and commit messages. Nothing should be in Portuguese.
+- Record in this file every new decision that affects the direction of the project.
+- Always comment briefly on whether you like something the user proposes or something the agent did. This is important to the user.
+- The agent cannot see the screen. After changing something visual, ask the user to open it and describe what appears.

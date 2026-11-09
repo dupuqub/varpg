@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- Tela de entrada -->
+  <!-- Entry screen -->
   <main id="screen-menu" class="screen">
     <h1>VARPG</h1>
     <button disabled>NEW GAME</button>
@@ -16,20 +16,25 @@
     <button data-goto="screen-chambers">TEST CHAMBERS</button>
   </main>
 
-  <!-- Escolha do mapa de teste -->
+  <!-- Choose the test map -->
   <main id="screen-chambers" class="screen" hidden>
     <h1>TEST CHAMBERS</h1>
     <button data-goto="screen-chamber-1">CHAMBER 1</button>
     <button data-goto="screen-menu">BACK</button>
   </main>
 
-  <!-- Chamber 1: fundamentos de movimento etc. -->
+  <!-- Chamber 1: movement fundamentals, etc. -->
   <main id="screen-chamber-1" class="screen" hidden>
     <h1>CHAMBER 1</h1>
     <canvas id="canvas" width="960" height="540"></canvas>
+    <p class="hint">WASD / LEFT STICK: MOVE &middot; MOUSE / RIGHT STICK: AIM</p>
     <button data-goto="screen-chambers">BACK</button>
   </main>
 
+  <!-- Order matters: main.js uses what the others define. -->
+  <script src="src/sim.js"></script>
+  <script src="src/input.js"></script>
+  <script src="src/render.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>

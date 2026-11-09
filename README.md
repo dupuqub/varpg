@@ -1,3 +1,3 @@
 # varpg
 
-Action RPG 2D top-down, em desenvolvimento inicial.
+A 2D top-down action RPG, in early development.
