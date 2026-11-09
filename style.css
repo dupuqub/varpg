@@ -62,6 +62,24 @@ button:disabled {
   letter-spacing: 0.1em;
 }
 
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+textarea {
+  width: min(90vw, 900px);
+  padding: 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: #000;
+  border: 1px solid var(--fg);
+  resize: vertical;
+}
+
 canvas {
   max-width: 100%;
   height: auto;

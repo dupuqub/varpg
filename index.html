@@ -20,6 +20,7 @@
   <main id="screen-chambers" class="screen" hidden>
     <h1>TEST CHAMBERS</h1>
     <button data-goto="screen-chamber-1">CHAMBER 1</button>
+    <button data-goto="screen-chamber-2">CHAMBER 2</button>
     <button data-goto="screen-menu">BACK</button>
   </main>
 
@@ -31,12 +32,29 @@
     <button data-goto="screen-chambers">BACK</button>
   </main>
 
+  <!-- Chamber 2: not a place in the game. Buttons that print text to copy. -->
+  <main id="screen-chamber-2" class="screen" hidden>
+    <h1>CHAMBER 2</h1>
+    <p class="hint">PRESS A BUTTON, THEN COPY THE OUTPUT</p>
+    <div class="tools">
+      <button id="tool-environment">ENVIRONMENT</button>
+      <button id="tool-simulation">SIMULATION CHECK</button>
+      <button id="tool-data">DATA</button>
+    </div>
+    <textarea id="output" readonly rows="18" spellcheck="false" placeholder="The output appears here."></textarea>
+    <div class="tools">
+      <button id="tool-copy">COPY</button>
+      <button data-goto="screen-chambers">BACK</button>
+    </div>
+  </main>
+
   <!-- Order matters: main.js uses what the others define. -->
   <script src="src/data.js"></script>
   <script src="src/sim.js"></script>
   <script src="src/history.js"></script>
   <script src="src/input.js"></script>
   <script src="src/render.js"></script>
+  <script src="src/chamber-2.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>

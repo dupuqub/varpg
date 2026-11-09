@@ -45,7 +45,8 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 Keep everything simple. Screens are HTML and CSS, and only one is shown at a time.
 
 - **Entry screen** with 3 buttons: NEW GAME, CONTINUE and TEST CHAMBERS. NEW GAME and CONTINUE do nothing yet (they are disabled).
-- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come; for now there is only **Chamber 1**, which is only for testing movement. Nothing else goes in it.
+- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come. **Chamber 1** is only for testing movement. Nothing else goes in it.
+- Chambers are not necessarily places in the game. **Chamber 2** is a test bench: buttons that run something in the real browser and print plain text into a box, with a COPY button, so the user can paste the output to the agent. Current buttons: ENVIRONMENT (browser, screen, gamepads, how many frame callbacks per second the browser gives), SIMULATION CHECK (a 600-frame scripted run played twice, the history and the cross-check, including a snap changed on purpose to see that the check notices it, and the final state) and DATA (the definitions and the initial state). The scripted run uses no trigonometry, so every browser must print the same final position; compare outputs between machines or against a Node run.
 
 ### Stack
 
@@ -195,6 +196,7 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
 - `src/render.js`: draws the state (reference grid, collision window overlay, player and aim arrow). It never changes it.
+- `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
@@ -233,4 +235,4 @@ Open `index.html` in the browser. For now the scripts are plain (no modules), so
 - Language: chat with the user in Brazilian Portuguese (more comfortable for them; they are fluent in English). Everything else is en-US: code, identifiers, comments, docs and commit messages. Nothing should be in Portuguese.
 - Record in this file every new decision that affects the direction of the project.
 - Always comment briefly on whether you like something the user proposes or something the agent did. This is important to the user.
-- The agent cannot see the screen. After changing something visual, ask the user to open it and describe what appears.
+- The agent cannot see the screen. After changing something visual, ask the user to open it and describe what appears. For anything that can be printed as text, add a button to Chamber 2 and ask the user to paste its output.
