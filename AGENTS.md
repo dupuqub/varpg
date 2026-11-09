@@ -45,7 +45,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 Keep everything simple. Screens are HTML and CSS, and only one is shown at a time.
 
 - **Entry screen** with 3 buttons: NEW GAME, CONTINUE and TEST CHAMBERS. NEW GAME and CONTINUE do nothing yet (they are disabled).
-- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come; for now there is only **Chamber 1**, where movement fundamentals etc. are tested.
+- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come; for now there is only **Chamber 1**, which is only for testing movement. Nothing else goes in it.
 
 ### Stack
 
