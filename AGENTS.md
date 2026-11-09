@@ -62,6 +62,26 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 - **Frame debug:** be able to pause and have a button that advances one frame at a time, to understand what happens at each moment.
 - **Per-frame report:** a step is an ordered collection of functions, and information between frames does not always show *when* inside the frame something happened. So every frame generates a report with everything that happened, in order. The report is plain text: each thing that happens writes into it. There will be no internal intra-pause or intra-play tools: debugging uses only normal play and frame by frame.
 
+### State, definitions and rules
+
+The user wants the smallest possible state. The state is a **photo** of how the game is now, not of what is done in it.
+
+- **Definitions (the "db"):** values that never change during a run, such as the base speed of an actor type, its radius and its max health. They live in a read-only file, planned as `src/data.js` with a plain object (for example `const DEFINITIONS = {...}`), loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (for example `type: "player"`).
+- **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition.
+- **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
+- The state carries the **version of the definitions** it was made with, so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
+- **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale); the per-frame report will record the value used and the steps of its calculation. Agreed with the user, **not implemented yet** (the code still uses `move.speed`).
+
+### Run history (two logs)
+
+Agreed with the user, **not implemented yet**.
+
+- The game keeps the **last 100 states** and the **last 100 inputs**, in two lists where index 0 is the oldest. Every step appends the new state and input, and if there are more than 100, the oldest (index 0) is removed.
+- **Cross-check:** take the oldest saved state, apply the saved inputs with `step`, and compare each result with the saved state of the same frame. A mismatch points to the exact frame and field (for example `actors[3].position.x`: expected 120.5, got 120.6) and means something is not deterministic. Run it continuously (for example every 100 frames), not only at the end.
+- It proves **consistency**, not **correctness**: a wrong rule replays equally wrong. Correctness is the job of the synergy tests and the damage audit page.
+- No hashes: with full states the comparison is state against state, and the states stay readable JSON.
+- **Going back while paused:** the user can walk back through the 100 saved frames (about 1.7 s). Pressing play on a past frame discards the states **and inputs** after it, and the run continues from there with new inputs. Going back must load a **copy** of the saved state, because `step` changes the state in place.
+
 ### Movement and input (first test, Chamber 1)
 
 The user approved this and noted that everything may change.
@@ -72,7 +92,7 @@ The user approved this and noted that everything may change.
 - `move.direction` is a vector with length 0 to 1. On the keyboard, diagonals are normalized so they are not faster.
 - `aim` is a unit vector, not an angle, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
 - Movement stops instantly when input stops (no inertia for now).
-- **Speed is dynamic** (the user's requirement): the actor's current `move.speed` is stored in the actor and read again every frame. Where it comes from is not defined yet.
+- **Speed is dynamic** (the user's requirement): it is read again every frame. Today it is `move.speed` stored in the actor; the plan is `baseSpeed` plus a `finalSpeed(actor)` function (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
 - Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
 - Gamepad: the browser only exposes it after a button is pressed. Sticks have a radial dead zone of 0.15.
 - The loop in `src/main.js` runs at most one step per browser callback. On monitors above 60 Hz the extra callbacks are ignored (no step, no drawing), so the game does not speed up. On slow machines it runs in slow motion.
@@ -155,14 +175,14 @@ They only become decisions when the user approves.
 - **The report is only written, never read by the simulation.** A test can check that the final state is identical with the report on or off. If generating a report every frame gets heavy, this allows turning it off without changing the run.
 - **The text report is for humans and agents to debug; for machine learning, the source is the collection of states (the user's decision).** The JSON state is already structured. Agent proposal: a separate export module that only reads the state and produces numeric data (for example, a CSV with one row per actor per frame: frame, id, position, health and so on, or a fixed-size numeric vector), and that, like the report, never changes the simulation. Values ML will want (damage dealt in the frame, kills) should be numeric counters in the state, instead of having to be extracted from text. The reward definition and the observation format are left for when ML enters the project.
 - **Practical requirements for determinism:** a pseudo-random generator with its seed stored in the state (`Math.random` cannot be seeded); no `Date.now` or `performance.now` inside the simulation; actors always processed in a fixed order; avoid `Math.sin`, `Math.cos` and `Math.pow` if replays must match across different browsers; state without `NaN`, `Infinity` or `undefined` (JSON cannot represent them).
-- **One run = seed + map + inputs per frame.** A test can play the same run twice and compare a hash of the final state.
-- Save the state at any frame and go back in time by reloading a saved state and replaying inputs.
+- **One run = seed + map + inputs per frame.** A test can play the same run twice and compare the final states.
 
 ## Open items
 
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
-- Where the dynamic speed comes from.
+- Where the dynamic speed comes from (the base value and the buffs).
+- Apply `baseSpeed` / `finalSpeed`, the definitions file and the 100-frame history in code (decided, see "State, definitions and rules" and "Run history"). The user has not asked for the code yet.
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
