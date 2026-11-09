@@ -131,12 +131,12 @@ The user approved this and noted that everything may change.
 
 - Every X time, Y spawn. For each map, exactly what appears and when is known in advance.
 - At first, all actors want to attack the player.
-- An actor that leaves the screen reappears on the opposite side. So there is a limited number of actors always present, almost all on screen.
+- An actor that leaves the screen reappears on the opposite side. So there is a limited number of actors always present, almost all on screen. Since the collision window is the universe (see "Collision grid"), the "screen" of this rule is the window, and the jump happens off screen.
 - Where collision is tested is limited by the collision grid (see "Collision grid").
 
 ### Collision grid
 
-- Collision is only tested inside a **window** of cells around the avatar. Nothing outside the window needs a collision test (the user's decision).
+- The **window** of cells around the avatar is the **whole universe of the game** (the user's decision): nothing ever exists outside these cells. Every actor is always inside it, and collision is tested only between actors inside it.
 - The cells come out of the avatar (the avatar is in the center cell), but the window must cover **all the ground where an actor can be**, including actors that are off screen (the user's requirement: at least twice the screen). It is a rectangle: `windowWidth` x `windowHeight` cells, each odd and at least 3.
 - Current window: **61 x 35** cells of 64 px, which is 3904 x 2240 px, a little more than twice the 1920 x 1080 screen. How far outside the screen actors can be depends on where they spawn, which is not decided, so the size is a dev setting to adjust. Agent's note: a bigger window costs almost nothing, because what costs is the number of actors tested, not the area; too small a window makes actors overlap; so err on the larger side.
 - Cell size and window size are **dev settings**, kept in `state.grid` (`cellSize`, `windowWidth`, `windowHeight`) so a run is reproducible. Do not hard-code them elsewhere. Current values: 64, 61 and 35.
@@ -145,7 +145,12 @@ The user approved this and noted that everything may change.
   - Cells are counted **relative to the avatar**. The avatar is always in cell `{ 0, 0 }`, and that cell covers `-cellSize / 2` up to `+cellSize / 2` around it. So the window stays fixed on screen while the world moves under it.
   - `cell` is always a pair of integers, even outside the window. `isInWindow(grid, cell)` says whether it is inside.
   - `cellSize` must be at least 2 x (largest radius + largest speed). Then two actors that can touch in a frame are in the same cell or in adjacent cells, so checking the 3x3 block around an actor is enough. Speed is dynamic, so this must be rechecked when speeds change. The code does not enforce it yet.
-- Side effect to know: actors outside the window do not collide at all. If the window were smaller than the area where actors live, they could overlap each other until they enter the window.
+- Consequences (agent's reading of the rule above, to be confirmed by the user). **Not implemented yet:** nothing enforces the invariant or moves actors back today.
+  1. Every actor must always be inside the window, so `isInWindow` becomes an invariant to check (fail loudly), not a filter.
+  2. An actor that would leave the window reappears on the **opposite side** of it, which matches the spawn idea. The window is centered on the player, so the rule is on the offset from the player. The half extents are `windowWidth * cellSize / 2` (1952 px) and `windowHeight * cellSize / 2` (1120 px). An offset of `+half` or more moves back by one window size, and an offset below `-half` moves forward by one. This matches `cellIndex`, which maps offsets in `[-half, +half)` to the cells.
+  3. Nobody crosses the seam: actors on opposite edges are not neighbors, so collision across the seam is ignored. It is invisible, because the seam is off screen (at least 992 px beyond the screen edge across, and 580 px up and down).
+  4. The ground (the reference grid) is infinite. Only the population is bounded.
+  5. To see the limits of the universe, a debug zoom-out is needed: at scale 0.5 the 1920 x 1080 canvas shows 3840 x 2160, almost the whole window. Drawing every cell of the window at scale 1 only produces visual noise.
 - Collision itself is not implemented yet. Chamber 1 draws the window as an amber overlay fixed on the player. The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated.
 
 ### Damage formula (initial version, no buffs)
