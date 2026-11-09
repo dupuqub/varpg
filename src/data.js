@@ -1,10 +1,13 @@
-// Definitions: the values that never change during a run (the "db").
+// Definitions: what the game is. The "db". Nothing in here changes during a run.
+// For each actor type it has:
+// - the fixed values (radius, base speed, ...);
+// - "initial": the state of a new actor of that type. createActor copies it.
 // The state only points here by id (actor.type), so it stays small.
 // Read-only: it is frozen below, so nothing can change it by accident.
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 1;
+const DEFINITIONS_VERSION = 2;
 
 const DEFINITIONS = {
   actors: {
@@ -15,7 +18,15 @@ const DEFINITIONS = {
       defense: 3,
       radius: 16,
       baseSpeed: 3, // pixels per frame (3 x 60 = 180 pixels per second)
-      // An actor type without baseSpeed is static (it has no "move"), like a trap.
+
+      initial: {
+        health: { current: 100 },
+        position: { x: 0, y: 0 },
+        aim: { x: 1, y: 0 }, // vector with length 1
+        cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
+        move: { direction: { x: 0, y: 0 } }, // vector with length 0 to 1
+        // A type without "move" here is static, like a trap.
+      },
     },
   },
 };

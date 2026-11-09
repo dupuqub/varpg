@@ -12,24 +12,17 @@ function definitionOf(actor) {
   return definition;
 }
 
-// A new actor, standing at the center of the world. It only holds what changes
-// during a run. An actor type without baseSpeed is static: it gets no "move".
+// A new actor: a copy of the "initial" state of its type (src/data.js).
+// It only holds what changes during a run. A type without "move" in its
+// initial state is static.
 function createActor(id, type) {
   const definition = DEFINITIONS.actors[type];
   if (!definition) throw new Error("Unknown actor type: " + type);
 
-  const actor = {
-    id,
-    type,
-    health: { current: definition.maxHealth },
-    position: { x: 0, y: 0 },
-    aim: { x: 1, y: 0 }, // vector with length 1
-    cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
-  };
-  if (definition.baseSpeed !== undefined) {
-    actor.move = { direction: { x: 0, y: 0 } }; // vector with length 0 to 1
-  }
-  return actor;
+  // The copy through JSON makes every actor own its numbers, so changing one
+  // actor never changes the definitions (or another actor).
+  const initial = JSON.parse(JSON.stringify(definition.initial));
+  return { id, type, ...initial };
 }
 
 // The speed an actor uses in the current frame, in pixels per frame.

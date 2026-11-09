@@ -66,9 +66,11 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 
 The user wants the smallest possible state. The state is a **photo** of how the game is now, not of what is done in it.
 
-- **Definitions (the "db"):** values that never change during a run, such as the base speed of an actor type, its radius and its max health. They live in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. An actor type without `baseSpeed` is static: it gets no `move`. Implemented for the player (name, max health, attack, defense, radius, base speed).
-- **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition.
-- **Run config:** a third kind of data, between definitions and state: what is chosen **before** the run and does not change during it, such as the player's build (allocated skill tree, equipped mecha parts). It is kept with the run (like the seed), not in the snaps, so a snap only carries what changes (current health, cooldowns, active buffs). Agreed with the user. Agent's warning: do not store derived values (such as `finalSpeed` or total damage) in actors for convenience, and keep an eye on lists of active effects (buffs, poison, slow), which are the fields that grow the most.
+- **Definitions (the "db"):** what the game *is*, and it never changes during a run. For each actor type: the fixed values (base speed, radius, max health, ...) and its **initial state**, the complete state of a new actor of that type. `createActor` only copies it, so no number about how an actor is born is hidden in code. It lives in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. A type without `move` in its initial state is static, like a trap. Implemented for the player.
+- **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition; if the player chose it before the run, it is the build.
+- **Build:** what the player chose for this run (allocated skill tree, equipped mecha parts). It is an **input** of the run, like the seed and the map, not a state: it does not evolve. It is kept with the run, not in the snaps. Only the avatar has a build; other actors read their definition directly. (The agent first called this a "pre-run state" and proposed an avatar "already prepared" with the build applied. The user found it confusing and it was dropped: nothing is pre-resolved.)
+- **Effects: recipe versus result.** Take a torso that gives +1 armor per enemy within radius X. What it does (the recipe) is in the definitions, in the part. Whether the player uses it is in the build. How much armor it gives *now* is **not stored**: a function like `finalSpeed` (for example `finalArmor(actor)`) computes it every frame from the recipe, the build and the state (the enemy positions). Only something with memory goes into the state, such as "this buff lasts 3 more seconds". The terms of `(X + Y + Z) * W` in the damage trace each come from one part of the build.
+- Agent's warning: do not store derived values (such as `finalSpeed` or total damage) in actors for convenience, and keep an eye on lists of active effects (buffs, poison, slow), which are the fields that grow the most.
 - **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
 - The state carries the **version of the definitions** it was made with (`state.definitionsVersion`, from `DEFINITIONS_VERSION`, a number raised by hand on any change; nothing refuses a mismatched state yet), so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
 - **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale). Implemented: for now it only returns the base speed. When buffs arrive it will probably return the value and the steps of the calculation, which the audit page will want.
@@ -154,13 +156,17 @@ Format of an actor **in the state** (provisional, it will change, for example on
 }
 ```
 
-Its definition, in `src/data.js`:
+Its definition, in `src/data.js` (the fixed values, and the initial state that `createActor` copies):
 
 ```js
-player: { name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3 }
+player: {
+  name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3,
+  initial: { health: { current: 100 }, position: { x: 0, y: 0 }, aim: { x: 1, y: 0 },
+             cell: { x: 0, y: 0 }, move: { direction: { x: 0, y: 0 } } },
+}
 ```
 
-Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is in pixels per frame, and the speed used in a frame comes from `finalSpeed(actor)`. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid").
+Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is in pixels per frame, and the speed used in a frame comes from `finalSpeed(actor)`. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid"). The initial `health.current` repeats `maxHealth` on purpose: the initial state is written out in full.
 
 ## Code layout
 
