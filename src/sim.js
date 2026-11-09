@@ -33,10 +33,20 @@ function finalSpeed(actor) {
   return definitionOf(actor).baseSpeed;
 }
 
+// What a run has besides its state: an id, and the build (what the player
+// chose before the run). The build is an input of the run, not a state, so it
+// is not inside the snaps. It is empty on purpose: nothing reads it yet.
+function createRun(id) {
+  return { id, build: {} };
+}
+
 // Initial state of Chamber 1: only the player, standing at the center of the world.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
-function createChamber1State() {
+// runId: the id of the run this state belongs to. The rules never read it; it
+// only identifies the snap (two runs both have a "frame 300").
+function createChamber1State(runId = 1) {
   const state = {
+    run: runId,
     frame: 0,
 
     // Version of the definitions this state was made with (see src/data.js).

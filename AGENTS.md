@@ -68,7 +68,7 @@ The user wants the smallest possible state. The state is a **photo** of how the 
 
 - **Definitions (the "db"):** what the game *is*, and it never changes during a run. For each actor type: the fixed values (base speed, radius, max health, ...) and its **initial state**, the complete state of a new actor of that type. `createActor` only copies it, so no number about how an actor is born is hidden in code. It lives in a read-only file, `src/data.js`, a plain object `DEFINITIONS` that is deep-frozen, loaded by `<script>` so `index.html` still opens directly (a `.json` would need `fetch` and a server). An actor points to its definition by id (`type: "player"`), and `definitionOf(actor)` returns it. A type without `move` in its initial state is static, like a trap. Implemented for the player.
 - **State:** only what changes: position, current health, direction, frame, active buffs. Rule of thumb: if it can change during a run, it is state; if it never changes, it is a definition; if the player chose it before the run, it is the build.
-- **Build:** what the player chose for this run (allocated skill tree, equipped mecha parts). It is an **input** of the run, like the seed and the map, not a state: it does not evolve. It is kept with the run, not in the snaps. Only the avatar has a build; other actors read their definition directly. (The agent first called this a "pre-run state" and proposed an avatar "already prepared" with the build applied. The user found it confusing and it was dropped: nothing is pre-resolved.)
+- **Build:** what the player chose for this run (allocated skill tree, equipped mecha parts). It is an **input** of the run, like the seed and the map, not a state: it does not evolve. It is kept with the run, not in the snaps. Only the avatar has a build; other actors read their definition directly. Implemented as an **empty** object: `createRun(id)` returns `{ id, build: {} }`, and nothing reads the build yet. (The agent first called this a "pre-run state" and proposed an avatar "already prepared" with the build applied. The user found it confusing and it was dropped: nothing is pre-resolved.)
 - **Effects: recipe versus result.** Take a torso that gives +1 armor per enemy within radius X. What it does (the recipe) is in the definitions, in the part. Whether the player uses it is in the build. How much armor it gives *now* is **not stored**: a function like `finalSpeed` (for example `finalArmor(actor)`) computes it every frame from the recipe, the build and the state (the enemy positions). Only something with memory goes into the state, such as "this buff lasts 3 more seconds". The terms of `(X + Y + Z) * W` in the damage trace each come from one part of the build.
 - Agent's warning: do not store derived values (such as `finalSpeed` or total damage) in actors for convenience, and keep an eye on lists of active effects (buffs, poison, slow), which are the fields that grow the most.
 - **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
@@ -77,16 +77,16 @@ The user wants the smallest possible state. The state is a **photo** of how the 
 
 ### Run history (two logs)
 
-Agreed with the user, **not implemented yet**.
+Agreed with the user. Implemented in `src/history.js` and recorded by the Chamber 1 loop (no buttons, no automatic cross-check yet; from the browser console, `crossCheck(runHistory)` runs it).
 
 - **Vocabulary:** a **snap** is a saved copy of the state at one frame (the user's word, because "json" is the file type used for many other things). "State" is the live one.
-- Each snap carries `run` and `frame`, so a snap exported to disk can be identified (two runs both have a "frame 300").
-- Agent's default, not yet confirmed: going back and pressing play discards the snaps and inputs after that frame together.
-- The game keeps the **last 100 snaps** and the **last 100 inputs**, in two lists where index 0 is the oldest. Every step appends the new state and input, and if there are more than 100, the oldest (index 0) is removed.
-- **Cross-check:** take the oldest saved state, apply the saved inputs with `step`, and compare each result with the saved state of the same frame. A mismatch points to the exact frame and field (for example `actors[3].position.x`: expected 120.5, got 120.6) and means something is not deterministic. Run it continuously (for example every 100 frames), not only at the end.
+- Each snap carries `run` and `frame` (`state.run` is the id of the run, set by `createChamber1State(runId)`; the rules never read it), so a snap exported to disk can be identified (two runs both have a "frame 300").
+- Agent's default, not yet confirmed: going back and pressing play discards the snaps and inputs after that frame together (`discardAfter`).
+- The game keeps the **last 100 snaps** and the **last 100 inputs** (`HISTORY_SIZE`), in two lists where index 0 is the oldest. Every step appends the new state and input (`recordFrame`), and if there are more than 100, the oldest (index 0) is removed. The lists are **aligned**: same index = same frame, and `inputs[i]` is the input of the step that produced `snaps[i]`. The first snap has no input (`null`). Snaps and inputs are saved as copies.
+- **Cross-check** (`crossCheck(history)`): take the oldest saved state, apply the saved inputs with `step`, and compare each result with the saved state of the same frame. It returns `null` if everything matches, or the first difference: `{ frame, path, expected, actual }` (for example `actors[3].position.x`: expected 120.5, got 120.6). A difference means something is not deterministic. Planned: run it continuously (for example every 100 frames), not only on demand.
 - It proves **consistency**, not **correctness**: a wrong rule replays equally wrong. Correctness is the job of the synergy tests and the damage audit page.
 - No hashes: with full states the comparison is state against state, and the states stay readable JSON.
-- **Going back while paused:** the user can walk back through the 100 saved frames (about 1.7 s). Pressing play on a past frame discards the states **and inputs** after it, and the run continues from there with new inputs. Going back must load a **copy** of the saved state, because `step` changes the state in place.
+- **Going back while paused:** the user can walk back through the 100 saved frames (about 1.7 s). Pressing play on a past frame discards the states **and inputs** after it, and the run continues from there with new inputs. Going back must load a **copy** of the saved state (`stateFromSnap`), because `step` changes the state in place.
 
 ### Movement and input (first test, Chamber 1)
 
@@ -98,7 +98,7 @@ The user approved this and noted that everything may change.
 - `move.direction` is a vector with length 0 to 1. On the keyboard, diagonals are normalized so they are not faster.
 - `aim` is a unit vector, not an angle, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
 - Movement stops instantly when input stops (no inertia for now).
-- **Speed is dynamic** (the user's requirement): it is read again every frame. Today it is `move.speed` stored in the actor; the plan is `baseSpeed` plus a `finalSpeed(actor)` function (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
+- **Speed is dynamic** (the user's requirement): it is read again every frame. The actor has `baseSpeed` (in the definitions) and a `finalSpeed(actor)` function gives the value used each frame (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
 - Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
 - Gamepad: the browser only exposes it after a button is pressed. Sticks have a radial dead zone of 0.15.
 - The loop in `src/main.js` runs at most one step per browser callback. On monitors above 60 Hz the extra callbacks are ignored (no step, no drawing), so the game does not speed up. On slow machines it runs in slow motion.
@@ -140,8 +140,6 @@ HEALTH = HEALTH - DAMAGE
 
 An actor is any entity that can act in combat. It includes traps, which are static actors. A static actor is simply an actor without `move`.
 
-Format (provisional, it will change, for example once the mecha parts are defined):
-
 Format of an actor **in the state** (provisional, it will change, for example once the mecha parts are defined). It only holds what changes. The fixed values come from the definitions by `type`:
 
 ```json
@@ -172,10 +170,11 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 
 - `index.html`, `style.css`: the screens.
 - `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen.
-- `src/sim.js`: the rules. No DOM access. `createChamber1State()`, `createActor`, `definitionOf`, `finalSpeed`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
 - `src/render.js`: draws the state (reference grid, collision window overlay, player and aim arrow). It never changes it.
-- `src/main.js`: screen navigation and the Chamber 1 loop.
+- `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
 ## Ideas (agent proposals, not decided)
@@ -193,11 +192,10 @@ They only become decisions when the user approves.
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
 - Where the dynamic speed comes from (the base value and the buffs).
-- The 100-frame history in code (decided, see "Run history"). Not implemented. `baseSpeed`, `finalSpeed` and the definitions file already are.
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Square window, or separate width and height (the screen is 16:9).
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
-- Next steps suggested by the agent: pause and advance one frame.
+- Next steps suggested by the agent: pause, advance one frame and go back (the history already exists, there are no buttons yet); running the cross-check automatically.
 - Folder structure beyond what already exists.
 
 ## How to run

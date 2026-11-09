@@ -28,14 +28,18 @@ const canvas = document.getElementById("canvas");
 const context = canvas.getContext("2d");
 trackMouse(canvas);
 
+let run = null;
 let state = null;
+let runHistory = null; // the last 100 snaps and inputs. In the console: crossCheck(runHistory)
 let animationId = null;
 let lastTimestamp = null;
 let accumulatedMs = 0;
 
 function startChamber1() {
   stopChamber1();
-  state = createChamber1State();
+  run = createRun(1);
+  state = createChamber1State(run.id);
+  runHistory = createHistory(state);
   lastTimestamp = null;
   accumulatedMs = 0;
   draw(context, state);
@@ -64,6 +68,8 @@ function loop(timestamp) {
   // Keep the leftover time, but never more than one step of delay.
   accumulatedMs = Math.min(accumulatedMs - STEP_MS, STEP_MS);
 
-  step(state, readInput());
+  const input = readInput();
+  step(state, input);
+  recordFrame(runHistory, state, input);
   draw(context, state);
 }
