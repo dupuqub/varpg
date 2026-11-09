@@ -6,7 +6,7 @@ Guia para qualquer agente que continue este projeto. Tudo o que importa para dar
 
 Action RPG 2D top-down na linha de Diablo e Path of Exile, que roda no navegador.
 
-Estado do repositório: contém apenas README.md, AGENTS.md e .gitignore. Ainda não há código.
+Estado do repositório: tem só a navegação entre telas (menu inicial, seleção de test chambers e a tela vazia da Chamber 1), em `index.html`, `style.css` e `src/main.js`. Ainda não há simulação nem jogo.
 
 ## Conceito
 
@@ -34,6 +34,13 @@ Entra num mapa (estilo Vampire Survivors), roda a build, coleta recurso, sai do 
 - Não é didática. É auditoria: o jogador precisa ter ciência completa do desempenho real da build, para melhorá-la com eficácia e para dar feedback sobre a lógica do jogo.
 
 ## Decisões
+
+### Telas
+
+Mantenha tudo simples. As telas são HTML e CSS, e só uma aparece por vez.
+
+- **Tela de entrada**, com 3 botões: NEW GAME, CONTINUE e TEST CHAMBERS. NEW GAME e CONTINUE ainda não fazem nada (estão desativados).
+- **TEST CHAMBERS** é outra tela, onde o usuário escolhe qual mapa de teste rodar. No futuro haverá outros testes; por ora só a **Chamber 1**, onde se testam os fundamentos de movimento etc.
 
 ### Stack
 
@@ -110,7 +117,11 @@ Só viram decisão quando o usuário aprovar.
 - Testes: Node só para testes (`node --test`, sem dependências npm) ou uma página de testes no navegador. O agente não consegue executar páginas no navegador por conta própria, e o usuário questionou a segurança do npm.
 - Visual: formas geométricas como placeholder? (sugerido, não confirmado)
 - Controles: WASD + mouse, ou clique para mover? (não decidido)
-- Estrutura de pastas do projeto (não decidida).
+- Estrutura de pastas além do que já existe (`index.html`, `style.css`, `src/main.js`).
+
+## Como rodar
+
+Abrir `index.html` no navegador. Por ora o script é simples (sem módulos), então não precisa de servidor. Quando a lógica da simulação virar módulos, para rodar também no Node, passará a ser preciso um servidor estático local, por exemplo `python3 -m http.server`.
 
 ## Como trabalhar neste projeto
 
@@ -120,3 +131,5 @@ Só viram decisão quando o usuário aprovar.
 - Código com foco em legibilidade e transparência: nomes claros, sem esperteza desnecessária.
 - Idioma da conversa: português do Brasil. Identificadores no código em inglês.
 - Registrar neste arquivo toda decisão nova que afete a direção do projeto.
+- Sempre comentar brevemente se gosta ou não de algo que o usuário propõe ou que o agente fez. É importante para o usuário.
+- O agente não vê a tela. Depois de mexer em algo visual, pedir ao usuário que abra e descreva o que aparece.

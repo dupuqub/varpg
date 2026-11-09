@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>varpg</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Tela de entrada -->
+  <main id="screen-menu" class="screen">
+    <h1>VARPG</h1>
+    <button disabled>NEW GAME</button>
+    <button disabled>CONTINUE</button>
+    <button data-goto="screen-chambers">TEST CHAMBERS</button>
+  </main>
+
+  <!-- Escolha do mapa de teste -->
+  <main id="screen-chambers" class="screen" hidden>
+    <h1>TEST CHAMBERS</h1>
+    <button data-goto="screen-chamber-1">CHAMBER 1</button>
+    <button data-goto="screen-menu">BACK</button>
+  </main>
+
+  <!-- Chamber 1: fundamentos de movimento etc. -->
+  <main id="screen-chamber-1" class="screen" hidden>
+    <h1>CHAMBER 1</h1>
+    <canvas id="canvas" width="960" height="540"></canvas>
+    <button data-goto="screen-chambers">BACK</button>
+  </main>
+
+  <script src="src/main.js"></script>
+</body>
+</html>
