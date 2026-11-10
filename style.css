@@ -80,12 +80,40 @@ textarea {
   resize: vertical;
 }
 
-/* The canvas is 1920 x 1080 inside. On a smaller window it is shown smaller,
-   keeping its shape, and it never grows taller than the window. */
-canvas {
-  max-width: 100%;
-  max-height: calc(100vh - 220px);
-  height: auto;
+/* A screen that fills the whole window (the game view). */
+.screen.fullscreen {
+  position: fixed;
+  inset: 0;
+  gap: 0;
   background: #000;
-  border: 1px solid var(--fg);
+}
+
+/* The canvas is 1920 x 1080 inside. It fills the window and keeps its shape:
+   on a window with another shape, black bars appear. At exactly 1920 x 1080
+   (for example the browser in full screen, F11) one canvas pixel is one screen pixel. */
+canvas {
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Small, faint label over the corner of the game view. */
+.overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  opacity: 0.5;
+}
+
+.overlay:hover {
+  opacity: 1;
+}
+
+.overlay button {
+  width: auto;
+  padding: 6px 14px;
 }

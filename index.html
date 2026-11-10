@@ -25,11 +25,13 @@
   </main>
 
   <!-- Chamber 1: only for testing movement -->
-  <main id="screen-chamber-1" class="screen" hidden>
-    <h1>CHAMBER 1: MOVEMENT</h1>
+  <main id="screen-chamber-1" class="screen fullscreen" hidden>
     <canvas id="canvas" width="1920" height="1080"></canvas>
-    <p class="hint">WASD / LEFT STICK: MOVE</p>
-    <button data-goto="screen-chambers">BACK</button>
+    <div class="overlay">
+      <span>CHAMBER 1: MOVEMENT</span>
+      <span class="hint">WASD / LEFT STICK: MOVE</span>
+      <button data-goto="screen-chambers">BACK (ESC)</button>
+    </div>
   </main>
 
   <!-- Chamber 2: not a place in the game. Buttons that print text to copy. -->

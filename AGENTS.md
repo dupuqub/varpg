@@ -115,7 +115,7 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 The user approved this and noted that everything may change.
 
-- The canvas is **1920 x 1080** (the user's requirement), and world units are canvas pixels. When the browser window is smaller, CSS shows the canvas smaller, keeping its shape (it never grows taller than the window). At 1:1 it needs a full 1080-pixel-tall window.
+- The canvas is **1920 x 1080** (the user's requirement), and world units are canvas pixels. **Chamber 1 is a full-window game view** (the user's requirement: the whole screen is playable, no title or button taking space around it): the canvas fills the window and keeps its 16:9 shape, with black bars if the window has another shape. A small faint label in the top-left corner shows the title, the controls and a BACK button; Esc also goes back. At exactly 1920 x 1080 (for example the browser in full screen, F11) one canvas pixel is one screen pixel; in a smaller window the picture is scaled down, and the world shown is always the same 1920 x 1080 area.
 - The player is always at the center of the screen (the camera follows the player).
 - Move with WASD or the left analog stick. **There is no manual aim** (the user's decision, no mouse and no right stick): the weapons aim by themselves. The user described four automatic weapons, on the shoulders and on the arms, with ammunition, damage types and so on (the details do not matter yet). So the avatar has no `aim` field. A weapon's target will be data of the weapon, later.
 - The player is drawn as a white circle. The arrow that showed where it looked was removed with the manual aim. If the avatar should show a facing direction (for example its movement direction), the user has not asked for it.

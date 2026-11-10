@@ -19,6 +19,13 @@ for (const button of document.querySelectorAll("[data-goto]")) {
   button.addEventListener("click", () => showScreen(button.dataset.goto));
 }
 
+// Esc leaves the game view (it has no room for a big BACK button).
+document.addEventListener("keydown", (event) => {
+  if (event.code === "Escape" && !document.getElementById("screen-chamber-1").hidden) {
+    showScreen("screen-chambers");
+  }
+});
+
 // ---- Chamber 1 ----
 
 const STEP_MS = 1000 / 60; // 60 steps per second
