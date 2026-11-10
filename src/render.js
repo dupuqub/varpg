@@ -5,7 +5,6 @@ const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
 const ROCK_COLOR = "#5a5f66";
-const ROCK_LABEL_COLOR = "#9aa0a8";
 
 function draw(context, state) {
   const { width, height } = context.canvas;
@@ -31,8 +30,7 @@ function draw(context, state) {
   drawDashStatus(context, player);
 }
 
-// The rocks that fall on the screen, as gray circles. Above each one, its position in the world (x,y),
-// so the user can check with the agent that it is in the right place.
+// The rocks that fall on the screen, as gray circles.
 function drawRocks(context, state, player) {
   const { width, height } = context.canvas;
   const left = player.position.x - width / 2;
@@ -40,9 +38,6 @@ function drawRocks(context, state, player) {
   const padding = 64; // so a rock that is only partly on the screen is also drawn
   const rocks = rocksInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding);
 
-  context.font = "14px monospace";
-  context.textAlign = "center";
-  context.textBaseline = "bottom";
   for (const rock of rocks) {
     const screenX = rock.position.x - left;
     const screenY = rock.position.y - top;
@@ -52,11 +47,7 @@ function drawRocks(context, state, player) {
     context.beginPath();
     context.arc(screenX, screenY, radius, 0, Math.PI * 2);
     context.fill();
-
-    context.fillStyle = ROCK_LABEL_COLOR;
-    context.fillText(`${rock.position.x},${rock.position.y}`, screenX, screenY - radius - 4);
   }
-  context.textAlign = "start"; // the dash text, drawn later, expects the default
 }
 
 // The numbers of the dash, as plain text in the bottom-left corner:
