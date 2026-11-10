@@ -69,17 +69,24 @@ function assertValidBuild(build) {
   }
 }
 
-// Fails loudly if a definition breaks a rule of the library. For now: every weight (of an actor type
-// and of a part) is a whole number of kg, zero or more (the user's rule). Zero is allowed and has a
-// meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
+// Fails loudly if a definition breaks a rule of the library. For now: every weight is a whole number of kg,
+// zero or more (the user's rule): the weight of a part, and for an actor type the weightPerRadius and the
+// radius (so weightPerRadius x radius is whole). Zero is allowed and has a meaning: the thing is harmless and
+// breaks at the first hit (see AGENTS.md, "Weight 0").
 // It runs once, when this file is loaded, so a bad definition stops the game before the first frame.
 function assertValidDefinitions() {
-  const check = (where, weight) => {
-    if (weight !== undefined && !(Number.isInteger(weight) && weight >= 0)) {
-      throw new Error("The weight of " + where + " must be a whole number of kg, 0 or more, and it is " + weight);
+  const check = (where, value) => {
+    if (value !== undefined && !(Number.isInteger(value) && value >= 0)) {
+      throw new Error("The weight of " + where + " must be a whole number of kg, 0 or more, and it is " + value);
     }
   };
-  for (const [id, definition] of Object.entries(DEFINITIONS.actors)) check("the actor type " + id, definition.weight);
+  for (const [id, definition] of Object.entries(DEFINITIONS.actors)) {
+    if (definition.weightPerRadius === undefined) continue;
+    check("the actor type " + id + " (weightPerRadius)", definition.weightPerRadius);
+    if (!Number.isInteger(definition.radius)) {
+      throw new Error("The radius of the actor type " + id + " must be a whole number, because the weight comes from it, and it is " + definition.radius);
+    }
+  }
   for (const [id, part] of Object.entries(DEFINITIONS.parts)) check("the part " + id, part.weight);
 }
 
@@ -110,9 +117,15 @@ function finalMaxHealth(actor, build) {
 }
 
 // The weight of an actor, in kg: for the avatar the total weight of its build, for any
-// other actor (or rock) the weight in its definition.
+// other actor (or rock) weightPerRadius x radius of its definition.
 function weightOf(actor, build) {
-  return isAvatar(actor) ? totalWeight(build) : definitionOf(actor).weight;
+  return isAvatar(actor) ? totalWeight(build) : weightOfType(definitionOf(actor));
+}
+
+// The weight of a still actor type: weightPerRadius x radius (the user's decision: the radius, not the area).
+// Both are whole numbers (assertValidDefinitions), so the weight is whole and nothing is rounded.
+function weightOfType(definition) {
+  return definition.weightPerRadius * definition.radius;
 }
 
 // The attack of a hit (the body slam). "hit" says what happened: for a collision it is

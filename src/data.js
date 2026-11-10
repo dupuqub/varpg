@@ -11,12 +11,14 @@
 //   rule    = forced by another number or by a rule of the game
 //   guess   = a placeholder, to be tuned by playing
 // The relations between numbers are collected in AGENTS.md ("Numbers and why").
-// Every weight (actor types and parts) is a whole number of kg, 0 or more: src/sim.js checks it when it loads.
-// A weight of 0 means harmless and easy to break (a branch, a box), see AGENTS.md ("Weight 0").
+// Every weight is a whole number of kg, 0 or more: the weight of a part, and for a still actor the multiplier
+// "weightPerRadius" and the radius (weight = weightPerRadius x radius, so it is whole by construction).
+// src/sim.js checks it when it loads. A weight of 0 means harmless and easy to break (a branch, a box),
+// see AGENTS.md ("Weight 0").
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 11;
+const DEFINITIONS_VERSION = 12;
 
 const DEFINITIONS = {
   actors: {
@@ -53,16 +55,18 @@ const DEFINITIONS = {
     // radius (guess, measured against the avatar's 16): stone = the same size, boulder = 1.25 x, rubber = 0.75 x.
     //   rule: no radius above terrain.rocks.margin (20), or rocks of neighbor squares could overlap.
     // bounce: the three reference points of the range (none, half, all), so the feel of each can be compared.
-    // weight (kg): anchor, proportional to the area (radius squared). The stone has the avatar's radius (16), so it
-    //   weighs the same as the starter build, 5000 kg (the user's first number); boulder 5000 x (20/16)^2 = 7800,
-    //   rubber 5000 x (12/16)^2 = 2800 (rounded to hundreds). A heavier rock hits harder (body slam: attack = weight x 0.001).
+    // weightPerRadius (kg per pixel of radius): the weight of a still actor is weightPerRadius x radius (the user's
+    //   decision: the radius, not the area, so a rock twice as wide weighs twice as much and hits twice as hard).
+    //   Both are whole numbers, so the weight is whole and nothing is rounded. A heavier rock hits harder
+    //   (body slam: attack = weight x 0.001 x impact / 6). guess: 300, a round number; the stone (radius 16) weighs
+    //   4800 kg, close to the avatar's 5000 kg, the boulder (20) 6000 kg, the rubber rock (12) 3600 kg.
     // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map. Each rock rolls its
     //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0. Same range for all kinds for now.
     stone: {
       name: "Stone",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 16,
-      weight: 5000,
+      weightPerRadius: 300,
       healthRange: { min: 10, max: 20 },
       bounce: 0,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
@@ -71,7 +75,7 @@ const DEFINITIONS = {
       name: "Boulder",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 20,
-      weight: 7800,
+      weightPerRadius: 300,
       healthRange: { min: 10, max: 20 },
       bounce: 0.5,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
@@ -80,7 +84,7 @@ const DEFINITIONS = {
       name: "Rubber rock",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 12,
-      weight: 2800,
+      weightPerRadius: 300,
       healthRange: { min: 10, max: 20 },
       bounce: 1,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
@@ -88,14 +92,14 @@ const DEFINITIONS = {
 
     // The training dummy: a still actor (no "move") that receives the avatar's body slam and hits back with its
     // own weight, to test the attack. Like a rock it does not move, but it is a real actor in the state.
-    // weight: guess, the same as the starter build and the stone, so a hit on it is as strong as a hit on a stone.
+    // weightPerRadius: guess, the same as the stone (and the same radius), so a hit on it is as strong as a hit on a stone.
     // maxHealth: guess, 30 = six hits of 5, so a few dashes (one every 4 s) are needed to see it fall to 0. It stays at 0.
     // defense 0: nothing is taken off the hits. radius: the avatar's. bounce 0.5: the boulder's, half of the speed comes back.
     dummy: {
       name: "Training dummy",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       maxHealth: 30,
-      weight: 5000,
+      weightPerRadius: 300,
       defense: 0,
       radius: 16,
       bounce: 0.5,
@@ -124,7 +128,7 @@ const DEFINITIONS = {
     // The body slam: what a collision does. Every contact with something that doesDamage is a hit; the attack is
     // the weight of whoever hits (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the
     // speed going into the other thing, in px/frame. Provisional formula (agent's proposal, to be discussed):
-    //   attackPerKg 0.001: the user's first number, a weight of 5000 kg hits for 5 at the reference impact.
+    //   attackPerKg 0.001: the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
     //     Walking (3) hits for half of it, a dash (12) for double.
     //   minDamage 1: the user's decision, a hit by something that doesDamage always costs at least 1,

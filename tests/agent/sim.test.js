@@ -918,14 +918,14 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, t
 });
 
 test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that minus the defense 3", () => {
-  const stone = slamInto(125, 444, "0,1", 10); // 5000 kg: attack 10, so 10 - 3 = 7 to the avatar; 10 to the stone
-  assert.strictEqual(stone.avatar, 93);
+  const stone = slamInto(125, 444, "0,1", 10); // 4800 kg: attack 9.6, so 9.6 - 3 = 6.6 to the avatar; the avatar (5000 kg) hits for 10
+  assert.ok(Math.abs(stone.avatar - 93.4) < 1e-9, "stone: " + stone.avatar);
   assert.strictEqual(stone.rock, 0); // 10 - 10: it breaks
-  const boulder = slamInto(145, -435, "0,-2", 17); // 7800 kg: attack 15.6, so 15.6 - 3 = 12.6
-  assert.ok(Math.abs(boulder.avatar - 87.4) < 1e-9, "boulder: " + boulder.avatar);
+  const boulder = slamInto(145, -435, "0,-2", 17); // 6000 kg: attack 12, so 12 - 3 = 9
+  assert.ok(Math.abs(boulder.avatar - 91) < 1e-9, "boulder: " + boulder.avatar);
   assert.strictEqual(boulder.rock, 7); // 17 - 10
-  const rubber = slamInto(690, -63, "2,-1", 15); // 2800 kg: attack 5.6, so 5.6 - 3 = 2.6
-  assert.ok(Math.abs(rubber.avatar - 97.4) < 1e-9, "rubber: " + rubber.avatar);
+  const rubber = slamInto(690, -63, "2,-1", 15); // 3600 kg: attack 7.2, so 7.2 - 3 = 4.2
+  assert.ok(Math.abs(rubber.avatar - 95.8) < 1e-9, "rubber: " + rubber.avatar);
   assert.strictEqual(rubber.rock, 5); // 15 - 10
 });
 
@@ -959,17 +959,19 @@ test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage n
       lighterAvatar: finalAttack(avatar, { impact: 12 }, lighter),
       boulderDamage: damageOf(boulder, { impact: 12 }, avatar, full),
       rubberDamage: damageOf(rubber, { impact: 12 }, avatar, full),
+      stoneWeight: weightOf(stone, full),
     };
   `);
   assert.strictEqual(result.defense, 3);
-  assert.strictEqual(result.stone, 10); // 5000 x 0.001 x 12 / 6
-  assert.strictEqual(result.atReference, 5); // at the reference impact the attack is weight x 0.001
-  assert.strictEqual(result.walking, 2.5);
+  assert.strictEqual(result.stoneWeight, 4800); // 300 x radius 16
+  assert.ok(Math.abs(result.stone - 9.6) < 1e-9); // 4800 x 0.001 x 12 / 6
+  assert.ok(Math.abs(result.atReference - 4.8) < 1e-9); // at the reference impact the attack is weight x 0.001
+  assert.ok(Math.abs(result.walking - 2.4) < 1e-9);
   assert.strictEqual(result.noImpact, 0);
   assert.strictEqual(result.avatar, 10); // the avatar hits with its own weight, 5000 kg
   assert.ok(Math.abs(result.lighterAvatar - 8.7) < 1e-9); // a lighter mecha hits softer: 4350 x 0.001 x 2
-  assert.ok(Math.abs(result.boulderDamage - 12.6) < 1e-9); // 15.6 - 3
-  assert.ok(Math.abs(result.rubberDamage - 2.6) < 1e-9); // 5.6 - 3
+  assert.ok(Math.abs(result.boulderDamage - 9) < 1e-9); // 12 - 3
+  assert.ok(Math.abs(result.rubberDamage - 4.2) < 1e-9); // 7.2 - 3
 });
 
 test("51 health stops at 0 (there is no death yet)", () => {
@@ -1140,9 +1142,9 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
   assert.strictEqual(result.afterHit.broken, 0);
   assert.strictEqual(result.afterHit.vx, 12); // no bounce and no stop
   assert.strictEqual(result.afterHit.x, 137); // not pushed out
-  assert.strictEqual(result.afterHit.health, 93); // the breaking hit still hurt the avatar (10 - 3)
+  assert.ok(Math.abs(result.afterHit.health - 93.4) < 1e-9); // the breaking hit still hurt the avatar (9.6 - 3)
   assert.ok(result.x > 159 + 32, "the avatar did not go through the broken rock: x=" + result.x);
-  assert.strictEqual(result.health, 93); // and the broken rock hurts no more
+  assert.ok(Math.abs(result.health - 93.4) < 1e-9); // and the broken rock hurts no more
 });
 
 test("63 every rock rolls its own health from the seed: whole numbers from 10 to 20, the same every time, and all values show up", () => {
@@ -1165,15 +1167,20 @@ test("63 every rock rolls its own health from the seed: whole numbers from 10 to
   assert.deepStrictEqual(plain(result.values), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
 });
 
-test("64 the weights of the rocks follow their area: the stone weighs as much as the avatar (same radius)", () => {
+test("64 the weight of a still actor is weightPerRadius x radius, a whole number: twice the radius, twice the weight", () => {
   const result = run(`
-    return ["stone", "boulder", "rubber"].map((kind) => {
+    return ["stone", "boulder", "rubber", "dummy"].map((kind) => {
       const definition = DEFINITIONS.actors[kind];
-      return { kind, weight: definition.weight, fromArea: Math.round(5000 * (definition.radius / 16) ** 2 / 100) * 100 };
+      return { kind, radius: definition.radius, weightPerRadius: definition.weightPerRadius, weight: weightOfType(definition) };
     });
   `);
-  for (const rock of result) assert.strictEqual(rock.weight, rock.fromArea, rock.kind);
-  assert.deepStrictEqual(plain(result).map((rock) => rock.weight), [5000, 7800, 2800]);
+  for (const actor of result) {
+    assert.strictEqual(actor.weight, actor.weightPerRadius * actor.radius, actor.kind);
+    assert.ok(Number.isInteger(actor.weight), actor.kind);
+  }
+  assert.deepStrictEqual(plain(result).map((actor) => actor.weight), [4800, 6000, 3600, 4800]);
+  const [stone, boulder] = result;
+  assert.strictEqual(boulder.weight / stone.weight, boulder.radius / stone.radius); // linear in the radius, not the area
 });
 
 test("65 the training dummy: the first dash up hits it with an impact of 7, and it hits back with its own weight", () => {
@@ -1196,7 +1203,7 @@ test("65 the training dummy: the first dash up hits it with an impact of 7, and 
   assert.deepStrictEqual(plain(result.start), { x: 0, y: -130 });
   assert.ok(result.hitFrame !== null, "the first dash did not reach the dummy");
   assert.ok(Math.abs(result.dummy - (30 - 35 / 6)) < 1e-9); // 5000 x 0.001 x 7 / 6 = 5.83, defense 0
-  assert.ok(Math.abs(result.avatar - (100 - (35 / 6 - 3))) < 1e-9); // the dummy hits back: 5.83 - 3 = 2.83
+  assert.ok(Math.abs(result.avatar - 97.4) < 1e-9); // the dummy (4800 kg) hits back: 4800 x 0.001 x 7 / 6 = 5.6, minus 3 = 2.6
   assert.ok(result.velocityAfter > 0, "bounce 0.5: the avatar comes back"); // moving up is negative y
   assert.strictEqual(result.dummyMoved, false);
 });
@@ -1246,7 +1253,7 @@ test("67 touching again after separating is a new collision and hurts again; the
 test("68 only something with doesDamage hits: a type without it never hurts what touches it", () => {
   const patched = loadGame((text) => text.replace(
     "const DEFINITIONS = {\n  actors: {",
-    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", weight: 5000, radius: 16, bounce: 0, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", weightPerRadius: 300, radius: 16, bounce: 0, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
   ));
   const result = run(`
     const soft = { type: "soft", position: { x: 0, y: 0 } };
@@ -1255,20 +1262,20 @@ test("68 only something with doesDamage hits: a type without it never hurts what
     return { soft: finalAttack(soft, { impact: 12 }, full), stone: finalAttack(stone, { impact: 12 }, full) };
   `, patched);
   assert.strictEqual(result.soft, 0); // same weight as the stone, but no doesDamage
-  assert.strictEqual(result.stone, 10);
+  assert.ok(Math.abs(result.stone - 9.6) < 1e-9);
 });
 
 test("69 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
   const result = withBuilds(`
     const rubber = { type: "rubber", position: { x: 0, y: 0 } };
     return {
-      weak: damageOf(rubber, { impact: 3 }, avatar, full), // attack 1.4, defense 3
-      strong: damageOf(rubber, { impact: 12 }, avatar, full), // attack 5.6, defense 3
+      weak: damageOf(rubber, { impact: 3 }, avatar, full), // attack 1.8, defense 3
+      strong: damageOf(rubber, { impact: 12 }, avatar, full), // attack 7.2, defense 3
       noImpact: damageOf(rubber, { impact: 0 }, avatar, full),
     };
   `);
   assert.strictEqual(result.weak, 1);
-  assert.ok(Math.abs(result.strong - 2.6) < 1e-9);
+  assert.ok(Math.abs(result.strong - 4.2) < 1e-9);
   assert.strictEqual(result.noImpact, 0);
 });
 
@@ -1286,21 +1293,39 @@ test("70 below the minimum impact (1) nothing triggers: no damage, no bounce; th
   assert.strictEqual(result.vx, 0); // not sent back (a bounce of 0.5 x 0.75 would give -0.375)
 });
 
-test("71 every weight in the definitions is a whole number of kg, 0 or more", () => {
+test("71 every weight in the definitions is a whole number: the parts, and the weightPerRadius and radius of the still actors", () => {
   const weights = run(`
     return [
-      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.weight !== undefined).map(([id, d]) => [id, d.weight]),
+      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.weightPerRadius !== undefined).flatMap(([id, d]) => [[id + " weightPerRadius", d.weightPerRadius], [id + " radius", d.radius]]),
       ...Object.entries(DEFINITIONS.parts).map(([id, p]) => [id, p.weight]),
     ];
   `);
-  assert.ok(weights.length >= 12);
+  assert.ok(weights.length >= 17);
   for (const [id, weight] of weights) assert.ok(Number.isInteger(weight) && weight >= 0, id + ": " + weight);
 });
 
-test("72 a weight that is not a whole number (or is negative) stops the game when it loads", () => {
-  const brokenActor = (text) => text.replace("weight: 5000,\n      healthRange", "weight: 5000.5,\n      healthRange");
+test("72 a weight that is not a whole number (or is negative) stops the game when it loads; 0 is allowed", () => {
+  const brokenMultiplier = (text) => text.replace("weightPerRadius: 300,\n      healthRange", "weightPerRadius: 300.5,\n      healthRange");
+  const brokenRadius = (text) => text.replace("radius: 16,\n      weightPerRadius", "radius: 16.5,\n      weightPerRadius");
   const brokenPart = (text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,');
-  assert.throws(() => loadGame(brokenActor), /actor type stone.*5000.5/);
+  assert.throws(() => loadGame(brokenMultiplier), /actor type stone.*300.5/);
+  assert.throws(() => loadGame(brokenRadius), /radius of the actor type stone.*16.5/);
   assert.throws(() => loadGame(brokenPart), /part head.*-1/);
-  loadGame((text) => text.replace("weight: 5000,\n      healthRange", "weight: 0,\n      healthRange")); // 0 is allowed
+  const box = loadGame((text) => text.replace("weightPerRadius: 300,\n      healthRange", "weightPerRadius: 0,\n      healthRange"));
+  assert.strictEqual(run("return weightOfType(DEFINITIONS.actors.stone);", box), 0);
+});
+
+test("73 a still actor with weight 0 and health 1 is harmless and breaks at the first hit, and the avatar goes through it", () => {
+  const box = loadGame((text) => text
+    .replace("weightPerRadius: 300,\n      healthRange: { min: 10, max: 20 }", "weightPerRadius: 0,\n      healthRange: { min: 1, max: 1 }"));
+  const result = run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = 125; p.position.y = 444; // touching the stone at 159,444, which is now the box
+    step(s, { move: { x: 1, y: 0 }, dash: true });
+    return { avatar: p.health.current, box: s.damagedRocks["0,1"], vx: p.move.velocity.x };
+  `, box);
+  assert.strictEqual(result.avatar, 100); // attack 0: no damage, not even the minimum
+  assert.strictEqual(result.box, 0); // the avatar hit it for 10 (minimum damage 1 would be enough)
+  assert.strictEqual(result.vx, 12); // broken: no stop, no bounce
 });
