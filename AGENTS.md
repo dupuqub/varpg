@@ -168,6 +168,38 @@ The user approved this and noted that everything may change.
   5. To see the limits of the universe, a debug zoom-out is needed: at scale 0.5 the 1920 x 1080 canvas shows 3840 x 2160, almost the whole window. Drawing every cell of the window at scale 1 only produces visual noise.
 - Collision itself is not implemented yet. The window is not drawn any more (the user no longer wants to see the collision boxes; the amber overlay was removed from `src/render.js`). The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated to the collision grid. If the window has to be seen again, a debug zoom-out is the better way (see the consequences above).
 
+### Numbers and why
+
+The user wants every chosen number to have a reason, to understand how the numbers relate. The reason sits next to each value in `src/data.js` (and `src/sim.js` for the grid), with its kind: **target** (computed from a feel, in plain units), **anchor** (a real-world reference), **rule** (forced by another number) or **guess** (a placeholder, tuned by playing). No value was changed when the reasons were written.
+
+| Value | Kind | Reason |
+|---|---|---|
+| `baseSpeed` 3 px/frame | target | 180 px/s: the 1920 px screen is crossed in about 10.7 s |
+| `acceleration` 0.25 | target | top speed in 0.2 s: 3 / 0.25 = 12 frames |
+| `deceleration` 0.125 | target | stops in 0.4 s, twice the time of speeding up (it slides): 3 / 0.125 = 24 frames |
+| `dash.speed` 12 | target and rule | 4 x the top speed; about 4.4 avatar widths of distance; must stay below 28 |
+| `overspeedDecay` 0.5 | target | a dash of 12 lasts (12 - 3) / 0.5 = 18 frames = 0.3 s |
+| `dash.maxCharges` 1, `rechargeFrames` 240 | anchor | the user's old project (1 charge, 4 s) |
+| `radius` 16 (avatar) | guess | 32 px wide, 1/60 of the screen width; the rocks are measured against it |
+| rock radii 16 / 20 / 12 | guess | the avatar's size, 1.25 x and 0.75 x |
+| rock `bounce` 0 / 0.5 / 1 | guess | none, half and all, to compare the three feels |
+| `rocks.cellSize` 256 | guess | 4 cells of the collision grid |
+| `rocks.chancePercent` 35 | target | about 11 rocks on a screen (seed 1 gives 12): enough to dodge, too few to wall you in |
+| `rocks.margin` 20 | rule | the largest rock radius |
+| `rocks.safeRadius` 200 | guess | larger than the first dash (142 px) |
+| `grid.cellSize` 64 | rule | 2 x (largest radius 20 + largest speed 12) = 64, exactly at the limit |
+| `grid.windowWidth` x `windowHeight` 61 x 35 | rule | twice the screen: 3904 x 2240 px |
+| robot 5 t, torso capacity 6 t (not in code yet) | anchor and rule | two large cars; 20% of room to grow, as a build budget |
+| `maxHealth`, `attack`, `defense` | guess | not defined yet |
+
+**Relations** (if one number changes, check the ones it is tied to):
+- Time to top speed = `baseSpeed / acceleration` frames. Time to stop = `baseSpeed / deceleration`.
+- Dash duration = `(dash.speed - baseSpeed) / overspeedDecay` frames. A stronger dash (from parts) lasts longer, because the decay is a constant.
+- `dash.speed` (and any future blink or charge speed) must stay below `radius + smallest rock radius` = 28, or a rock can be crossed in one frame.
+- `grid.cellSize >= 2 x (largest radius + largest speed)`: a dash above 12, or a rock above radius 20, needs a bigger cell (and then fewer cells for the same area).
+- `rocks.margin >= largest rock radius`, or neighbor rocks can overlap (tests 38 and 40).
+- `rocks.safeRadius` should stay above the dash distance, or the first dash can hit a rock.
+
 ### Damage formula (initial version, no buffs)
 
 ```

@@ -231,6 +231,8 @@ function createChamber1State(runId = 1, seed = 1) {
     //   How far outside the screen actors can be is not decided yet (it depends
     //   on where they spawn). A bigger window costs almost nothing: what costs
     //   is the number of actors tested, not the area.
+    // cellSize 64 = rule: 2 x (largest radius 20 + largest speed 12), exactly at the limit,
+    // so a faster dash or a bigger rock needs a bigger cell. windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
     actors: [createActor(PLAYER_ID, "player")],
