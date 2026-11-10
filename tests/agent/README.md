@@ -115,13 +115,13 @@ These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 
 
 ### Body slam: damage from collisions
 
-Rule: a collision (a pair that was not touching in the last frame) with something that has `doesDamage` is a hit; friction is not, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
+Rule: a collision (a pair that was not touching in the last frame, with an impact of at least 1) with something that has `doesDamage` is a hit; friction is not, and nothing triggers below an impact of 1. A hit costs at least 1, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 47 | Walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5 (10 - 7.5), the avatar nothing (2.5 - 3 is below 0), and it still stops. | No minimum impact: any contact hits, but weakly. The bounce is a separate rule. |
+| 47 | Walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5 (10 - 7.5), the avatar the minimum damage 1 (2.5 - 3 is below 1), and it still stops. | No minimum impact: any contact hits, but weakly. The bounce is a separate rule. |
 | 48 | A dash (impact 12) into the stone costs the avatar 7 (10 - 3) and the stone 10 (it breaks); into the boulder 12.6 and 10; into the rubber rock 2.6 and 10. | A hit hurts both sides, each with its own weight. |
-| 49 | A glancing blow hurts the stone, but less than the head-on walk of test 47. | Only the part of the speed going into the rock counts. |
+| 49 | A glancing blow (impact about 1.7) hurts the stone, but less than the head-on walk of test 47; the avatar loses 1. | Only the part of the speed going into the rock counts. |
 | 50 | The attack at impact 12 is 10 for the stone and for the avatar, 8.7 for a lighter avatar; 5 at the reference impact 6, 2.5 at 3, 0 at no impact. The damage never goes below 0. | The formula in numbers you can check by hand. |
 | 51 | Health stops at 0. | There is no death yet. |
 | 52 | The cross-check stays clean in a run where both avatar and rock are hurt, and the state stays plain numbers. | Damage must replay identically (determinism). |
@@ -135,9 +135,11 @@ Rule: a collision (a pair that was not touching in the last frame) with somethin
 | 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
 | 64 | The rock weights follow the area (5000 / 7800 / 2800). | The reason of the weights is checked, not only the values. |
 | 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 24.17 (5000 x 0.001 x 7 / 6 = 5.83) and the avatar from 100 to 97.17 (5.83 - 3). The avatar bounces back and the dummy does not move. | The first combat test works from the very first dash. |
-| 66 | Walking into the dummy and pressing for 3 more seconds hurts it once, at the arrival; the health does not change while pressing. At 0 health the dummy stays and still collides. | Only the moment of the collision hurts, not friction. |
+| 66 | Pressing into the dummy: it hits at impact 3 (2.5), the bounce sends the avatar back at 1.5, pressing again hits at impact 1.5 (1.25), and the next return is below 1: nothing more, even after 200 frames of pressing. The avatar loses 1 each time (minimum damage). At 0 health the dummy stays and still collides. | Only real collisions hurt, and the chain ends by itself. |
 | 67 | After walking away (no contact) and coming back, the second collision hurts again; the contacts list is plain state (`["player_1|dummy_1"]` while touching, empty when apart). | A new collision is a new hit. |
 | 68 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 10. | The rule is modular: the flag decides who hits. |
+| 69 | A hit always costs at least 1: attack 1.4 against defense 3 costs 1; attack 5.6 costs 2.6; no impact costs 0. | The defense never makes the target immune. |
+| 70 | An impact below 1 (0.5, into a bounce-0.5 thing) triggers nothing: no damage, no bounce, the avatar stops. | The collision threshold. |
 
 ### The kit of parts
 

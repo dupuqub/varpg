@@ -903,7 +903,7 @@ function slamInto(x, y, rockKey, rockMaxHealth) {
   `);
 }
 
-test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, the avatar nothing (2.5 - 3 is below 0)", () => {
+test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, the avatar the minimum damage 1 (2.5 - 3 is below 1)", () => {
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -912,7 +912,7 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, t
     step(s, { move: { x: 1, y: 0 } });
     return { avatar: p.health.current, damagedRocks: s.damagedRocks, vx: p.move.velocity.x };
   `);
-  assert.strictEqual(result.avatar, 100);
+  assert.strictEqual(result.avatar, 99); // 2.5 - 3 is below the minimum damage, 1
   assert.deepStrictEqual(plain(result.damagedRocks), { "0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
   assert.strictEqual(result.vx, 0); // it still stopped (the bounce is a separate rule)
 });
@@ -938,7 +938,7 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
     step(s, { move: { x: 1, y: 0 } });
     return { avatar: p.health.current, damagedRocks: s.damagedRocks };
   `);
-  assert.strictEqual(result.avatar, 100);
+  assert.strictEqual(result.avatar, 99); // the attack is below the defense, so the minimum damage 1
   const loss = 10 - result.damagedRocks["0,1"];
   assert.ok(loss > 0 && loss < 2.5, "a graze should hurt the stone less than the head-on walk of test 47 (2.5), it lost " + loss);
 });
@@ -1201,22 +1201,24 @@ test("65 the training dummy: the first dash up hits it with an impact of 7, and 
   assert.strictEqual(result.dummyMoved, false);
 });
 
-test("66 walking and pressing into the dummy hurts it once, at the moment of the collision; friction does not hurt; at 0 it stays", () => {
+test("66 pressing into the dummy: it bounces back and hits again while the impact is at least 1 (3, then 1.5), then nothing more; at 0 it stays", () => {
   const result = run(`
     const s = createChamber1State();
     const player = s.actors[0];
     const dummy = s.actors.find((actor) => actor.id === "dummy_1");
-    for (let i = 0; i < 60; i++) step(s, { move: { x: 0, y: -1 } }); // walks up into the dummy and presses
-    const afterArriving = { dummy: dummy.health.current, avatar: player.health.current };
-    for (let i = 0; i < 120; i++) step(s, { move: { x: 0, y: -1 } }); // keeps pressing
+    for (let i = 0; i < 100; i++) step(s, { move: { x: 0, y: -1 } }); // walks up into the dummy and keeps pressing
+    const settled = { dummy: dummy.health.current, avatar: player.health.current };
+    for (let i = 0; i < 200; i++) step(s, { move: { x: 0, y: -1 } }); // keeps pressing
     const afterPressing = { dummy: dummy.health.current, avatar: player.health.current };
     applyDamage(dummy, 100);
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: -1 } });
-    return { afterArriving, afterPressing, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
+    return { settled, afterPressing, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
   `);
-  assert.ok(result.afterArriving.dummy < 30, "the arrival should have hurt the dummy");
-  assert.strictEqual(result.afterArriving.avatar, 100); // 2.5 - 3 is below 0
-  assert.deepStrictEqual(plain(result.afterPressing), plain(result.afterArriving)); // pressing for 2 s more changed nothing
+  // First collision at impact 3: the dummy loses 5000 x 0.001 x 3 / 6 = 2.5. The bounce sends the avatar back at
+  // 1.5 (bounce 0.5); pressing again hits at impact 1.5: 1.25. The next return is below 1: nothing triggers.
+  // The avatar loses the minimum damage 1 each time (the attack is below its defense 3).
+  assert.deepStrictEqual(plain(result.settled), { dummy: 26.25, avatar: 98 });
+  assert.deepStrictEqual(plain(result.afterPressing), plain(result.settled)); // pressing for 3 s more changed nothing
   assert.strictEqual(result.dummyAtZero, 0);
   assert.strictEqual(result.stillThere, true);
   assert.ok(result.y >= -130 + 32 - 1e-9, "the avatar went into the dummy: y=" + result.y); // still collides at 0 health
@@ -1254,4 +1256,32 @@ test("68 only something with doesDamage hits: a type without it never hurts what
   `, patched);
   assert.strictEqual(result.soft, 0); // same weight as the stone, but no doesDamage
   assert.strictEqual(result.stone, 10);
+});
+
+test("69 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
+  const result = withBuilds(`
+    const rubber = { type: "rubber", position: { x: 0, y: 0 } };
+    return {
+      weak: damageOf(rubber, { impact: 3 }, avatar, full), // attack 1.4, defense 3
+      strong: damageOf(rubber, { impact: 12 }, avatar, full), // attack 5.6, defense 3
+      noImpact: damageOf(rubber, { impact: 0 }, avatar, full),
+    };
+  `);
+  assert.strictEqual(result.weak, 1);
+  assert.ok(Math.abs(result.strong - 2.6) < 1e-9);
+  assert.strictEqual(result.noImpact, 0);
+});
+
+test("70 below the minimum impact (1) nothing triggers: no damage, no bounce; the avatar just stops against the thing", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = 145; p.position.y = -435; // inside the boulder at 172,-435 (bounce 0.5), pushed out by the collision
+    p.move.velocity.x = 0.5; // impact 0.5, below 1
+    step(s, { move: { x: 1, y: 0 } }); // accelerates to 0.75 into it
+    return { avatar: p.health.current, damagedRocks: s.damagedRocks, vx: p.move.velocity.x, contacts: s.contacts };
+  `);
+  assert.strictEqual(result.avatar, 100);
+  assert.deepStrictEqual(plain(result.damagedRocks), {});
+  assert.strictEqual(result.vx, 0); // not sent back (a bounce of 0.5 x 0.75 would give -0.375)
 });

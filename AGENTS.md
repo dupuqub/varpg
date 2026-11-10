@@ -41,7 +41,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 |---|---|
 | Actor types (radius, acceleration, deceleration, dash charges and recharge, bounce, weight, health) | `DEFINITIONS.actors` in `src/data.js` |
 | Mecha parts (weight and specs) and the starter build | `DEFINITIONS.parts`, `DEFINITIONS.starterBuild` |
-| Values equal for everyone (`overspeedDecay`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
+| Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `bodySlam.minDamage`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | Rocks on the ground (`cellSize`, `chancePercent`, `margin`, `safeRadius`, `kinds`) | `DEFINITIONS.terrain.rocks` |
 | What Chamber 1 has besides the avatar and the rocks (the dummy and its position) | `DEFINITIONS.chamber1` |
 | Collision grid (`cellSize`, `windowWidth`, `windowHeight`) | `state.grid`, set in `createChamber1State` in `src/sim.js` |
@@ -183,7 +183,8 @@ library
 
 - Circle against circle. The *normal* is the unit vector from the thing to the actor. The actor is pushed along the normal until it just touches the thing.
 - The velocity is split into the part going **into** the thing (along the normal) and the part going **along** it. The part going in becomes `-bounce x` itself, and the part along is **not changed**. So no bounce cancels the reflection only and the actor **slides** (the user's definition: "bounce 0 is not friction 1, it does not stop movement, it only cancels the reflection"), and the angle matters. Friction does not exist; it could become another value per rock later.
-- When the actor is going into the thing, that is a hit, and the **body slam** hurts both sides before the bounce (see "Damage").
+- **Collision threshold (the user's decision):** the collision only happens when the speed going into the thing (the impact) is at least `collision.minImpact` ("1 for now", to be found by playing). Below it **nothing triggers**: no hit and no bounce, and the actor just stops against the thing (the part going in is removed). Its purpose is to avoid several contacts in a row. Bounce and weight are properties of the still actor and have nothing to do with each other: any still actor (a block in its nature, not a "rock" with sizes) has a weight, a bounce and `doesDamage`.
+- When the collision happens, the **body slam** hurts both sides before the bounce (see "Damage").
 - The rocks are tested in the fixed order of `rocksInArea`; a corner between two rocks is resolved over the next frames. See "Relations" for the speed above which a rock could be crossed in one frame.
 - **Known weakness:** rocks are actors in the design but a separate shape in the code (`other.square !== undefined` tells a rock from an actor). It will cost when moving actors arrive.
 
@@ -194,7 +195,7 @@ DAMAGE = max(0, finalAttack - finalDefense)
 HEALTH = HEALTH - DAMAGE
 ```
 
-- Defending never heals the target. Health stops at zero; there is no death yet.
+- A hit by something that `doesDamage` always costs at least `bodySlam.minDamage`: the defense never makes the target immune and never heals it. Health stops at zero; there is no death yet.
 - `finalAttack` and `finalDefense` are pure functions, like `finalSpeed` (the user's decision): the recipe is in the library, what is equipped is in the build, and the value is computed every time. The functions are `finalAttack`, `finalDefense`, `damageOf` and `applyDamage` in `src/sim.js`.
 - **Body slam (the user's decisions, with his first numbers, "to begin with", not validated by play):** a collision hurts **both sides**, each with **its own weight**. Every **collision** with something whose definition has **`doesDamage: true`** is a hit (the user's decision: modular, because speeds will change); a type without it never hurts what touches it. **Only the moment of the collision hurts, friction does not** (the user's decision): a pair that was already touching in the last frame is friction, and `state.contacts` keeps the pairs of the last frame to tell them apart. Pressing and sliding still push and bounce, but are not new hits. The attack grows with the weight and the impact: `finalAttack = weight of the attacker x bodySlam.attackPerKg x impact / bodySlam.referenceImpact` (**the formula is the agent's provisional proposal, to be discussed with the user**; the two constants are his first numbers). The impact is the part of the speed going into the other thing, so a graze is a weak hit. The weight of the avatar is the total weight of its build; of anything else, the `weight` of its definition. Later modifiers of the body slam do not exist yet.
 - **Training dummy (the agent's proposal, to validate):** the actor type `dummy`, a still actor with health, weight and bounce, listed with its position in `DEFINITIONS.chamber1`. The avatar's body slam hurts it and it hits back with its own weight. At zero health it stays and still collides. Health numbers are drawn above the dummy and above any hurt rock.
@@ -202,7 +203,7 @@ HEALTH = HEALTH - DAMAGE
 - **Damage trace (the user's requirement, not implemented):** any change to health must be explainable. The damage is shown as a formula such as `(X + Y + Z) * W`, and every term says where it came from (which skill, part or buff). It feeds the damage audit page. The structure of the trace is not defined.
 - The formula will be developed little by little, one piece at a time.
 - **Known weaknesses (for the user to decide):**
-  - Subtracting the defense is all or nothing: a defense at or above the attack is full immunity, and with small numbers a little defense is a large part of a hit.
+  - Subtracting the defense is still a flat subtraction: with small numbers a little defense is a large part of a hit, and anything below the defense costs the same `minDamage`.
   - Hits come in whole steps of the attack, so a fine health range for the rocks shows up in play as only a few different numbers of hits.
 
 ### Movement and input

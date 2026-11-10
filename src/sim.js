@@ -122,10 +122,13 @@ function finalDefense(actor, build) {
   return (definitionOf(actor).defense ?? 0) + fromParts(actor, build, "defense");
 }
 
-// The damage of a hit on a target: finalAttack - finalDefense, never below 0
-// (defending never heals). The shield is not here yet.
+// The damage of a hit on a target: finalAttack - finalDefense, but never below minDamage
+// (a hit always costs something). No attack (the attacker does not doDamage) means no damage at all.
+// The shield is not here yet.
 function damageOf(attacker, hit, target, build) {
-  return Math.max(0, finalAttack(attacker, hit, build) - finalDefense(target, build));
+  const attack = finalAttack(attacker, hit, build);
+  if (attack <= 0) return 0;
+  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, build));
 }
 
 // Takes damage off the health. Health stops at 0 (there is no death yet).
@@ -286,7 +289,7 @@ function staticsNear(state, actor) {
 // Pushes an actor out of the still things it overlaps, hurts both sides, and changes its velocity.
 // For each thing that overlaps (circle against circle):
 // 1. The "normal" is the direction from the thing to the actor (a unit vector).
-// 2. If the actor is going toward the thing and was not already touching it in the last frame, that is a hit, and its impact is the speed
+// 2. If the actor is going toward the thing fast enough (collision.minImpact) and was not already touching it in the last frame, that is a hit, and its impact is the speed
 //    going INTO the thing (along the normal). Each side hurts the other with its own
 //    weight (damageOf, the body slam): the actor takes the damage of the thing, and the
 //    thing takes the damage of the actor. A rock keeps its health in state.damagedRocks,
@@ -295,7 +298,8 @@ function staticsNear(state, actor) {
 // 3. The actor is moved along the normal until it just touches the thing.
 // 4. The velocity is split in two: the part that goes INTO the thing (along the
 //    normal) and the part that goes ALONG it. The part going in is replaced by
-//    the bounce of the thing: -bounce x (what was going in). The part along the
+//    the bounce of the thing: -bounce x (what was going in); below the minimum impact there is no
+//    bounce, the part going in is just removed. The part along the
 //    thing is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
 function collideWithStatics(state, actor, build, lastContacts) {
@@ -323,7 +327,10 @@ function collideWithStatics(state, actor, build, lastContacts) {
     const velocity = actor.move.velocity;
     const goingIn = velocity.x * normalX + velocity.y * normalY;
 
-    if (goingIn < 0 && isNewContact) {
+    // A collision needs an impact of at least collision.minImpact; below it nothing triggers.
+    const collides = goingIn < 0 && -goingIn >= DEFINITIONS.constants.collision.minImpact;
+
+    if (collides && isNewContact) {
       const hit = { impact: -goingIn };
       if (actor.health) applyDamage(actor, damageOf(other, hit, actor, build));
       const damage = damageOf(actor, hit, other, build);
@@ -339,9 +346,11 @@ function collideWithStatics(state, actor, build, lastContacts) {
     actor.position.x += normalX * overlap;
     actor.position.y += normalY * overlap;
 
+    // The part going in is removed; a collision also adds the bounce, anything below the minimum does not.
     if (goingIn < 0) {
-      velocity.x -= (1 + otherDefinition.bounce) * goingIn * normalX;
-      velocity.y -= (1 + otherDefinition.bounce) * goingIn * normalY;
+      const factor = collides ? 1 + otherDefinition.bounce : 1;
+      velocity.x -= factor * goingIn * normalX;
+      velocity.y -= factor * goingIn * normalY;
     }
   }
 }

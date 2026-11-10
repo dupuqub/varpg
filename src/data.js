@@ -14,7 +14,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 10;
+const DEFINITIONS_VERSION = 11;
 
 const DEFINITIONS = {
   actors: {
@@ -113,13 +113,21 @@ const DEFINITIONS = {
     // target: a dash of 12 lasts 0.3 s: (12 - 3) / 0.5 = 18 frames. A power of two, so the speed lands exactly on the top speed.
     overspeedDecay: 0.5,
 
+    // A collision only happens when the speed going INTO the other thing (the impact, px/frame) is at least
+    // minImpact. Below it nothing triggers: no hit, no bounce (the actor just stops against the thing).
+    // minImpact 1: the user's decision, "for now", to be found by playing. Its job is to avoid several contacts
+    // in a row: pressing (acceleration 0.25 per frame) never reaches it, so it cannot hit again and again.
+    collision: { minImpact: 1 },
+
     // The body slam: what a collision does. Every contact with something that doesDamage is a hit; the attack is
     // the weight of whoever hits (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the
     // speed going into the other thing, in px/frame. Provisional formula (agent's proposal, to be discussed):
     //   attackPerKg 0.001: the user's first number, a weight of 5000 kg hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
     //     Walking (3) hits for half of it, a dash (12) for double.
-    bodySlam: { attackPerKg: 0.001, referenceImpact: 6 },
+    //   minDamage 1: the user's decision, a hit by something that doesDamage always costs at least 1,
+    //     so a defense never makes the target immune.
+    bodySlam: { attackPerKg: 0.001, referenceImpact: 6, minDamage: 1 },
 
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that
