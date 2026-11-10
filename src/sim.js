@@ -25,12 +25,30 @@ function createActor(id, type) {
   return { id, type, ...initial };
 }
 
-// The speed an actor uses in the current frame, in pixels per frame.
+// The top speed of an actor in the current frame, in pixels per frame.
 // It is a function, not a stored value, so buffs, mecha parts, etc. can be
 // applied here, in order, later. For now it is only the base speed.
 // It must stay pure: the result depends only on the actor and the definitions.
 function finalSpeed(actor) {
   return definitionOf(actor).baseSpeed;
+}
+
+// Moves a velocity toward a target velocity by at most "rate" (pixels per frame),
+// in a straight line, and changes the velocity in place. If the target is
+// within reach, it lands exactly on it. Only arithmetic and a square root
+// (which is exact in every browser), so the result is the same everywhere.
+function approach(velocity, target, rate) {
+  const deltaX = target.x - velocity.x;
+  const deltaY = target.y - velocity.y;
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+  if (distance <= rate) {
+    velocity.x = target.x;
+    velocity.y = target.y;
+    return;
+  }
+  velocity.x += (deltaX / distance) * rate;
+  velocity.y += (deltaY / distance) * rate;
 }
 
 // What a run has besides its state: an id, and the build (what the player
@@ -113,12 +131,22 @@ function step(state, input) {
   player.move.direction.y = input.move.y;
 
   // 2. Movement: every actor that has "move" walks, in list order.
-  // The speed is asked every frame, because it can change from one frame to the next.
+  // The velocity does not jump to the wanted value: it speeds up toward it
+  // while the actor wants to move, and slows down toward zero when it does not.
+  // The top speed is asked every frame, because it can change from one frame to the next.
   for (const actor of state.actors) {
     if (!actor.move) continue;
+    const { direction, velocity } = actor.move;
+    const definition = definitionOf(actor);
     const speed = finalSpeed(actor);
-    actor.position.x += actor.move.direction.x * speed;
-    actor.position.y += actor.move.direction.y * speed;
+
+    const wantsToMove = direction.x !== 0 || direction.y !== 0;
+    const target = { x: direction.x * speed, y: direction.y * speed };
+    const rate = wantsToMove ? definition.acceleration : definition.deceleration;
+    approach(velocity, target, rate);
+
+    actor.position.x += velocity.x;
+    actor.position.y += velocity.y;
   }
 
   // 3. Cells: where every actor is, relative to the player.

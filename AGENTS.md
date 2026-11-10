@@ -75,7 +75,7 @@ The user wants the smallest possible state. The state is a **photo** of how the 
 - Agent's warning: do not store derived values (such as `finalSpeed` or total damage) in actors for convenience, and keep an eye on lists of active effects (buffs, poison, slow), which are the fields that grow the most.
 - **Rules (code):** `step`, `finalSpeed`, etc. The order of the phases is written in `step`, is the same in every run, and is not stored anywhere.
 - The state carries the **version of the definitions** it was made with (`state.definitionsVersion`, from `DEFINITIONS_VERSION`, a number raised by hand on any change; nothing refuses a mismatched state yet), so a test can refuse a photo from another version (a photo alone is not self-contained: it only makes sense with the right definitions).
-- **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the speed used in the current frame, and movement uses that value. Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale). Implemented: for now it only returns the base speed. When buffs arrive it will probably return the value and the steps of the calculation, which the audit page will want.
+- **Speed:** the actor has `baseSpeed`. The function `finalSpeed(actor)` (code, pure, no clock or randomness) returns the top speed in the current frame, and movement aims at that value (see "Movement and input" for the inertia). Buffs, mecha parts, etc. will be applied inside it, in order. `finalSpeed` is not stored in the actor (it would be derived data that can go stale). Implemented: for now it only returns the base speed. When buffs arrive it will probably return the value and the steps of the calculation, which the audit page will want.
 
 ### The library (names agreed with the user)
 
@@ -121,8 +121,10 @@ The user approved this and noted that everything may change.
 - The player is drawn as a white circle. The arrow that showed where it looked was removed with the manual aim. If the avatar should show a facing direction (for example its movement direction), the user has not asked for it.
 - `move.direction` is a vector with length 0 to 1. On the keyboard, diagonals are normalized so they are not faster.
 - Vectors (for example `move.direction`) are used instead of angles, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
-- Movement stops instantly when input stops (no inertia for now).
-- **Speed is dynamic** (the user's requirement): it is read again every frame. The actor has `baseSpeed` (in the definitions) and a `finalSpeed(actor)` function gives the value used each frame (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
+- **Movement has inertia** (the user's requirement, from his earlier project, where movement felt more dynamic): the avatar speeds up and slides to a stop. `move.direction` is what the actor *wants* (the input), and `move.velocity` (`{ x, y }`, pixels per frame) is how it is *really* moving. The velocity is **state** (it has memory), so it is stored. Every frame, in `step`, `approach(velocity, target, rate)` moves the velocity in a straight line toward `target = direction x finalSpeed(actor)`, by at most `rate`, and lands exactly on the target when it is within reach. `rate` is `acceleration` while the actor wants to move (direction not zero) and `deceleration` when it does not. Turning around passes through zero, with no jump. Only arithmetic and `Math.sqrt` (exact in every browser), so it stays deterministic. Then `position += velocity`.
+- `acceleration` and `deceleration` are fixed values in the definitions (pixels per frame, per frame). **Provisional, to be tuned by feel:** 0.25 and 0.125, which give 12 frames (0.2 s) from rest to the top speed 3 and 24 frames (0.4 s) to stop. They are powers of two on purpose, so the numbers add up exactly in floating point and the speed lands on the top speed at a round frame. Later, mecha parts (for example the legs) may change them, in a function like `finalSpeed`.
+- Diagonals: the keyboard input is normalized (0.707), not 0.8 as in the user's old project. Not confirmed by the user.
+- **Top speed is dynamic** (the user's requirement): it is read again every frame. The actor has `baseSpeed` (in the definitions) and a `finalSpeed(actor)` function gives the top speed used each frame (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
 - Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
 - Gamepad: the browser only exposes it after a button is pressed. The left stick has a radial dead zone of 0.15.
 - The loop in `src/main.js` runs at most one step per browser callback. On monitors above 60 Hz the extra callbacks are ignored (no step, no drawing), so the game does not speed up. On slow machines it runs in slow motion.
@@ -179,7 +181,10 @@ Format of an actor **in the state** (provisional, it will change, for example on
   "health": { "current": 100 },
   "position": { "x": 0, "y": 0 },
   "cell": { "x": 0, "y": 0 },
-  "move": { "direction": { "x": 0, "y": 0 } }
+  "move": {
+    "direction": { "x": 0, "y": 0 },
+    "velocity": { "x": 0, "y": 0 }
+  }
 }
 ```
 
@@ -188,18 +193,19 @@ Its definition, in `src/data.js` (the fixed values, and the initial state that `
 ```js
 player: {
   name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3,
-  initial: { health: { current: 100 }, position: { x: 0, y: 0 },
-             cell: { x: 0, y: 0 }, move: { direction: { x: 0, y: 0 } } },
+  acceleration: 0.25, deceleration: 0.125,
+  initial: { health: { current: 100 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 },
+             move: { direction: { x: 0, y: 0 }, velocity: { x: 0, y: 0 } } },
 }
 ```
 
-Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is in pixels per frame, and the speed used in a frame comes from `finalSpeed(actor)`. `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid"). The initial `health.current` repeats `maxHealth` on purpose: the initial state is written out in full.
+Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is the top speed in pixels per frame, and the top speed used in a frame comes from `finalSpeed(actor)`. `acceleration` and `deceleration` are provisional (see "Movement and input"). `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid"). The initial `health.current` repeats `maxHealth` on purpose: the initial state is written out in full.
 
 ## Code layout
 
 - `index.html`, `style.css`: the screens.
 - `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen.
-- `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `approach`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard and gamepad, and returns `{ move }` for the frame.
 - `src/render.js`: draws the state (reference grid, collision window overlay and the player). It never changes it.
@@ -221,7 +227,9 @@ They only become decisions when the user approves.
 
 - Define ATTACK and DEFENSE. First code step suggested by the agent: run the formula in a simple test, without a screen.
 - The full list of mecha parts (the user will provide it).
-- Where the dynamic speed comes from (the base value and the buffs).
+- Where the dynamic speed comes from (the base value and the buffs). Material from the user's old project: each mecha part has `Specs` as `[path, value]` pairs that add up (for example `Armor.Max`), `Mods` that look like multipliers, and `Weight`, which **affects the final speed** (how is not decided; total weight there was 2.3, and the legs gave `Speed: 8`). Its speed was a physics force, so that number does not convert directly. Not recorded in detail until the user confirms the list of parts and the formula.
+- Tune `acceleration` and `deceleration` by feel (the user will describe what he sees in Chamber 1).
+- The Booster (a dash with charges and recharge, from the old project) needs a new input (a button) and state (charges). Not started.
 - Move `src/data.js` to the library structure (shelves, books, addresses, version per shelf). See "The library".
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
