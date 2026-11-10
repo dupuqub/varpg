@@ -823,9 +823,18 @@ test("43 the angle matters: only the part going into the rock is replaced, the p
 });
 
 test("44 a dash into a stone stops, a dash into a rubber rock comes back at the full dash speed", () => {
-  const right = { x: 1, y: 0 };
-  const intoStone = hitOnce(125, 444, 0, 0, right, { dash: true }); // dash: 12 px, ends 10 px inside
-  const intoRubber = hitOnce(690, -63, 0, 0, right, { dash: true });
+  // A dash now hurts the rock by 10, which would break the stone (health 10) and cancel the bounce.
+  // So here every rock has 50 health: the test is about the bounce, not about breaking.
+  const tough = loadGame((text) => text.replace("healthRange: { min: 10, max: 20 }", "healthRange: { min: 50, max: 50 }").replaceAll("healthRange: { min: 10, max: 20 }", "healthRange: { min: 50, max: 50 }"));
+  const dashInto = (x, y) => run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = ${x}; p.position.y = ${y};
+    step(s, { move: { x: 1, y: 0 }, dash: true });
+    return { x: p.position.x, vx: p.move.velocity.x };
+  `, tough);
+  const intoStone = dashInto(125, 444); // dash: 12 px, ends 10 px inside
+  const intoRubber = dashInto(690, -63);
   assert.strictEqual(intoStone.vx, 0);
   assert.strictEqual(intoStone.x, 127);
   assert.strictEqual(intoRubber.vx, -12);
@@ -877,8 +886,8 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
 });
 
 // ---- Body slam: damage from collisions ----
-// The rule (src/sim.js): the attack of a collision is the weight of whoever hits x 0.001, and it only
-// happens if the impact (the speed going into the other thing) is greater than 6.
+// The rule (src/sim.js): every contact with something that has doesDamage is a hit. The attack is
+// weight x 0.001 x impact / 6 (impact = the speed going into the other thing; provisional formula).
 // damage = max(0, attack - defense). Avatar: 5000 kg, defense 3, health 100.
 // Rocks of seed 1 (see test 39): the stone at 159,444 (5000 kg, health 10, square 0,1), the boulder at
 // 172,-435 (7800 kg, health 17, square 0,-2) and the rubber rock at 711,-63 (2800 kg, health 15, square 2,-1).
@@ -894,7 +903,7 @@ function slamInto(x, y, rockKey, rockMaxHealth) {
   `);
 }
 
-test("47 walking into a rock at 3 px/frame is not a hit: nobody is hurt (the impact must be above 6)", () => {
+test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, the avatar nothing (2.5 - 3 is below 0)", () => {
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -904,23 +913,23 @@ test("47 walking into a rock at 3 px/frame is not a hit: nobody is hurt (the imp
     return { avatar: p.health.current, damagedRocks: s.damagedRocks, vx: p.move.velocity.x };
   `);
   assert.strictEqual(result.avatar, 100);
-  assert.deepStrictEqual(plain(result.damagedRocks), {});
+  assert.deepStrictEqual(plain(result.damagedRocks), { "0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
   assert.strictEqual(result.vx, 0); // it still stopped (the bounce is a separate rule)
 });
 
-test("48 a dash into a rock hurts both: the rock hits with its weight x 0.001 minus the defense 3, the avatar hits for 5", () => {
-  const stone = slamInto(125, 444, "0,1", 10); // 5000 kg: 5 - 3 = 2 to the avatar; 5 to the stone
-  assert.strictEqual(stone.avatar, 98);
-  assert.strictEqual(stone.rock, 5); // 10 - 5
-  const boulder = slamInto(145, -435, "0,-2", 17); // 7800 kg: 7.8 - 3 = 4.8
-  assert.ok(Math.abs(boulder.avatar - 95.2) < 1e-9, "boulder: " + boulder.avatar);
-  assert.strictEqual(boulder.rock, 12); // 17 - 5
-  const rubber = slamInto(690, -63, "2,-1", 15); // 2800 kg: 2.8 - 3 < 0, so 0 (defending never heals)
-  assert.strictEqual(rubber.avatar, 100);
-  assert.strictEqual(rubber.rock, 10); // 15 - 5
+test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that minus the defense 3", () => {
+  const stone = slamInto(125, 444, "0,1", 10); // 5000 kg: attack 10, so 10 - 3 = 7 to the avatar; 10 to the stone
+  assert.strictEqual(stone.avatar, 93);
+  assert.strictEqual(stone.rock, 0); // 10 - 10: it breaks
+  const boulder = slamInto(145, -435, "0,-2", 17); // 7800 kg: attack 15.6, so 15.6 - 3 = 12.6
+  assert.ok(Math.abs(boulder.avatar - 87.4) < 1e-9, "boulder: " + boulder.avatar);
+  assert.strictEqual(boulder.rock, 7); // 17 - 10
+  const rubber = slamInto(690, -63, "2,-1", 15); // 2800 kg: attack 5.6, so 5.6 - 3 = 2.6
+  assert.ok(Math.abs(rubber.avatar - 97.4) < 1e-9, "rubber: " + rubber.avatar);
+  assert.strictEqual(rubber.rock, 5); // 15 - 10
 });
 
-test("49 a graze is not a hit either: only the part of the speed going into the rock counts", () => {
+test("49 a graze is a weak hit: only the part of the speed going into the rock counts, so it hurts less than a head-on walk", () => {
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -930,10 +939,11 @@ test("49 a graze is not a hit either: only the part of the speed going into the 
     return { avatar: p.health.current, damagedRocks: s.damagedRocks };
   `);
   assert.strictEqual(result.avatar, 100);
-  assert.deepStrictEqual(plain(result.damagedRocks), {});
+  const loss = 10 - result.damagedRocks["0,1"];
+  assert.ok(loss > 0 && loss < 2.5, "a graze should hurt the stone less than the head-on walk of test 47 (2.5), it lost " + loss);
 });
 
-test("50 the attack: weight x 0.001, only above an impact of 6; the damage never goes below 0", () => {
+test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage never goes below 0", () => {
   const result = withBuilds(`
     const stone = { type: "stone", position: { x: 0, y: 0 } };
     const boulder = { type: "boulder", position: { x: 0, y: 0 } };
@@ -942,8 +952,9 @@ test("50 the attack: weight x 0.001, only above an impact of 6; the damage never
     return {
       defense: finalDefense(avatar, full),
       stone: finalAttack(stone, { impact: 12 }, full),
-      exactlySix: finalAttack(stone, { impact: 6 }, full),
-      justAbove: finalAttack(stone, { impact: 6.5 }, full),
+      atReference: finalAttack(stone, { impact: 6 }, full),
+      walking: finalAttack(stone, { impact: 3 }, full),
+      noImpact: finalAttack(stone, { impact: 0 }, full),
       avatar: finalAttack(avatar, { impact: 12 }, full),
       lighterAvatar: finalAttack(avatar, { impact: 12 }, lighter),
       boulderDamage: damageOf(boulder, { impact: 12 }, avatar, full),
@@ -951,13 +962,14 @@ test("50 the attack: weight x 0.001, only above an impact of 6; the damage never
     };
   `);
   assert.strictEqual(result.defense, 3);
-  assert.strictEqual(result.stone, 5);
-  assert.strictEqual(result.exactlySix, 0); // "greater than 6": 6 is not a hit
-  assert.strictEqual(result.justAbove, 5);
-  assert.strictEqual(result.avatar, 5); // the avatar hits with its own weight, 5000 kg
-  assert.ok(Math.abs(result.lighterAvatar - 4.35) < 1e-9); // a lighter mecha hits softer
-  assert.ok(Math.abs(result.boulderDamage - 4.8) < 1e-9); // 7.8 - 3
-  assert.strictEqual(result.rubberDamage, 0); // 2.8 - 3 is below 0
+  assert.strictEqual(result.stone, 10); // 5000 x 0.001 x 12 / 6
+  assert.strictEqual(result.atReference, 5); // at the reference impact the attack is weight x 0.001
+  assert.strictEqual(result.walking, 2.5);
+  assert.strictEqual(result.noImpact, 0);
+  assert.strictEqual(result.avatar, 10); // the avatar hits with its own weight, 5000 kg
+  assert.ok(Math.abs(result.lighterAvatar - 8.7) < 1e-9); // a lighter mecha hits softer: 4350 x 0.001 x 2
+  assert.ok(Math.abs(result.boulderDamage - 12.6) < 1e-9); // 15.6 - 3
+  assert.ok(Math.abs(result.rubberDamage - 2.6) < 1e-9); // 5.6 - 3
 });
 
 test("51 health stops at 0 (there is no death yet)", () => {
@@ -1105,12 +1117,12 @@ test("61 a rock that is hurt is stored by its square, and it keeps its health be
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
-    p.position.x = 125; p.position.y = 444;
-    step(s, { move: { x: 1, y: 0 }, dash: true }); // hits the stone: 10 - 5
+    p.position.x = 690; p.position.y = -63;
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // hits the rubber rock: 15 - 10
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: 0 } });
     return { damagedRocks: s.damagedRocks, json: JSON.stringify(s) };
   `);
-  assert.deepStrictEqual(plain(result.damagedRocks), { "0,1": 5 });
+  assert.deepStrictEqual(plain(result.damagedRocks), { "2,-1": 5 });
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json); // still plain JSON
 });
 
@@ -1120,7 +1132,7 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
     const p = s.actors[0];
     s.damagedRocks["0,1"] = 5; // the stone at 159,444 has 5 left
     p.position.x = 125; p.position.y = 444;
-    step(s, { move: { x: 1, y: 0 }, dash: true }); // 5 - 5: it breaks
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // 5 - 10: it breaks (health stops at 0)
     const afterHit = { broken: s.damagedRocks["0,1"], vx: p.move.velocity.x, x: p.position.x, health: p.health.current };
     for (let i = 0; i < 40; i++) step(s, { move: { x: 1, y: 0 } });
     return { afterHit, x: p.position.x, health: p.health.current };
@@ -1128,9 +1140,9 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
   assert.strictEqual(result.afterHit.broken, 0);
   assert.strictEqual(result.afterHit.vx, 12); // no bounce and no stop
   assert.strictEqual(result.afterHit.x, 137); // not pushed out
-  assert.strictEqual(result.afterHit.health, 98); // the breaking hit still hurt the avatar (5 - 3)
+  assert.strictEqual(result.afterHit.health, 93); // the breaking hit still hurt the avatar (10 - 3)
   assert.ok(result.x > 159 + 32, "the avatar did not go through the broken rock: x=" + result.x);
-  assert.strictEqual(result.health, 98); // and the broken rock hurts no more
+  assert.strictEqual(result.health, 93); // and the broken rock hurts no more
 });
 
 test("63 every rock rolls its own health from the seed: whole numbers from 10 to 20, the same every time, and all values show up", () => {
@@ -1183,25 +1195,42 @@ test("65 the training dummy: the first dash up hits it with an impact of 7, and 
   `);
   assert.deepStrictEqual(plain(result.start), { x: 0, y: -130 });
   assert.ok(result.hitFrame !== null, "the first dash did not reach the dummy");
-  assert.strictEqual(result.dummy, 25); // 5000 kg x 0.001 = 5, defense 0
-  assert.strictEqual(result.avatar, 98); // the dummy hits back: 5 - 3 = 2
+  assert.ok(Math.abs(result.dummy - (30 - 35 / 6)) < 1e-9); // 5000 x 0.001 x 7 / 6 = 5.83, defense 0
+  assert.ok(Math.abs(result.avatar - (100 - (35 / 6 - 3))) < 1e-9); // the dummy hits back: 5.83 - 3 = 2.83
   assert.ok(result.velocityAfter > 0, "bounce 0.5: the avatar comes back"); // moving up is negative y
   assert.strictEqual(result.dummyMoved, false);
 });
 
-test("66 walking into the dummy hurts nobody, and the dummy stays at 0 health instead of disappearing", () => {
+test("66 walking and pressing into the dummy keeps hurting it a little (known consequence of no minimum impact); at 0 it stays", () => {
   const result = run(`
     const s = createChamber1State();
     const player = s.actors[0];
     const dummy = s.actors.find((actor) => actor.id === "dummy_1");
     for (let i = 0; i < 120; i++) step(s, { move: { x: 0, y: -1 } }); // walks up into the dummy and presses
     const afterWalking = { dummy: dummy.health.current, avatar: player.health.current };
+    // Known consequence, recorded for the user to decide: with no minimum impact, pressing drains the dummy
     applyDamage(dummy, 100);
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: -1 } });
     return { afterWalking, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
   `);
-  assert.deepStrictEqual(plain(result.afterWalking), { dummy: 30, avatar: 100 });
+  assert.strictEqual(result.afterWalking.avatar, 100); // each frame's hit is below the defense 3
+  assert.ok(result.afterWalking.dummy < 30 && result.afterWalking.dummy > 0, "the dummy health after pressing: " + result.afterWalking.dummy);
   assert.strictEqual(result.dummyAtZero, 0);
   assert.strictEqual(result.stillThere, true);
   assert.ok(result.y >= -130 + 32 - 1e-9, "the avatar went into the dummy: y=" + result.y); // still collides at 0 health
+});
+
+test("67 only something with doesDamage hits: a type without it never hurts what touches it", () => {
+  const patched = loadGame((text) => text.replace(
+    "const DEFINITIONS = {\n  actors: {",
+    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", weight: 5000, radius: 16, bounce: 0, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+  ));
+  const result = run(`
+    const soft = { type: "soft", position: { x: 0, y: 0 } };
+    const stone = { type: "stone", position: { x: 0, y: 0 } };
+    const full = createRun(1).build;
+    return { soft: finalAttack(soft, { impact: 12 }, full), stone: finalAttack(stone, { impact: 12 }, full) };
+  `, patched);
+  assert.strictEqual(result.soft, 0); // same weight as the stone, but no doesDamage
+  assert.strictEqual(result.stone, 10);
 });

@@ -14,12 +14,13 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 9;
+const DEFINITIONS_VERSION = 10;
 
 const DEFINITIONS = {
   actors: {
     player: {
       name: "Player",
+      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       // The maximum health, the defense, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. Every rock radius is measured against it.
@@ -57,6 +58,7 @@ const DEFINITIONS = {
     //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0. Same range for all kinds for now.
     stone: {
       name: "Stone",
+      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 16,
       weight: 5000,
       healthRange: { min: 10, max: 20 },
@@ -65,6 +67,7 @@ const DEFINITIONS = {
     },
     boulder: {
       name: "Boulder",
+      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 20,
       weight: 7800,
       healthRange: { min: 10, max: 20 },
@@ -73,6 +76,7 @@ const DEFINITIONS = {
     },
     rubber: {
       name: "Rubber rock",
+      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       radius: 12,
       weight: 2800,
       healthRange: { min: 10, max: 20 },
@@ -87,6 +91,7 @@ const DEFINITIONS = {
     // defense 0: nothing is taken off the hits. radius: the avatar's. bounce 0.5: the boulder's, half of the speed comes back.
     dummy: {
       name: "Training dummy",
+      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       maxHealth: 30,
       weight: 5000,
       defense: 0,
@@ -108,12 +113,13 @@ const DEFINITIONS = {
     // target: a dash of 12 lasts 0.3 s: (12 - 3) / 0.5 = 18 frames. A power of two, so the speed lands exactly on the top speed.
     overspeedDecay: 0.5,
 
-    // The body slam: what a collision does. The attack of a collision is the weight of whoever hits (kg) times
-    // attackPerKg, and a hit only happens when the impact (the part of the speed going into the other thing,
-    // in px/frame) is greater than minImpact. These are the user's first numbers, "to begin with":
-    //   attackPerKg 0.001: a weight of 5000 kg hits for 5.
-    //   minImpact 6: guess. The top speed is 3, so walking into something never hurts; a dash (12) does.
-    bodySlam: { attackPerKg: 0.001, minImpact: 6 },
+    // The body slam: what a collision does. Every contact with something that doesDamage is a hit; the attack is
+    // the weight of whoever hits (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the
+    // speed going into the other thing, in px/frame. Provisional formula (agent's proposal, to be discussed):
+    //   attackPerKg 0.001: the user's first number, a weight of 5000 kg hits for 5 at the reference impact.
+    //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
+    //     Walking (3) hits for half of it, a dash (12) for double.
+    bodySlam: { attackPerKg: 0.001, referenceImpact: 6 },
 
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that
@@ -158,9 +164,8 @@ const DEFINITIONS = {
   // What Chamber 1 has besides the avatar and the rocks.
   chamber1: {
     // The training dummy, straight up from the start.
-    // position: rule, 130 px. A dash hits only while its speed is above bodySlam.minImpact (6): from 12, falling
-    //   0.5 per frame, that is 12 frames and 111 px. At 130 px the dummy is touched after 98 px (130 minus the two
-    //   radii), with an impact of 7, so the first dash can hit it. It is also inside the rocks' safe zone
+    // position: rule, 130 px. At 130 px the dummy is touched after 98 px of a dash (130 minus the two
+    //   radii), with an impact of 7, so the first dash reaches it. It is also inside the rocks' safe zone
     //   (200 px minus the largest rock radius 20 and the dummy radius 16 = 164), so no rock can overlap it.
     actors: [{ id: "dummy_1", type: "dummy", position: { x: 0, y: -130 } }],
   },

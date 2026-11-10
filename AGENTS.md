@@ -41,7 +41,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 |---|---|
 | Actor types (radius, acceleration, deceleration, dash charges and recharge, bounce, weight, health) | `DEFINITIONS.actors` in `src/data.js` |
 | Mecha parts (weight and specs) and the starter build | `DEFINITIONS.parts`, `DEFINITIONS.starterBuild` |
-| Values equal for everyone (`overspeedDecay`, `bodySlam.attackPerKg`, `bodySlam.minImpact`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
+| Values equal for everyone (`overspeedDecay`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | Rocks on the ground (`cellSize`, `chancePercent`, `margin`, `safeRadius`, `kinds`) | `DEFINITIONS.terrain.rocks` |
 | What Chamber 1 has besides the avatar and the rocks (the dummy and its position) | `DEFINITIONS.chamber1` |
 | Collision grid (`cellSize`, `windowWidth`, `windowHeight`) | `state.grid`, set in `createChamber1State` in `src/sim.js` |
@@ -59,7 +59,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 - Time to reach the top speed = top speed / `acceleration`. Time to stop = top speed / `deceleration`. The top speed depends on the build, so a heavier build takes as long to reach a lower speed.
 - Top speed of the avatar = sum of the `speed` of its parts - total weight x `weightSpeedPenalty`.
 - Dash duration = (dash speed - top speed) / `overspeedDecay`. A stronger dash lasts longer, because the decay is a constant.
-- A dash is a hit only while its speed is above `bodySlam.minImpact`: that is (dash speed - `minImpact`) / `overspeedDecay` frames. So `minImpact`, the dash speed and `overspeedDecay` together decide how far a dash can hit, and the position of the dummy in `DEFINITIONS.chamber1` depends on it.
+- Nothing about damage is specific to the dash: any contact with something that `doesDamage` is a hit, whatever gave the speed. The dash only sets a velocity, so the damage of a dash follows from its speed at the moment of contact.
 - The dash speed (and any future blink or charge speed) must stay below the avatar radius + the smallest rock radius, or a rock can be crossed in one frame.
 - `grid.cellSize` >= 2 x (largest radius + largest speed). A faster dash or a bigger rock needs a bigger cell.
 - `terrain.rocks.margin` >= the largest rock radius, or rocks of neighbor squares can overlap.
@@ -196,14 +196,14 @@ HEALTH = HEALTH - DAMAGE
 
 - Defending never heals the target. Health stops at zero; there is no death yet.
 - `finalAttack` and `finalDefense` are pure functions, like `finalSpeed` (the user's decision): the recipe is in the library, what is equipped is in the build, and the value is computed every time. The functions are `finalAttack`, `finalDefense`, `damageOf` and `applyDamage` in `src/sim.js`.
-- **Body slam (the user's decisions, with his first numbers, "to begin with", not validated by play):** a collision hurts **both sides**, each with **its own weight**. `finalAttack(attacker, hit, build) = weight of the attacker x bodySlam.attackPerKg`, and **only if the impact is greater than `bodySlam.minImpact`**; otherwise there is no hit. The impact is the part of the speed going into the other thing, so a graze, or pressing against something, is not a hit. The weight of the avatar is the total weight of its build; of anything else, the `weight` of its definition. Later modifiers of the body slam do not exist yet.
+- **Body slam (the user's decisions, with his first numbers, "to begin with", not validated by play):** a collision hurts **both sides**, each with **its own weight**. Every contact with something whose definition has **`doesDamage: true`** is a hit (the user's decision: modular, because speeds will change); a type without it never hurts what touches it. The attack grows with the weight and the impact: `finalAttack = weight of the attacker x bodySlam.attackPerKg x impact / bodySlam.referenceImpact` (**the formula is the agent's provisional proposal, to be discussed with the user**; the two constants are his first numbers). The impact is the part of the speed going into the other thing, so a graze is a weak hit. The weight of the avatar is the total weight of its build; of anything else, the `weight` of its definition. Later modifiers of the body slam do not exist yet.
 - **Training dummy (the agent's proposal, to validate):** the actor type `dummy`, a still actor with health, weight and bounce, listed with its position in `DEFINITIONS.chamber1`. The avatar's body slam hurts it and it hits back with its own weight. At zero health it stays and still collides. Health numbers are drawn above the dummy and above any hurt rock.
 - **Shield (the user's decision, not implemented):** it is essentially **a health that regenerates**, and it comes primarily from the Generator. Order (the agent's suggestion, the user agreed): the damage is calculated first, **the shield absorbs it first, and what is left goes to health**. It has memory, so it is state. The regeneration rule is not defined.
 - **Damage trace (the user's requirement, not implemented):** any change to health must be explainable. The damage is shown as a formula such as `(X + Y + Z) * W`, and every term says where it came from (which skill, part or buff). It feeds the damage audit page. The structure of the trace is not defined.
 - The formula will be developed little by little, one piece at a time.
 - **Known weaknesses (for the user to decide):**
   - Subtracting the defense is all or nothing: a defense at or above the attack is full immunity, and with small numbers a little defense is a large part of a hit.
-  - The impact is only a gate: a hit just above `minImpact` is as strong as one at full dash speed. Together with the decay, a dash can only hit during its first part (see "Relations"), a rule nobody chose.
+  - With no minimum impact, pressing against something keeps hitting it a little every frame (grinding). Options for the user: a small minimum impact, a cooldown per contact, or accepting it.
   - Hits come in whole steps of the attack, so a fine health range for the rocks shows up in play as only a few different numbers of hits.
 
 ### Movement and input

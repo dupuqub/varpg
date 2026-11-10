@@ -109,20 +109,20 @@ These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 
 | 41 | Head-on at 3 px/frame: the stone stops you (0), the boulder sends you back at 1.5, the rubber rock at 3. | The bounce rule, in numbers you can check by hand: `-bounce x speed`. |
 | 42 | After the hit the avatar is exactly touching the rock (for example 127 = 159 - (16 + 16)). | The push-out puts it just outside, not inside and not far away. |
 | 43 | Glancing blow on the stone: the part of the velocity going into the rock is 0, the part along the rock is unchanged, and the speed kept is more than 80%. | The angle matters and bounce 0 slides, it is not friction (the user's definition). |
-| 44 | A dash into the stone stops (0). A dash into the rubber rock comes back at -12, the full dash speed. | The dash and the collision work together. |
+| 44 | A dash into the stone stops (0). A dash into the rubber rock comes back at -12, the full dash speed. (Both rocks are given 50 health here, so the dash does not break the stone.) | The dash and the collision work together. |
 | 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
 | 46 | The cross-check stays clean in a run that really hits the stone. | The collision must replay identically (determinism). |
 
 ### Body slam: damage from collisions
 
-Rule: the attack of a collision is the weight of whoever hits x 0.001, and it only happens if the impact (the speed going into the other thing) is greater than 6. `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
+Rule: every contact with something that has `doesDamage` is a hit, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 47 | Walking into a rock at 3 px/frame hurts nobody (the impact must be above 6), and the avatar still stops. | Walking must never cost health. The bounce is a separate rule. |
-| 48 | A dash into the stone costs the avatar 2 (5 - 3) and the stone 5; into the boulder 4.8 and 5; into the rubber rock 0 (2.8 - 3 is below 0) and 5. | A hit hurts both sides, each with its own weight. |
-| 49 | A glancing blow does nothing. | Only the part of the speed going into the rock counts. |
-| 50 | The attack is weight x 0.001: 5 for the stone and for the avatar, 4.35 for a lighter avatar. An impact of exactly 6 is not a hit, 6.5 is. The damage never goes below 0. | The formula in numbers you can check by hand, including its edge. |
+| 47 | Walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5 (10 - 7.5), the avatar nothing (2.5 - 3 is below 0), and it still stops. | No minimum impact: any contact hits, but weakly. The bounce is a separate rule. |
+| 48 | A dash (impact 12) into the stone costs the avatar 7 (10 - 3) and the stone 10 (it breaks); into the boulder 12.6 and 10; into the rubber rock 2.6 and 10. | A hit hurts both sides, each with its own weight. |
+| 49 | A glancing blow hurts the stone, but less than the head-on walk of test 47. | Only the part of the speed going into the rock counts. |
+| 50 | The attack at impact 12 is 10 for the stone and for the avatar, 8.7 for a lighter avatar; 5 at the reference impact 6, 2.5 at 3, 0 at no impact. The damage never goes below 0. | The formula in numbers you can check by hand. |
 | 51 | Health stops at 0. | There is no death yet. |
 | 52 | The cross-check stays clean in a run where both avatar and rock are hurt, and the state stays plain numbers. | Damage must replay identically (determinism). |
 
@@ -130,12 +130,13 @@ Rule: the attack of a collision is the weight of whoever hits x 0.001, and it on
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 61 | A hurt rock is stored by its square (`"0,1": 5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
-| 62 | A rock with 5 left breaks when a dash hits it: no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
+| 61 | A hurt rock is stored by its square (`"2,-1": 5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
+| 62 | A rock with 5 left breaks when a dash hits it (the avatar loses 7): no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
 | 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
 | 64 | The rock weights follow the area (5000 / 7800 / 2800). | The reason of the weights is checked, not only the values. |
-| 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 25 and the avatar from 100 to 98. The avatar bounces back and the dummy does not move. | The first combat test works from the very first dash. |
-| 66 | Walking into the dummy hurts nobody. At 0 health the dummy stays and still collides. | The dummy is a stable target for testing. |
+| 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 24.17 (5000 x 0.001 x 7 / 6 = 5.83) and the avatar from 100 to 97.17 (5.83 - 3). The avatar bounces back and the dummy does not move. | The first combat test works from the very first dash. |
+| 66 | Walking and pressing into the dummy hurts it a little each frame and the avatar not at all (known consequence of having no minimum impact, listed in AGENTS.md). At 0 health the dummy stays and still collides. | The grinding is recorded, not hidden. |
+| 67 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 10. | The rule is modular: the flag decides who hits. |
 
 ### The kit of parts
 

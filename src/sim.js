@@ -103,15 +103,17 @@ function weightOf(actor, build) {
 
 // The attack of a hit (the body slam). "hit" says what happened: for a collision it is
 // { impact }, the part of the velocity that went into the other thing, in px/frame.
-// The attack is the weight of the attacker times attackPerKg, but only if the impact is
-// greater than minImpact; otherwise there is no hit and the attack is 0.
+// Only something whose definition says doesDamage hits at all. The attack grows with the
+// weight of the attacker and with the impact: weight x attackPerKg x impact / referenceImpact.
+// There is no minimum impact and nothing about the dash here: any contact hits, by any
+// speed source. (The formula is a provisional proposal, to be discussed with the user.)
 // Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
 // can be added later, as terms of the damage trace. Pure: it depends only on its
 // arguments and the definitions. The attacker can be an actor or a rock ({ type }).
 function finalAttack(attacker, hit, build) {
   const rules = DEFINITIONS.constants.bodySlam;
-  if (hit.impact <= rules.minImpact) return 0;
-  return weightOf(attacker, build) * rules.attackPerKg;
+  if (!definitionOf(attacker).doesDamage || hit.impact <= 0) return 0;
+  return (weightOf(attacker, build) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
 }
 
 // The defense of an actor: the definition plus the sum of the defense of the parts.
