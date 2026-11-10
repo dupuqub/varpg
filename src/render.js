@@ -4,7 +4,7 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
-const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#a8445c" }; // by object type: a new object type needs its color here
+const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
 function draw(context, state, blueprint) {
   const { width, height } = context.canvas;
