@@ -88,6 +88,18 @@ node --test
 | 32 | Running diagonally at the top speed and releasing brakes at 0.125, not 0.5. | Guards against a rounding error (3.0000000000000004) being taken as "faster than the top speed". |
 | 33 | The cross-check stays clean in a run that contains dashes. | The dash button is part of the input, so it has to replay identically. |
 
+### Rocks (seed and formula)
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 34 | The same seed always gives the same rocks (and there are many of them over a large area). | Determinism of the world: the rocks come from the seed, not from chance. |
+| 35 | Different seeds give different rocks. | Shows the seed really matters. |
+| 36 | Looking at a small area finds exactly the rocks that a big area has inside that same region. | A rock must not depend on where you look from, or rocks would pop in and out while walking. |
+| 37 | No rock is closer than 200 px to the starting point, for 40 different seeds (and rocks do start right after that). | The avatar must never begin inside a rock. |
+| 38 | No two rocks overlap, for 5 seeds. | The formula keeps each rock inside its own square, with a margin. |
+| 39 | **Known answer:** seed 1 gives 12 rocks on the first screen, the first a boulder at 172,-435 and the last a boulder at 854,418. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the ROCKS lines of DATA in Chamber 2). |
+| 40 | The state keeps only the seed (not the rocks), and every rock kind is a valid static actor with a bounce from 0 to 1 and a radius that fits the margin. | The state stays small, and the library data cannot break the formula by accident. |
+
 ## Proof that the tests can fail
 
 While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. Tests that never fail would be worthless.

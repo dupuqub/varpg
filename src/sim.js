@@ -93,6 +93,55 @@ function approach(velocity, target, rate) {
   velocity.y += (deltaY / distance) * rate;
 }
 
+// ---- Rocks ----
+// Rocks are not stored in the state. The seed (state.seed) and a formula say which
+// rock is where, so the same seed always gives the same rocks, in any browser.
+
+// A number from 0 to 4294967295 made from four integers. Only integer
+// arithmetic (Math.imul, xor, shifts), so it is exact in every browser. The
+// "salt" gives a different number to each question asked about the same square.
+function hashInts(seed, x, y, salt) {
+  let h = Math.imul(seed, 0x9e3779b1) ^ Math.imul(x, 0x85ebca6b) ^ Math.imul(y, 0xc2b2ae35) ^ Math.imul(salt, 0x27d4eb2f);
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+// The rock in one square of the world, or null if that square has none.
+// A rock is { type, position: { x, y } }, and its position is a whole number.
+function rockInSquare(seed, squareX, squareY) {
+  const rules = DEFINITIONS.terrain.rocks;
+
+  if (hashInts(seed, squareX, squareY, 1) % 100 >= rules.chancePercent) return null;
+
+  const room = rules.cellSize - 2 * rules.margin;
+  const x = squareX * rules.cellSize + rules.margin + (hashInts(seed, squareX, squareY, 2) % room);
+  const y = squareY * rules.cellSize + rules.margin + (hashInts(seed, squareX, squareY, 3) % room);
+  if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
+
+  const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
+  return { type, position: { x, y } };
+}
+
+// Every rock whose center is inside the area (world coordinates), in a fixed
+// order (row by row). Looking at a bigger area never changes a rock, it only finds more.
+function rocksInArea(seed, left, top, right, bottom) {
+  const size = DEFINITIONS.terrain.rocks.cellSize;
+  const rocks = [];
+  for (let squareY = Math.floor(top / size); squareY <= Math.floor(bottom / size); squareY++) {
+    for (let squareX = Math.floor(left / size); squareX <= Math.floor(right / size); squareX++) {
+      const rock = rockInSquare(seed, squareX, squareY);
+      if (!rock) continue;
+      const { x, y } = rock.position;
+      if (x >= left && x <= right && y >= top && y <= bottom) rocks.push(rock);
+    }
+  }
+  return rocks;
+}
+
 // What a run has besides its state: an id, and the build (what the player
 // chose before the run). The build is an input of the run, not a state, so it
 // is not inside the snaps. It is empty on purpose: nothing reads it yet.
@@ -104,10 +153,15 @@ function createRun(id) {
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
-function createChamber1State(runId = 1) {
+function createChamber1State(runId = 1, seed = 1) {
   const state = {
     run: runId,
     frame: 0,
+
+    // The seed of the world (it decides where the rocks are). It is in the state
+    // so a snap alone is enough to replay: the rules read it from here.
+    // It must be a whole number.
+    seed,
 
     // Version of the definitions this state was made with (see src/data.js).
     definitionsVersion: DEFINITIONS_VERSION,

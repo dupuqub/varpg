@@ -80,6 +80,16 @@ function simulationCheckText() {
   ].join("\n");
 }
 
+// The rocks on the first screen (960 px each way from the starting point), to
+// compare with the numbers drawn above the rocks in Chamber 1.
+function rocksText(seed) {
+  const rocks = rocksInArea(seed, -960, -540, 960, 540);
+  return [
+    `rocks on the first screen (seed ${seed}, x from -960 to 960, y from -540 to 540): ${rocks.length}`,
+    ...rocks.map((rock) => `  ${rock.type} at ${rock.position.x},${rock.position.y}`),
+  ].join("\n");
+}
+
 function dataText() {
   return [
     "DATA",
@@ -88,6 +98,7 @@ function dataText() {
     JSON.stringify(DEFINITIONS, null, 2),
     "initial state of Chamber 1:",
     JSON.stringify(createChamber1State(createRun(1).id), null, 2),
+    rocksText(createChamber1State(createRun(1).id).seed),
   ].join("\n");
 }
 

@@ -7,7 +7,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 4;
+const DEFINITIONS_VERSION = 5;
 
 const DEFINITIONS = {
   actors: {
@@ -38,6 +38,29 @@ const DEFINITIONS = {
         // A type without "move" here is static, like a trap.
       },
     },
+
+    // Rocks: static actors (no "move"). They are not stored in the state: the
+    // seed and the formula in "terrain" below say where they are (see rocksInArea).
+    // bounce: how much of the speed of whoever hits it comes back (0 = none, 1 = all).
+    // The bounce is not used yet, because there is no collision yet.
+    stone: {
+      name: "Stone",
+      radius: 16,
+      bounce: 0,
+      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
+    },
+    boulder: {
+      name: "Boulder",
+      radius: 20,
+      bounce: 0.5,
+      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
+    },
+    rubber: {
+      name: "Rubber rock",
+      radius: 12,
+      bounce: 1,
+      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
+    },
   },
 
   // Values that are the same for every actor, and that parts and buffs do not change.
@@ -46,6 +69,18 @@ const DEFINITIONS = {
     // speed (for example right after a dash). Parts can make a dash stronger, but
     // not decay slower, so a stronger dash is also a longer dash.
     overspeedDecay: 0.5,
+  },
+
+  // How the ground is filled (provisional values, to be tuned).
+  terrain: {
+    rocks: {
+      cellSize: 256, // the world is cut into squares of this size, with at most one rock in each
+      chancePercent: 35, // chance that a square has a rock
+      margin: 20, // a rock stays this far from the edges of its square (the largest rock radius),
+      //             so rocks of neighbor squares never overlap
+      safeRadius: 200, // no rock closer than this to the starting point (0, 0)
+      kinds: ["stone", "boulder", "rubber"], // which actor types a rock can be (the formula picks one)
+    },
   },
 };
 

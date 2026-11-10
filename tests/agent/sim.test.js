@@ -652,3 +652,103 @@ test("33 the cross-check stays clean in a run with dashes", () => {
   assert.strictEqual(result.check, null);
   assert.ok(result.dashes >= 1); // the run really had dashes
 });
+
+// ---- Rocks (seed and formula) ----
+
+test("34 the same seed always gives the same rocks", () => {
+  const [first, second] = run(`
+    const a = JSON.stringify(rocksInArea(1, -3000, -3000, 3000, 3000));
+    const b = JSON.stringify(rocksInArea(1, -3000, -3000, 3000, 3000));
+    return [a, b];
+  `);
+  assert.strictEqual(first, second);
+  assert.ok(JSON.parse(first).length > 50); // and there really are rocks
+});
+
+test("35 different seeds give different rocks", () => {
+  const [one, two] = run(`
+    return [JSON.stringify(rocksInArea(1, -3000, -3000, 3000, 3000)), JSON.stringify(rocksInArea(2, -3000, -3000, 3000, 3000))];
+  `);
+  assert.notStrictEqual(one, two);
+});
+
+test("36 a rock does not depend on where you look from: a small area finds exactly the rocks of a big one that fall inside it", () => {
+  const { small, fromBig } = run(`
+    const big = rocksInArea(7, -2000, -2000, 2000, 2000);
+    const small = rocksInArea(7, -500, -300, 700, 900);
+    const fromBig = big.filter((r) => r.position.x >= -500 && r.position.x <= 700 && r.position.y >= -300 && r.position.y <= 900);
+    return { small: JSON.stringify(small), fromBig: JSON.stringify(fromBig) };
+  `);
+  assert.strictEqual(small, fromBig);
+});
+
+test("37 there is no rock near the starting point, for any seed", () => {
+  const closest = run(`
+    let closest = Infinity;
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const rock of rocksInArea(seed, -1000, -1000, 1000, 1000)) {
+        closest = Math.min(closest, Math.sqrt(rock.position.x * rock.position.x + rock.position.y * rock.position.y));
+      }
+    }
+    return closest;
+  `);
+  assert.ok(closest >= 200); // safeRadius
+  assert.ok(closest < 260); // and rocks do come right after it (the zone is not larger than it should be)
+});
+
+test("38 rocks never overlap each other", () => {
+  const overlaps = run(`
+    let overlaps = 0;
+    for (let seed = 1; seed <= 5; seed++) {
+      const rocks = rocksInArea(seed, -3000, -3000, 3000, 3000);
+      for (let i = 0; i < rocks.length; i++) {
+        for (let j = i + 1; j < rocks.length; j++) {
+          const dx = rocks[i].position.x - rocks[j].position.x;
+          const dy = rocks[i].position.y - rocks[j].position.y;
+          const reach = DEFINITIONS.actors[rocks[i].type].radius + DEFINITIONS.actors[rocks[j].type].radius;
+          if (dx * dx + dy * dy < reach * reach) overlaps++;
+        }
+      }
+    }
+    return overlaps;
+  `);
+  assert.strictEqual(overlaps, 0);
+});
+
+test("39 known answer: seed 1 gives 12 rocks on the first screen, the first one a boulder at 172,-435", () => {
+  // If this fails after a change to the formula or the hash, every map changed.
+  // If it fails on another machine or browser, the hash is not exact there.
+  const result = run(`
+    const rocks = rocksInArea(1, -960, -540, 960, 540);
+    return { count: rocks.length, first: rocks[0], last: rocks[rocks.length - 1] };
+  `);
+  assert.strictEqual(result.count, 12);
+  assert.deepStrictEqual(plain(result.first), { type: "boulder", position: { x: 172, y: -435 } });
+  assert.deepStrictEqual(plain(result.last), { type: "boulder", position: { x: 854, y: 418 } });
+});
+
+test("40 the state keeps only the seed, not the rocks, and every rock kind is valid", () => {
+  const result = run(`
+    const s = createChamber1State(1, 5);
+    const rules = DEFINITIONS.terrain.rocks;
+    return {
+      seed: s.seed,
+      defaultSeed: createChamber1State().seed,
+      hasRocks: JSON.stringify(s).includes("stone") || "rocks" in s,
+      kinds: rules.kinds.map((kind) => ({
+        kind,
+        exists: kind in DEFINITIONS.actors,
+        isStatic: !("move" in DEFINITIONS.actors[kind].initial),
+        fits: DEFINITIONS.actors[kind].radius <= rules.margin,
+        bounceOk: DEFINITIONS.actors[kind].bounce >= 0 && DEFINITIONS.actors[kind].bounce <= 1,
+      })),
+    };
+  `);
+  assert.strictEqual(result.seed, 5);
+  assert.strictEqual(result.defaultSeed, 1);
+  assert.strictEqual(result.hasRocks, false);
+  for (const kind of result.kinds) {
+    assert.ok(kind.exists && kind.isStatic && kind.bounceOk, kind.kind);
+    assert.ok(kind.fits, kind.kind + ": a radius above the margin could make rocks overlap");
+  }
+});
