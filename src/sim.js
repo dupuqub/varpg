@@ -600,11 +600,12 @@ function moveDummy(state, dummy, player) {
 //    the objects are not pushed).
 // 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
 //    still pushes, but does not hurt and does not turn.
+// Returns true if something was pushed (so the cells of what moved must be written again).
 function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
   const dx = dummy.position.x - other.position.x;
   const dy = dummy.position.y - other.position.y;
   const touching = dummy.radius + other.radius;
-  if (dx * dx + dy * dy >= touching * touching) return;
+  if (dx * dx + dy * dy >= touching * touching) return false;
 
   const otherIsDummy = other.wander !== undefined;
   const isNewContact = !lastContacts.includes(key);
@@ -623,7 +624,7 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
       applyDamage(dummy, damageOf(other, hit, dummy, blueprint));
       const damage = damageOf(dummy, hit, other, blueprint);
       if (other.square !== undefined) {
-        if (damageObject(state, other, damage)) return; // the object broke: no collision
+        if (damageObject(state, other, damage)) return false; // the object broke: no collision, nothing moved
       } else {
         applyDamage(other, damage);
       }
@@ -643,51 +644,110 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
     turnDummy(state, dummy);
     if (otherIsDummy) turnDummy(state, other);
   }
+  return true;
+}
+
+// ---- The cells of an actor ----
+// Every actor holds the cells it covers, in actor.cells: { from: { x, y }, to: { x, y } }, a rectangle of cells with
+// both corners included (the user's decision: any actor can have several cells). It is the rectangle of cells that
+// the square around its circle touches (position -/+ radius), relative to the avatar, like cellIndex. A small actor
+// covers one cell, or up to four when it is over a border; a huge one covers many. Two circles that overlap always
+// share at least one cell, whatever their sizes, so nothing has to look at neighbor cells and the size of a cell
+// does not limit the size of an actor: it only changes how much work the grid saves.
+
+// Writes the cells an actor covers now.
+function setCells(actor, player, grid) {
+  const dx = actor.position.x - player.position.x;
+  const dy = actor.position.y - player.position.y;
+  actor.cells.from.x = cellIndex(dx - actor.radius, grid.cellSize);
+  actor.cells.from.y = cellIndex(dy - actor.radius, grid.cellSize);
+  actor.cells.to.x = cellIndex(dx + actor.radius, grid.cellSize);
+  actor.cells.to.y = cellIndex(dy + actor.radius, grid.cellSize);
+}
+
+// True if two rectangles of cells have at least one cell in common.
+function shareCell(a, b) {
+  return a.from.x <= b.to.x && b.from.x <= a.to.x && a.from.y <= b.to.y && b.from.y <= a.to.y;
+}
+
+// The index of the grid: for each cell ("x,y"), the numbers of the Dummies that cover it. It is made again in every
+// step from actor.cells (it is not part of the state), and kept right while the collisions push the Dummies.
+function addToCells(inCell, number, cells) {
+  for (let y = cells.from.y; y <= cells.to.y; y++) {
+    for (let x = cells.from.x; x <= cells.to.x; x++) {
+      const key = x + "," + y;
+      if (!inCell.has(key)) inCell.set(key, []);
+      inCell.get(key).push(number);
+    }
+  }
+}
+
+function removeFromCells(inCell, number, cells) {
+  for (let y = cells.from.y; y <= cells.to.y; y++) {
+    for (let x = cells.from.x; x <= cells.to.x; x++) {
+      const list = inCell.get(x + "," + y);
+      list.splice(list.indexOf(number), 1);
+    }
+  }
+}
+
+// The smallest number above "after" among the Dummies that cover any of these cells, or -1 if there is none.
+function nextInCells(inCell, cells, after) {
+  let next = -1;
+  for (let y = cells.from.y; y <= cells.to.y; y++) {
+    for (let x = cells.from.x; x <= cells.to.x; x++) {
+      const list = inCell.get(x + "," + y);
+      if (!list) continue;
+      for (const number of list) {
+        if (number > after && (next === -1 || number < next)) next = number;
+      }
+    }
+  }
+  return next;
 }
 
 // The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
-// the Dummies after it in the list (so each pair is looked at once, in the same order as testing every pair).
-// The Dummies are found by the collision grid: each one is put in its cell (relative to the avatar, like
-// actor.cell), and a Dummy is only tested against the avatar and the Dummies of its own cell and of the eight around it. That is
-// enough when two Dummies that touch are always in the same or in neighboring cells, which is what the rule of the
-// cellSize says (see state.grid in createChamber1State). The cells are the ones at the start of this step, so a
-// Dummy pushed by an earlier pair is still looked up where it was.
+// the Dummies after it in the list (so each pair is looked at once). The result is exactly the one of testing every
+// pair in that order; the grid only skips the pairs that cannot touch:
+// - a Dummy is tested against the avatar only if they share a cell, and against the Dummies that share a cell with it;
+// - the cells are read from the actors (actor.cells, written by step after the movement), and whenever a collision
+//   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
+//   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
+//   list made before.
 function collideDummies(state, lastContacts, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.wander);
-  const size = state.grid.cellSize;
 
-  const cellOf = dummies.map((dummy) => ({
-    x: cellIndex(dummy.position.x - player.position.x, size),
-    y: cellIndex(dummy.position.y - player.position.y, size),
-  }));
-  const inCell = new Map(); // "x,y" -> the numbers of the Dummies in that cell, in list order
-  cellOf.forEach((cell, number) => {
-    const key = cell.x + "," + cell.y;
-    if (!inCell.has(key)) inCell.set(key, []);
-    inCell.get(key).push(number);
-  });
+  const inCell = new Map();
+  dummies.forEach((dummy, number) => addToCells(inCell, number, dummy.cells));
+
+  // A Dummy moved: its cells are written again, in the actor and in the index.
+  const refreshCells = (number) => {
+    removeFromCells(inCell, number, dummies[number].cells);
+    setCells(dummies[number], player, state.grid);
+    addToCells(inCell, number, dummies[number].cells);
+  };
 
   for (let i = 0; i < dummies.length; i++) {
     const dummy = dummies[i];
+
+    let pushed = false;
     for (const object of objectsNear(state, dummy)) {
-      touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
+      if (touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint)) pushed = true;
     }
-    // The avatar is in the center cell (the cells are relative to it), so it only touches the Dummies of the nine cells around it.
-    if (Math.abs(cellOf[i].x) <= 1 && Math.abs(cellOf[i].y) <= 1) {
-      touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+    if (pushed) refreshCells(i);
+
+    if (shareCell(dummy.cells, player.cells)) {
+      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint)) refreshCells(i);
     }
 
-    const later = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const neighbors = inCell.get(cellOf[i].x + dx + "," + (cellOf[i].y + dy));
-        if (neighbors) for (const j of neighbors) if (j > i) later.push(j);
+    let j = nextInCells(inCell, dummy.cells, i);
+    while (j !== -1) {
+      if (touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint)) {
+        refreshCells(i);
+        refreshCells(j);
       }
-    }
-    later.sort((a, b) => a - b);
-    for (const j of later) {
-      touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
+      j = nextInCells(inCell, dummy.cells, j);
     }
   }
 }
@@ -733,13 +793,10 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 
     // Collision grid. These are dev settings. They live in the state so a run
     // can be reproduced exactly, and so they can be changed in one place.
-    // - cellSize: side of a cell, in pixels. Two actors that touch must always be in the same cell or in adjacent
-    //   cells. That asks for a cell of at least:
-    //   - the sum of the two largest radii, if the cells are computed AFTER the movement of the frame (what
-    //     collideDummies does): the speed does not matter;
-    //   - 2 x (largest radius + largest speed), if the cells stored at the end of the last frame (actor.cell) are used,
-    //     because both actors moved since. Measured with `node tests/agent/benchmark-grid.js pair`.
-    //   Stored cells also break at the seam: an actor that wraps jumps across the window, and its stored cell is wrong.
+    // - cellSize: side of a cell, in pixels. It does not limit the size of an actor: an actor covers every cell
+    //   its circle reaches (actor.cells), so two actors that touch always share a cell. It only decides how much
+    //   work the grid saves: a cell much smaller than the actors makes each one cover many cells, a cell much larger
+    //   puts many actors in the same cell. Measure with `node tests/agent/benchmark-grid.js`.
     // - windowWidth, windowHeight: cells across and down in the window around
     //   the player. Each is odd, 3 or more. The player is in the center cell.
     //   Collision is only tested inside this window, so it must cover all the
@@ -750,10 +807,8 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     //   How far outside the screen actors can be is not decided yet (it depends
     //   on where they spawn). A bigger window costs almost nothing: what costs
     //   is the number of actors tested, not the area.
-    // cellSize 64: guess, "an imaginary number that looks reasonable" (the user's words); the benchmark found it holds
-    //   for the Dummies (the largest two radii add up to exactly 64) with cells computed after the movement. It does
-    //   NOT hold with stored cells, nor will it for things that move faster than 2 px/frame (a dash) between two
-    //   large radii: that case needs 88. The objects and the avatar do not use the grid yet (the user decides when).
+    // cellSize 64: guess, "an imaginary number that looks reasonable" (the user's words). The benchmark found the cost
+    //   about the same from 60 to 100 with the Dummies of today; it is to be measured again when the actors change.
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
@@ -762,6 +817,7 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 
   assertValidGrid(state.grid);
   createDummies(state);
+  for (const actor of state.actors) setCells(actor, avatar, state.grid);
   return state;
 }
 
@@ -845,15 +901,13 @@ function step(state, input, blueprint) {
     collideWithObjects(state, actor, blueprint, lastContacts);
   }
 
-  // 3. The Dummies collide (with objects, the avatar and each other) and turn.
-  collideDummies(state, lastContacts, blueprint);
+  // 3. Cells: the cells every actor covers now, relative to the player (see "The cells of an actor").
+  // Every actor must already have "cells" and a radius (it fails loudly if one does not).
+  for (const actor of state.actors) setCells(actor, player, state.grid);
 
-  // 4. Cells: where every actor is, relative to the player.
-  // Every actor must already have a "cell" (it fails loudly if one does not).
-  for (const actor of state.actors) {
-    actor.cell.x = cellIndex(actor.position.x - player.position.x, state.grid.cellSize);
-    actor.cell.y = cellIndex(actor.position.y - player.position.y, state.grid.cellSize);
-  }
+  // 4. The Dummies collide (with objects, the avatar and each other) and turn. The collision reads the cells from
+  // the actors, and writes them again for every Dummy it pushes, so at the end of the step they are still right.
+  collideDummies(state, lastContacts, blueprint);
 
   state.frame += 1;
 }

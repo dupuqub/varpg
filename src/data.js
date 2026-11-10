@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 23;
+const DEFINITIONS_VERSION = 24;
 
 const DEFINITIONS = {
   actors: {
@@ -42,7 +42,7 @@ const DEFINITIONS = {
       // of its blueprint (createChamber1State).
       initial: {
         position: { x: 0, y: 0 },
-        cell: { x: 0, y: 0 }, // grid cell relative to the avatar, set every frame
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
@@ -68,7 +68,7 @@ const DEFINITIONS = {
       speed: 2,
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
-        cell: { x: 0, y: 0 }, // grid cell relative to the avatar, set every frame
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
         move: {
           direction: { x: 0, y: 0 }, // the unit vector of the angle it is walking at
           velocity: { x: 0, y: 0 }, // direction x speed, in pixels per frame

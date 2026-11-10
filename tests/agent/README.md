@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 95) walk, turn and hurt what they touch, with the same body slam.
+- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 100) walk, turn and hurt what they touch, with the same body slam.
 
 ## The tests, one by one
 
@@ -48,9 +48,9 @@ node --test
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 10 | The state carries the grid settings (64 / 61 / 35) and the player is always in cell (0, 0). | The grid settings live in the state so a run is reproducible. |
-| 11 | Cell boundaries: an offset of 31.9 is still in the center cell, 32 is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
-| 12 | When the player walks, another actor (a marker without a type, only a test fixture) changes cell. | Cells are relative to the player, not fixed to the world. |
+| 10 | The state carries the grid settings (64 / 61 / 35) and the player covers only the cell (0, 0) (`cells` from 0,0 to 0,0: a radius of 16 inside a cell of 64). | The grid settings live in the state so a run is reproducible. |
+| 11 | Cell boundaries: a point (radius 0, which covers one cell) at an offset of 31.9 is still in the center cell, at 32 it is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
+| 12 | When the player walks, another actor (a marker without a type, only a test fixture) changes cells. | Cells are relative to the player, not fixed to the world. |
 | 13 | `isInWindow` for a 3x3, an 11x11 and the 61 x 35 rectangle. | Checks the edges of the window, on each axis separately. |
 | 14 | The default window reaches at least 1920 px and 1080 px from the player. | The user's requirement: the window covers at least twice the screen. |
 | 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field) are refused with an error. | The settings must fail loudly, not run with nonsense. |
@@ -167,7 +167,7 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 
 ### The Dummies
 
-Tests 80 to 95 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
+Tests 80 to 100 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
 
 | # | What it checks | Why it matters |
 |---|---|---|
@@ -186,17 +186,19 @@ Tests 80 to 95 (most run in a game without objects, so only the collisions the t
 | 92 | The speed of a Dummy comes from its recipe through `finalSpeed` (a recipe of 3 gives Dummies of 3); a thing without a speed has 0; a Dummy speed of 0 or less stops the game when it loads. | Everything goes through the final functions, and the definitions are checked. |
 | 93 | Two Dummies side by side at the same velocity (they do not close in on each other) overlap: both turn once, and nobody is hurt. | Below the minimum impact there is no hit, but the contact still turns the Dummy. |
 | 94 | A Dummy that breaks a rock (1 health left) is still hurt by it (100 to 99), but is not pushed and does not turn, and goes through the broken rock. | The same rule as the avatar's: an object that breaks in the hit has no collision. |
-| 95 | The collision grid finds the same collisions as testing every pair of Dummies: the same state after 200 frames, for cell sizes of 60, 100 and 300 (with more than 20 turns, so the comparison proves something). | The grid is a faster way to the same result, not a different rule. |
+| 95 | The collision grid finds the same collisions as testing every pair of Dummies: the same whole state after 200 frames, for cells of 12, 20, 60, 100 and 300 (with more than 20 turns, so the comparison proves something). | The grid is a faster way to the same result, not a different rule, and no cell size loses a collision. |
+| 96 | The cells of an actor are the rectangle its circle reaches: radius 16 at the center covers one cell; at 20 px to the right it covers two; over a corner, four; a point covers one; a radius of 256 covers 9 x 9; and they are relative to the avatar. | `setCells` in numbers, borders included. |
+| 97 | In 20000 pairs of circles for each of three cell sizes (16, 64 and 300; radii 1 to 300), every pair that overlaps shares a cell. | The reason the grid cannot lose a collision, whatever the sizes. |
+| 98 | With Dummies of radius 256 and 128 among the others, the state after 200 frames is the same as testing every pair; the radius of 256 covers 8 or 9 cells each way, and the huge Dummy collided. | Huge actors need nothing special (the user's decision: several cells for any actor). |
+| 99 | Three Dummies in a row: the first overlaps the second, which is pushed over the border of a cell into the third, with which it shared no cell before. Both collisions happen in the same step. | The cells are written again at once when a Dummy is pushed. (Without that, this test and 100 fail; it was tried.) |
+| 100 | At the start and after each of 300 steps, the cells stored in every actor are the ones computed from its position and radius, with Dummies over borders, pushed and wrapped. | The stored cells are the truth the collision reads (the user's rule: read from the object). |
 
 ### Benchmark of the grid (not a test)
 
-`node tests/agent/benchmark-grid.js still|dash [frames]` and `node tests/agent/benchmark-grid.js pair`. In all of them the run played with the grid is compared, frame by frame and as the whole state, with the same run played by testing every pair of Dummies. The times depend on the machine.
+`node tests/agent/benchmark-grid.js still|giants [frames]`. The same run (the real number of Dummies, the avatar still) is played with several cell sizes in a window of the same size in pixels, and compared frame by frame, as the whole state, with the same run played by testing every pair of Dummies. It prints ms per step, pairs tested per step, the cells a Dummy covers on average, and "identical" (it must always be: no cell size can lose a collision). The times depend on the machine.
 
-- **still:** the real number of Dummies, the avatar still, several cell sizes in a window of the same size in pixels. Prints ms per step, pairs tested per step and whether the result is identical. A cell below the sum of the two largest radii loses collisions; from there up to about twice that the result is identical and the cost about the same; a much larger cell is close to testing every pair.
-- **dash:** Dummies with radii up to the objects' maximum, and an avatar that dashes all the time. Compares a cell of 64 and of 88, each with cells computed after the movement ("fresh", what the game does) and with the cells stored at the end of the last frame ("stale"), without and with the wrap of the window. Result on the run played: fresh is identical in both sizes; stale is identical without wrap in both sizes, but differs at the first Dummy that wraps (the stored cell is from the other side of the window).
-- **pair:** the worst case built on purpose: two Dummies of the largest radius that do not touch before the step and touch after it, placed so that the stored cells are two apart. With the cell of 64, stored cells **miss** the collision both at the Dummies' speed and at the speed of a dash; fresh cells find it. With the cell of 88 both ways find it.
-
-What it shows: the random run never hit the worst alignment, only the built case proves the limit. The rule of 2 x (radius + speed) is exact for stored cells and larger than needed for fresh ones.
+- **still:** the Dummies of the game. On the agent's machine the cost was lowest around 60 to 100 px, and rose for much smaller cells (each Dummy covers many) and much larger ones (many Dummies per cell).
+- **giants:** the same, with the first eight Dummies made huge (radii 256 and 128). Small cells become expensive, because a huge Dummy covers thousands of them; 60 to 100 px stayed the cheapest.
 
 ## Proof that the tests can fail
 

@@ -181,7 +181,7 @@ test("09 the top speed is asked every frame (finalSpeed can change from one fram
 
 // ---- Collision grid ----
 
-test("10 the state has the grid settings, and the player is always in cell (0, 0)", () => {
+test("10 the state has the grid settings, and the player covers only the cell (0, 0)", () => {
   const state = run(`
     const s = createChamber1State();
     for (let i = 0; i < 30; i++) step(s, { move: { x: 1, y: 0 } });
@@ -190,18 +190,18 @@ test("10 the state has the grid settings, and the player is always in cell (0, 0
   assert.strictEqual(state.grid.cellSize, 64);
   assert.strictEqual(state.grid.windowWidth, 61);
   assert.strictEqual(state.grid.windowHeight, 35);
-  assert.strictEqual(state.actors[0].cell.x, 0);
-  assert.strictEqual(state.actors[0].cell.y, 0);
+  assert.deepStrictEqual(plain(state.actors[0].cells), { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }); // radius 16 inside a cell of 64
 });
 
-test("11 cell boundaries: the center cell covers [-32, +32) around the player", () => {
+test("11 cell boundaries: the center cell covers [-32, +32) around the player (a point, radius 0, covers one cell)", () => {
   const cells = run(`
     return [31.9, 32, -32, -32.1, 100, 0].map((dx) => {
       const s = createChamber1State();
-      s.actors.push({ id: "marker", position: { x: dx, y: -70 }, cell: { x: 0, y: 0 } });
+      s.actors.push({ id: "marker", radius: 0, position: { x: dx, y: -70 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } });
       step(s, { move: { x: 0, y: 0 } });
       const marker = s.actors.find((actor) => actor.id === "marker");
-      return [marker.cell.x, marker.cell.y];
+      if (JSON.stringify(marker.cells.from) !== JSON.stringify(marker.cells.to)) throw new Error("a point must cover one cell");
+      return [marker.cells.from.x, marker.cells.from.y];
     });
   `);
   assert.deepStrictEqual(plain(cells), [
@@ -217,16 +217,16 @@ test("11 cell boundaries: the center cell covers [-32, +32) around the player", 
 test("12 cells are relative to the player: when the player walks, a still actor changes cell", () => {
   const cells = run(`
     const s = createChamber1State();
-    s.actors.push({ id: "marker", position: { x: 100, y: 0 }, cell: { x: 0, y: 0 } });
+    s.actors.push({ id: "marker", radius: 0, position: { x: 100, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } });
     step(s, { move: { x: 0, y: 0 } });
     const marker = s.actors.find((actor) => actor.id === "marker");
-    const before = marker.cell.x;
+    const before = marker.cells.from.x;
     const original = finalSpeed;
     finalSpeed = () => 64;
     s.actors[0].move.velocity.x = 64; // already moving at 64 px per frame
     step(s, { move: { x: 1, y: 0 } });
     finalSpeed = original;
-    return [before, marker.cell.x];
+    return [before, marker.cells.from.x];
   `);
   assert.deepStrictEqual(plain(cells), [2, 1]);
 });
@@ -338,7 +338,7 @@ test("17 unknown types fail loudly, and a type without 'move' is static", () => 
   const withTrap = loadGame((text) => {
     const patched = text.replace(
       "const DEFINITIONS = {\n  actors: {",
-      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },'
     );
     assert.notStrictEqual(patched, text, "the patch of data.js should apply");
     return patched;
@@ -375,7 +375,7 @@ test("18 a new avatar is a copy of the initial state in the definitions plus its
     const initial = DEFINITIONS.actors.avatar.initial;
     const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
     return {
-      copiesInitial: same(b.position, initial.position) && same(b.cell, initial.cell) && same(b.move, initial.move) && b.dash.recharge === initial.dash.recharge,
+      copiesInitial: same(b.position, initial.position) && same(b.cells, initial.cells) && same(b.move, initial.move) && b.dash.recharge === initial.dash.recharge,
       definitionsUntouched: initial.position.x === 0 && initial.move.direction.x === 0 && initial.move.velocity.x === 0 && !("charges" in initial.dash),
       otherUntouched: b.position.x === 0 && b.move.direction.x === 0 && b.move.velocity.x === 0 && b.dash.charges.now === 1 && b.health.now === 100,
       idFirst: Object.keys(a).slice(0, 2).join(","),
@@ -1864,36 +1864,186 @@ test("94 a Dummy that breaks an object in the hit is still hurt by it, but is no
   assert.ok(result.later.y > result.atBreak.y + 70, "the Dummy did not go through: " + result.atBreak.y + " -> " + result.later.y);
 });
 
-test("95 the collision grid finds the same collisions as testing every pair of Dummies: the same state after 200 frames, for the cell sizes that follow the rule", () => {
+// The old way, kept here as the reference: every Dummy against every object near it, the avatar, and every Dummy after
+// it in the list, in that order. The grid of the game must give exactly the same state.
+const EVERY_PAIR = `
+  const everyPair = (state, lastContacts, blueprint) => {
+    const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+    const dummies = state.actors.filter((actor) => actor.wander);
+    for (let i = 0; i < dummies.length; i++) {
+      const dummy = dummies[i];
+      for (const object of objectsNear(state, dummy)) {
+        touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
+      }
+      touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+      for (let j = i + 1; j < dummies.length; j++) touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
+    }
+  };
+  // Plays "frames" steps of a state made by "make", with the grid or with every pair, and returns the state as text.
+  // The cells are left out of the comparison of every pair only when it does not write them (it never pushes through
+  // refreshCells), so both sides write all the cells again before the text is made.
+  const playWith = (make, frames, useEveryPair, input = () => ({ move: { x: 0, y: 0 } })) => {
+    const real = collideDummies;
+    if (useEveryPair) collideDummies = everyPair;
+    try {
+      const s = make();
+      for (let frame = 0; frame < frames; frame++) step(s, input(frame));
+      for (const actor of s.actors) setCells(actor, s.actors[0], s.grid);
+      return JSON.stringify(s);
+    } finally {
+      collideDummies = real;
+    }
+  };
+  const turnsIn = (json) => JSON.parse(json).actors.reduce((sum, actor) => sum + (actor.wander ? actor.wander.turns : 0), 0);
+`;
+
+test("95 the collision grid finds the same collisions as testing every pair of Dummies: the same state after 200 frames, for cells much smaller and much larger than a Dummy", () => {
   const result = run(`
-    const everyPair = (state, lastContacts, blueprint) => {
-      const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-      const dummies = state.actors.filter((actor) => actor.wander);
-      for (let i = 0; i < dummies.length; i++) {
-        const dummy = dummies[i];
-        for (const object of objectsNear(state, dummy)) {
-          touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
-        }
-        touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
-        for (let j = i + 1; j < dummies.length; j++) touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
-      }
+    ${EVERY_PAIR}
+    const make = (cellSize) => () => {
+      const s = createChamber1State(1, 2);
+      s.grid = { cellSize, windowWidth: 3900 / cellSize, windowHeight: 2100 / cellSize };
+      for (const actor of s.actors) setCells(actor, s.actors[0], s.grid);
+      return s;
     };
-    const play = (cellSize, useEveryPair) => {
-      const real = collideDummies;
-      if (useEveryPair) collideDummies = everyPair;
-      try {
-        const s = createChamber1State(1, 2);
-        s.grid = { cellSize, windowWidth: 3900 / cellSize, windowHeight: 2100 / cellSize };
-        for (let frame = 0; frame < 200; frame++) step(s, { move: { x: 0, y: 0 } });
-        return JSON.stringify(s);
-      } finally {
-        collideDummies = real;
-      }
-    };
-    const turns = (json) => JSON.parse(json).actors.reduce((sum, actor) => sum + (actor.wander ? actor.wander.turns : 0), 0);
-    const reference = play(60, true);
-    return { same: [60, 100, 300].map((size) => play(size, false) === play(size, true)), turns: turns(reference) };
+    const reference = playWith(make(60), 200, true);
+    return { same: [12, 20, 60, 100, 300].map((size) => playWith(make(size), 200, false) === playWith(make(size), 200, true)), turns: turnsIn(reference) };
   `, WITH_DUMMIES);
-  assert.deepStrictEqual(plain(result.same), [true, true, true]);
+  assert.deepStrictEqual(plain(result.same), [true, true, true, true, true]); // no cell size loses a collision
   assert.ok(result.turns > 20, "the Dummies hardly collided, so the comparison proves little: " + result.turns);
+});
+
+test("96 an actor covers the rectangle of cells its circle reaches: one cell when it fits, two or four over a border, many when it is huge; a point covers one", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const avatar = s.actors[0];
+    const cellsAt = (x, y, radius, avatarX = 0, avatarY = 0) => {
+      avatar.position.x = avatarX; avatar.position.y = avatarY;
+      const actor = { radius, position: { x: avatarX + x, y: avatarY + y }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } };
+      setCells(actor, avatar, s.grid);
+      return actor.cells;
+    };
+    return {
+      fits: cellsAt(0, 0, 16),
+      overRight: cellsAt(20, 0, 16), // reaches 36, past the border at 32
+      overCorner: cellsAt(20, 20, 16),
+      justInside: cellsAt(15.9, 0, 16), // reaches 31.9
+      point: cellsAt(100, -70, 0),
+      huge: cellsAt(0, 0, 256), // from -256 to 256
+      hugeAway: cellsAt(0, 0, 256, 1000, -500), // the cells are relative to the avatar
+    };
+  `);
+  assert.deepStrictEqual(plain(result.fits), { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } });
+  assert.deepStrictEqual(plain(result.overRight), { from: { x: 0, y: 0 }, to: { x: 1, y: 0 } });
+  assert.deepStrictEqual(plain(result.overCorner), { from: { x: 0, y: 0 }, to: { x: 1, y: 1 } });
+  assert.deepStrictEqual(plain(result.justInside), { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } });
+  assert.deepStrictEqual(plain(result.point), { from: { x: 2, y: -1 }, to: { x: 2, y: -1 } });
+  assert.deepStrictEqual(plain(result.huge), { from: { x: -4, y: -4 }, to: { x: 4, y: 4 } }); // 9 x 9 = 81 cells
+  assert.deepStrictEqual(plain(result.hugeAway), plain(result.huge));
+});
+
+test("97 two circles that overlap always share a cell, whatever their sizes and the size of the cell (20000 pairs, radii 1 to 300)", () => {
+  const result = run(`
+    const avatar = { position: { x: 0, y: 0 } };
+    let overlapping = 0;
+    let missed = 0;
+    for (const cellSize of [16, 64, 300]) {
+      const grid = { cellSize };
+      for (let n = 0; n < 20000; n++) {
+        const make = (salt) => {
+          const actor = {
+            radius: 1 + (hashInts(n, cellSize, 1, salt) % 300),
+            position: { x: (hashInts(n, cellSize, 2, salt) % 1200) - 600, y: (hashInts(n, cellSize, 3, salt) % 1200) - 600 },
+            cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } },
+          };
+          setCells(actor, avatar, grid);
+          return actor;
+        };
+        const a = make(1);
+        const b = make(2);
+        const reach = a.radius + b.radius;
+        const dx = a.position.x - b.position.x;
+        const dy = a.position.y - b.position.y;
+        if (dx * dx + dy * dy >= reach * reach) continue;
+        overlapping++;
+        if (!shareCell(a.cells, b.cells)) missed++;
+      }
+    }
+    return { overlapping, missed };
+  `);
+  assert.ok(result.overlapping > 5000, "too few overlapping pairs to prove anything: " + result.overlapping);
+  assert.strictEqual(result.missed, 0);
+});
+
+test("98 huge Dummies (radius 128 and 256) among the others collide like everything else: the same state as testing every pair, with the cell of the game", () => {
+  const result = run(`
+    ${EVERY_PAIR}
+    const make = () => {
+      const s = createChamber1State(1, 2);
+      const dummies = s.actors.filter((actor) => actor.wander);
+      dummies[0].radius = 256; // the code reads the radius from the actor
+      dummies[1].radius = 128;
+      dummies[2].radius = 128;
+      for (const actor of s.actors) setCells(actor, s.actors[0], s.grid);
+      return s;
+    };
+    const grid = playWith(make, 200, false);
+    const every = playWith(make, 200, true);
+    const start = make().actors[1].cells;
+    const giant = JSON.parse(grid).actors[1];
+    return { same: grid === every, cellsAcross: start.to.x - start.from.x + 1, cellsDown: start.to.y - start.from.y + 1, giantTurns: giant.wander.turns, turns: turnsIn(grid) };
+  `, WITH_DUMMIES);
+  assert.ok(result.same, "the grid lost a collision of a huge Dummy");
+  assert.ok(result.cellsAcross >= 8 && result.cellsAcross <= 9 && result.cellsDown >= 8 && result.cellsDown <= 9, "a radius of 256 covers 8 or 9 cells each way: " + result.cellsAcross + " x " + result.cellsDown);
+  assert.ok(result.giantTurns > 3, "the huge Dummy hardly collided: " + result.giantTurns);
+});
+
+test("99 a Dummy pushed into a third one in the same step still finds it (its cells are written again at once)", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0, 1, 2);
+    const [avatar, a, b, c] = s.actors;
+    // All three walk down at the same velocity, so only the places matter. The border between two cells is at x = 608.
+    // b ends half a pixel before the border and c starts half a pixel after it: they do not touch and share no cell.
+    // a overlaps b by 10 from the left, so b is pushed 5 to the right, over the border and into c.
+    for (const d of [a, b, c]) { d.radius = 16; face(d, 90); d.position.y = 0; }
+    a.position.x = 569.5; b.position.x = 591.5; c.position.x = 624.5;
+    for (const actor of s.actors) setCells(actor, avatar, s.grid);
+    const sharedBefore = shareCell(b.cells, c.cells);
+    step(s, { move: { x: 0, y: 0 } });
+    return { sharedBefore, contacts: s.contacts, turns: [a.wander.turns, b.wander.turns, c.wander.turns], bCells: b.cells };
+  `, EMPTY);
+  assert.strictEqual(result.sharedBefore, false);
+  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1", "dummy_1|dummy_2"]);
+  assert.deepStrictEqual(plain(result.turns), [1, 2, 1]); // b turned twice: once for each collision
+});
+
+test("100 the cells stored in the actors are right at the start and after every step, pushes and wraps included", () => {
+  const result = run(`
+    const s = createChamber1State(1, 4);
+    const wrong = () => {
+      let count = 0;
+      const avatar = s.actors[0];
+      for (const actor of s.actors) {
+        const expected = {
+          from: { x: cellIndex(actor.position.x - actor.radius - avatar.position.x, 64), y: cellIndex(actor.position.y - actor.radius - avatar.position.y, 64) },
+          to: { x: cellIndex(actor.position.x + actor.radius - avatar.position.x, 64), y: cellIndex(actor.position.y + actor.radius - avatar.position.y, 64) },
+        };
+        if (JSON.stringify(actor.cells) !== JSON.stringify(expected)) count++;
+      }
+      return count;
+    };
+    const atStart = wrong();
+    let later = 0;
+    for (let frame = 0; frame < 300; frame++) {
+      step(s, { move: { x: 1, y: frame % 2 ? 1 : 0 } });
+      later += wrong();
+    }
+    const turns = s.actors.reduce((sum, actor) => sum + (actor.wander ? actor.wander.turns : 0), 0);
+    const spread = s.actors.filter((actor) => actor.wander && (actor.cells.from.x !== actor.cells.to.x || actor.cells.from.y !== actor.cells.to.y)).length;
+    return { atStart, later, turns, spread };
+  `, WITH_DUMMIES);
+  assert.strictEqual(result.atStart, 0);
+  assert.strictEqual(result.later, 0);
+  assert.ok(result.turns > 20 && result.spread > 5, "too little happened to prove it: " + result.turns + " turns, " + result.spread + " Dummies over a border");
 });
