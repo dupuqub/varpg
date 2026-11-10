@@ -1,0 +1,522 @@
+// Tests written by the agent (not by the user). See tests/agent/README.md.
+// Run from the root of the repository:  node --test tests/agent/
+//
+// The browser scripts (src/data.js, src/sim.js, src/history.js) are plain
+// scripts that share globals. Here each one is loaded into a vm context, the
+// way a browser loads them, so no change to the source is needed for testing.
+
+const test = require("node:test");
+const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+
+const SRC = path.join(__dirname, "..", "..", "src");
+const FILES = ["data.js", "sim.js", "history.js"];
+
+function readSource(name) {
+  return fs.readFileSync(path.join(SRC, name), "utf8");
+}
+
+// A fresh context with the game scripts loaded. "extraSource" can replace the text of a file.
+function loadGame(patchData = (text) => text) {
+  const context = vm.createContext({});
+  for (const name of FILES) {
+    const text = name === "data.js" ? patchData(readSource(name)) : readSource(name);
+    vm.runInContext(text, context);
+  }
+  return context;
+}
+
+const context = loadGame();
+
+// Runs code inside the game context, in its own function so names do not clash.
+// Objects made inside the context have another prototype than ours, so a result
+// that is compared with deepStrictEqual goes through plain(...) first.
+function run(code, where = context) {
+  return vm.runInContext(`(() => { ${code} })()`, where);
+}
+
+function plain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+// ---- State ----
+
+test("01 the initial state is plain JSON (writing it and reading it back changes nothing)", () => {
+  const text = JSON.stringify(run("return createChamber1State();"));
+  assert.strictEqual(JSON.stringify(JSON.parse(text)), text);
+  assert.strictEqual(text.includes("null"), false);
+});
+
+test("02 the state does not keep a reference to the input", () => {
+  const state = run(`
+    const s = createChamber1State();
+    const input = { move: { x: 1, y: 0 } };
+    step(s, input);
+    input.move.x = 99;
+    return s;
+  `);
+  assert.strictEqual(state.actors[0].move.direction.x, 1);
+});
+
+test("03 the same inputs give exactly the same state (determinism)", () => {
+  const [first, second] = run(`
+    const inputs = [];
+    for (let i = 0; i < 600; i++) {
+      const angle = i * 0.37;
+      inputs.push({ move: { x: Math.cos(angle), y: Math.sin(angle) } });
+    }
+    function play() {
+      const s = createChamber1State();
+      for (const input of inputs) step(s, input);
+      return JSON.stringify(s);
+    }
+    return [play(), play()];
+  `);
+  assert.strictEqual(first, second);
+});
+
+test("04 there is no manual aim: the state has no aim, and an aim in the input is ignored", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const withAim = createChamber1State();
+    step(s, { move: { x: 1, y: 0 } });
+    step(withAim, { move: { x: 1, y: 0 }, aim: { x: 0, y: 1 } });
+    return { has: "aim" in s.actors[0], same: JSON.stringify(s) === JSON.stringify(withAim) };
+  `);
+  assert.strictEqual(result.has, false);
+  assert.strictEqual(result.same, true);
+});
+
+// ---- Movement ----
+
+test("05 moving right: 12 frames of acceleration, then the top speed (60 frames = 163.5 px)", () => {
+  // 12 frames speeding up by 0.25 each: 0.25 + 0.5 + ... + 3 = 19.5 px.
+  // Then 48 frames at the top speed 3 = 144 px. Total 163.5 px.
+  const state = run(`
+    const s = createChamber1State();
+    for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 } });
+    return s;
+  `);
+  assert.strictEqual(state.frame, 60);
+  assert.strictEqual(state.actors[0].position.x, 163.5);
+  assert.strictEqual(state.actors[0].position.y, 0);
+  assert.strictEqual(state.actors[0].move.velocity.x, 3);
+});
+
+test("06 a normalized diagonal reaches the same top speed as a straight line", () => {
+  const state = run(`
+    const s = createChamber1State();
+    const c = Math.SQRT1_2;
+    for (let i = 0; i < 60; i++) step(s, { move: { x: c, y: c } });
+    return s;
+  `);
+  const { x, y } = state.actors[0].position;
+  assert.ok(Math.abs(Math.sqrt(x * x + y * y) - 163.5) < 1e-9);
+});
+
+test("07 speeding up takes 12 frames, stopping takes 24, and the speed never goes above the top", () => {
+  const { up, down } = run(`
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    const up = [];
+    for (let i = 0; i < 14; i++) { step(s, { move: { x: 1, y: 0 } }); up.push(v.x); }
+    const down = [];
+    for (let i = 0; i < 26; i++) { step(s, { move: { x: 0, y: 0 } }); down.push(v.x); }
+    return { up, down };
+  `);
+  assert.strictEqual(up[11], 3); // reached at frame 12
+  assert.ok(up[10] < 3); // and not before
+  assert.ok(up.every((value) => value <= 3));
+  assert.strictEqual(down[23], 0); // stopped at frame 24
+  assert.ok(down[22] > 0); // and not before
+});
+
+test("08 turning around: the velocity goes through zero in a straight line, without a jump", () => {
+  const { frames, x } = run(`
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    for (let i = 0; i < 20; i++) step(s, { move: { x: 1, y: 0 } });
+    let frames = 0;
+    while (v.x > 0 && frames < 100) { step(s, { move: { x: -1, y: 0 } }); frames++; }
+    return { frames, x: v.x };
+  `);
+  assert.strictEqual(frames, 12); // 3 / 0.25 = 12 frames to reach zero
+  assert.strictEqual(x, 0);
+});
+
+test("09 the top speed is asked every frame (finalSpeed can change from one frame to the next)", () => {
+  const { top, last } = run(`
+    const original = finalSpeed;
+    const s = createChamber1State();
+    const input = { move: { x: 1, y: 0 } };
+    step(s, input); // top speed 3 (baseSpeed)
+    finalSpeed = () => 10;
+    let top = 0;
+    for (let i = 0; i < 60; i++) { step(s, input); top = Math.max(top, s.actors[0].move.velocity.x); }
+    finalSpeed = original;
+    return { top, last: s.actors[0].move.velocity.x };
+  `);
+  assert.strictEqual(top, 10);
+  assert.strictEqual(last, 10);
+});
+
+// ---- Collision grid ----
+
+test("10 the state has the grid settings, and the player is always in cell (0, 0)", () => {
+  const state = run(`
+    const s = createChamber1State();
+    for (let i = 0; i < 30; i++) step(s, { move: { x: 1, y: 0 } });
+    return s;
+  `);
+  assert.strictEqual(state.grid.cellSize, 64);
+  assert.strictEqual(state.grid.windowWidth, 61);
+  assert.strictEqual(state.grid.windowHeight, 35);
+  assert.strictEqual(state.actors[0].cell.x, 0);
+  assert.strictEqual(state.actors[0].cell.y, 0);
+});
+
+test("11 cell boundaries: the center cell covers [-32, +32) around the player", () => {
+  const cells = run(`
+    return [31.9, 32, -32, -32.1, 100, 0].map((dx) => {
+      const s = createChamber1State();
+      s.actors.push({ id: "dummy", position: { x: dx, y: -70 }, radius: 16, cell: { x: 0, y: 0 } });
+      step(s, { move: { x: 0, y: 0 } });
+      return [s.actors[1].cell.x, s.actors[1].cell.y];
+    });
+  `);
+  assert.deepStrictEqual(plain(cells), [
+    [0, -1], // 31.9: still the center column
+    [1, -1], // 32: next column
+    [0, -1], // -32: still the center column
+    [-1, -1], // -32.1: previous column
+    [2, -1], // 100
+    [0, -1], // 0
+  ]);
+});
+
+test("12 cells are relative to the player: when the player walks, a still actor changes cell", () => {
+  const cells = run(`
+    const s = createChamber1State();
+    s.actors.push({ id: "dummy", position: { x: 100, y: 0 }, radius: 16, cell: { x: 0, y: 0 } });
+    step(s, { move: { x: 0, y: 0 } });
+    const before = s.actors[1].cell.x;
+    const original = finalSpeed;
+    finalSpeed = () => 64;
+    s.actors[0].move.velocity.x = 64; // already moving at 64 px per frame
+    step(s, { move: { x: 1, y: 0 } });
+    finalSpeed = original;
+    return [before, s.actors[1].cell.x];
+  `);
+  assert.deepStrictEqual(plain(cells), [2, 1]);
+});
+
+test("13 isInWindow: a 3x3 window reaches 1 cell, 11x11 reaches 5, and it can be a rectangle", () => {
+  const answers = run(`
+    const small = { cellSize: 64, windowWidth: 3, windowHeight: 3 };
+    const large = { cellSize: 64, windowWidth: 11, windowHeight: 11 };
+    const screen = { cellSize: 64, windowWidth: 61, windowHeight: 35 };
+    return [
+      isInWindow(small, { x: 1, y: -1 }),
+      isInWindow(small, { x: 2, y: 0 }),
+      isInWindow(large, { x: 5, y: 5 }),
+      isInWindow(large, { x: 0, y: -6 }),
+      isInWindow(screen, { x: 30, y: 17 }),
+      isInWindow(screen, { x: -30, y: -17 }),
+      isInWindow(screen, { x: 31, y: 0 }),
+      isInWindow(screen, { x: 0, y: 18 }),
+      isInWindow(screen, { x: 0, y: -18 }),
+    ];
+  `);
+  assert.deepStrictEqual(plain(answers), [true, false, true, false, true, true, false, false, false]);
+});
+
+test("14 the default window is at least twice the 1920 x 1080 screen", () => {
+  const [coversWidth, coversHeight, halfWidth, halfHeight] = run(`
+    const g = createChamber1State().grid;
+    const halfWidth = (g.windowWidth - 1) / 2 * g.cellSize + g.cellSize / 2; // pixels from the player to the edge
+    const halfHeight = (g.windowHeight - 1) / 2 * g.cellSize + g.cellSize / 2;
+    return [halfWidth >= 1920, halfHeight >= 1080, halfWidth, halfHeight];
+  `);
+  assert.strictEqual(coversWidth, true);
+  assert.strictEqual(coversHeight, true);
+  assert.strictEqual(halfWidth, 1952);
+  assert.strictEqual(halfHeight, 1120);
+});
+
+test("15 bad grid settings fail loudly (each axis is checked on its own)", () => {
+  const rejected = run(`
+    const bad = [
+      { cellSize: 64, windowWidth: 4, windowHeight: 3 },
+      { cellSize: 64, windowWidth: 3, windowHeight: 4 },
+      { cellSize: 64, windowWidth: 2, windowHeight: 3 },
+      { cellSize: 64, windowWidth: 3, windowHeight: 3.5 },
+      { cellSize: 0, windowWidth: 3, windowHeight: 3 },
+      { cellSize: -1, windowWidth: 3, windowHeight: 3 },
+      { cellSize: NaN, windowWidth: 3, windowHeight: 3 },
+      { cellSize: 64, windowWidth: 3 },
+      { cellSize: 64, windowSize: 3 },
+    ];
+    return bad.map((grid) => {
+      try { assertValidGrid(grid); return false; } catch (error) { return true; }
+    });
+  `);
+  assert.ok(plain(rejected).every((value) => value === true));
+  assert.doesNotThrow(() => run("assertValidGrid({ cellSize: 64, windowWidth: 61, windowHeight: 35 });"));
+});
+
+// ---- Definitions and actors ----
+
+test("16 the definitions are frozen, the state only points to them, and it carries their version", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const player = s.actors[0];
+    const before = DEFINITIONS.actors.player.baseSpeed;
+    DEFINITIONS.actors.player.baseSpeed = 99; // ignored: frozen
+    DEFINITIONS.actors.other = { baseSpeed: 1 }; // ignored: frozen
+    return {
+      version: s.definitionsVersion,
+      expectedVersion: DEFINITIONS_VERSION,
+      frozen: Object.isFrozen(DEFINITIONS) && Object.isFrozen(DEFINITIONS.actors.player),
+      unchanged: DEFINITIONS.actors.player.baseSpeed === before && !("other" in DEFINITIONS.actors),
+      type: player.type,
+      hasRadius: "radius" in player,
+      hasBaseSpeed: "baseSpeed" in player,
+      health: player.health,
+      radius: definitionOf(player).radius,
+      speed: finalSpeed(player),
+    };
+  `);
+  assert.strictEqual(result.version, result.expectedVersion);
+  assert.strictEqual(result.frozen, true);
+  assert.strictEqual(result.unchanged, true);
+  assert.strictEqual(result.type, "player");
+  assert.strictEqual(result.hasRadius, false); // fixed values stay in the definitions
+  assert.strictEqual(result.hasBaseSpeed, false);
+  assert.deepStrictEqual(plain(result.health), { current: 100 });
+  assert.strictEqual(result.radius, 16);
+  assert.strictEqual(result.speed, 3);
+});
+
+test("17 unknown types fail loudly, and a type without 'move' is static", () => {
+  const result = run(`
+    let createRejected = false;
+    try { createActor("x", "nope"); } catch (error) { createRejected = true; }
+    let definitionRejected = false;
+    try { definitionOf({ type: "nope" }); } catch (error) { definitionRejected = true; }
+    return { createRejected, definitionRejected };
+  `);
+  assert.strictEqual(result.createRejected, true);
+  assert.strictEqual(result.definitionRejected, true);
+
+  // The definitions are frozen, so build a second context from a patched copy
+  // of data.js that adds a "trap" type without "move".
+  const withTrap = loadGame((text) => {
+    const patched = text.replace(
+      "const DEFINITIONS = {\n  actors: {",
+      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", maxHealth: 1, attack: 5, defense: 0, radius: 10, initial: { health: { current: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+    );
+    assert.notStrictEqual(patched, text, "the patch of data.js should apply");
+    return patched;
+  });
+  const trap = run('return createActor("trap_1", "trap");', withTrap);
+  assert.strictEqual("move" in trap, false);
+  assert.strictEqual(trap.health.current, 1);
+
+  const walker = run('return createActor("walker_1", "player");', withTrap);
+  assert.strictEqual("move" in walker, true);
+
+  const trapPosition = run(
+    `
+    const s = createChamber1State();
+    s.actors.push(createActor("trap_1", "trap"));
+    step(s, { move: { x: 1, y: 0 } });
+    return JSON.stringify(s.actors[1].position);
+  `,
+    withTrap
+  );
+  assert.strictEqual(trapPosition, JSON.stringify({ x: 0, y: 0 }));
+});
+
+test("18 a new actor is a copy of the initial state in the definitions, and owns its numbers", () => {
+  const result = run(`
+    const a = createActor("a", "player");
+    const b = createActor("b", "player");
+    a.position.x = 50;
+    a.health.current = 1;
+    a.move.direction.x = 1;
+    a.move.velocity.x = 2;
+    const initial = DEFINITIONS.actors.player.initial;
+    return {
+      sameAsInitial: JSON.stringify({ id: "b", type: "player", ...initial }) === JSON.stringify(b),
+      definitionsUntouched: initial.position.x === 0 && initial.health.current === 100
+        && initial.move.direction.x === 0 && initial.move.velocity.x === 0,
+      otherUntouched: b.position.x === 0 && b.health.current === 100
+        && b.move.direction.x === 0 && b.move.velocity.x === 0,
+      idFirst: Object.keys(a).slice(0, 2).join(","),
+    };
+  `);
+  assert.strictEqual(result.sameAsInitial, true);
+  assert.strictEqual(result.definitionsUntouched, true);
+  assert.strictEqual(result.otherUntouched, true);
+  assert.strictEqual(result.idFirst, "id,type");
+});
+
+test("19 the run and the state: the state carries the run id, and the build is empty and outside the state", () => {
+  const result = run(`
+    const r = createRun(7);
+    const s = createChamber1State(r.id);
+    return { run: r, stateRun: s.run, defaultRun: createChamber1State().run, hasBuild: "build" in s };
+  `);
+  assert.deepStrictEqual(plain(result.run), { id: 7, build: {} });
+  assert.strictEqual(result.stateRun, 7);
+  assert.strictEqual(result.defaultRun, 1);
+  assert.strictEqual(result.hasBuild, false);
+});
+
+// ---- Run history ----
+
+test("20 history: two aligned lists, index 0 is the oldest, and the snaps are copies", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    const first = { snaps: h.snaps.length, inputs: h.inputs.length, firstInput: h.inputs[0] };
+    for (let i = 0; i < 5; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    const frames = h.snaps.map((snap) => snap.frame);
+    const x = h.snaps[5].actors[0].position.x; // 0.25 + 0.5 + 0.75 + 1 + 1.25 = 3.75
+    s.actors[0].position.x = 999; // changing the live state...
+    const unchanged = h.snaps[5].actors[0].position.x === x; // ...must not change the history
+    const inputCopy = { move: { x: 1, y: 0 } };
+    recordFrame(h, s, inputCopy);
+    inputCopy.move.x = 42; // changing the input afterwards...
+    const inputUnchanged = h.inputs[h.inputs.length - 1].move.x === 1;
+    return { first, frames, x, unchanged, inputUnchanged };
+  `);
+  assert.strictEqual(result.first.snaps, 1);
+  assert.strictEqual(result.first.inputs, 1);
+  assert.strictEqual(result.first.firstInput, null);
+  assert.deepStrictEqual(plain(result.frames), [0, 1, 2, 3, 4, 5]);
+  assert.strictEqual(result.x, 3.75);
+  assert.strictEqual(result.unchanged, true);
+  assert.strictEqual(result.inputUnchanged, true);
+});
+
+test("21 history keeps only the last 100, and the oldest (index 0) leaves first", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    for (let i = 0; i < 250; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    return {
+      snaps: h.snaps.length,
+      inputs: h.inputs.length,
+      oldest: h.snaps[0].frame,
+      newest: h.snaps[h.snaps.length - 1].frame,
+      aligned: h.snaps.every((snap, i) => snap.frame === 151 + i),
+      historySize: HISTORY_SIZE,
+    };
+  `);
+  assert.strictEqual(result.historySize, 100);
+  assert.strictEqual(result.snaps, 100);
+  assert.strictEqual(result.inputs, 100);
+  assert.strictEqual(result.oldest, 151);
+  assert.strictEqual(result.newest, 250);
+  assert.strictEqual(result.aligned, true);
+});
+
+test("22 cross-check: a normal run matches, even after the window has slid", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    for (let i = 0; i < 300; i++) {
+      const angle = i * 0.37;
+      const input = { move: { x: Math.cos(angle), y: Math.sin(angle) } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    return crossCheck(h);
+  `);
+  assert.strictEqual(result, null);
+});
+
+test("23 cross-check: a changed snap is found, with the exact frame and field", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    for (let i = 0; i < 120; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    const changedFrame = h.snaps[50].frame;
+    h.snaps[50].actors[0].position.x += 0.1;
+    return { found: crossCheck(h), changedFrame };
+  `);
+  assert.strictEqual(result.found.frame, result.changedFrame);
+  assert.strictEqual(result.found.path, "actors[0].position.x");
+  assert.ok(Math.abs(result.found.actual - result.found.expected + 0.1) < 1e-9);
+});
+
+test("24 cross-check also catches a rule that is not repeatable (hidden state outside the snaps)", () => {
+  // Here finalSpeed secretly counts its calls. The recording and the replay see different counters.
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    let counter = 0;
+    const original = finalSpeed;
+    finalSpeed = (actor) => (counter++ >= 60 ? 0.1 : original(actor));
+    for (let i = 0; i < 90; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    const found = crossCheck(h); // the counter is at 90 already: the replay is slower from frame 1
+    finalSpeed = original;
+    return found;
+  `);
+  assert.strictEqual(result.frame, 1);
+  assert.strictEqual(result.path, "actors[0].position.x");
+  assert.strictEqual(result.expected, 0.25);
+  assert.strictEqual(result.actual, 0.1);
+});
+
+test("25 discardAfter: going back and playing again drops what came after, and the lists stay aligned", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    for (let i = 0; i < 30; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    const back = stateFromSnap(h, 10); // go back to frame 10 (a copy)
+    discardAfter(h, 10);
+    const afterDiscard = { snaps: h.snaps.length, inputs: h.inputs.length };
+    for (let i = 0; i < 5; i++) {
+      const input = { move: { x: 0, y: 1 } }; // a different future
+      step(back, input);
+      recordFrame(h, back, input);
+    }
+    return {
+      afterDiscard,
+      framesNow: h.snaps.map((snap) => snap.frame),
+      lastY: h.snaps[h.snaps.length - 1].actors[0].position.y,
+      historyIsCopy: h.snaps[10] !== back,
+      check: crossCheck(h),
+    };
+  `);
+  assert.strictEqual(result.afterDiscard.snaps, 11);
+  assert.strictEqual(result.afterDiscard.inputs, 11);
+  assert.deepStrictEqual(plain(result.framesNow), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  assert.ok(result.lastY > 0 && result.lastY < 15); // moved down, with inertia (less than 5 x 3)
+  assert.strictEqual(result.historyIsCopy, true);
+  assert.strictEqual(result.check, null);
+});

@@ -211,6 +211,7 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 - `src/render.js`: draws the state (the reference grid and the player). It never changes it.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
+- `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` has 25 tests of the rules, and `README.md` explains each one in plain words. Any other kind of test the user writes later should go in its own folder.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
 ## Ideas (agent proposals, not decided)
@@ -233,13 +234,17 @@ They only become decisions when the user approves.
 - The Booster (a dash with charges and recharge, from the old project) needs a new input (a button) and state (charges). Not started.
 - Move `src/data.js` to the library structure (shelves, books, addresses, version per shelf). See "The library".
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
-- Testing: Node only for tests (`node --test`, no npm dependencies) or a test page in the browser. The agent cannot run browser pages by itself, and the user questioned npm's security.
+- Testing: decided. Automated tests run in Node with `node --test` (no npm dependencies, the user questioned npm's security) and live in `tests/agent/` (see "How to run"). What only a real browser can show goes to Chamber 2. Not covered yet: the Chamber 2 scripted run never releases the keys, so the deceleration branch is only tested in Node (the agent proposed adding idle frames to the script; the final position will change when that is done).
 - Next steps suggested by the agent: pause, advance one frame and go back (the history already exists, there are no buttons yet); running the cross-check automatically.
 - Folder structure beyond what already exists.
 
 ## How to run
 
 Open `index.html` in the browser. For now the scripts are plain (no modules), so no server is needed. When the simulation logic becomes modules, to also run in Node, a local static server will be needed, for example `python3 -m http.server`.
+
+### Tests
+
+From the root of the repository: `node --test` (no path; Node finds the `*.test.js` files). A good run ends with `# fail 0`. The user can paste the whole output to the agent. The tests load `src/data.js`, `src/sim.js` and `src/history.js` into a `vm` context, so the browser scripts do not need to become modules. Whenever the rules change on purpose (for example the acceleration), update the numbers in the tests and in `tests/agent/README.md`.
 
 ## How to work on this project
 
