@@ -105,7 +105,8 @@ function blueprintText(blueprint) {
     `defense: ${sumSpec(blueprint, "defense")} = ${finalDefense(avatar, blueprint)}`,
     `dash speed: ${sumSpec(blueprint, "dashSpeed")} = ${finalDashSpeed(avatar, blueprint)}`,
     `dash charges (maximum): ${sumSpec(blueprint, "dashCharges")} = ${finalDashMaxCharges(avatar, blueprint)}`,
-    `radius: ${finalRadius(avatar, blueprint)}, acceleration: ${finalAcceleration(avatar, blueprint)}, deceleration: ${finalDeceleration(avatar, blueprint)}, dash recharge: ${finalDashRechargeFrames(avatar, blueprint)} frames (all from the recipe of the avatar)`,
+    `radius: ${finalRadius(avatar, blueprint)}, acceleration: ${finalAcceleration(avatar, blueprint)}, deceleration: ${finalDeceleration(avatar, blueprint)} (from the recipe of the avatar)`,
+    `dash recharge (frames): ${sumSpec(blueprint, "rechargeFrames")} = ${finalDashRechargeFrames(avatar, blueprint)}`,
   ].join("\n");
 }
 

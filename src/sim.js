@@ -183,9 +183,10 @@ function finalDeceleration(actor, blueprint) {
   return definitionOf(actor).deceleration;
 }
 
-// The frames a dash charge takes to come back. Base from the recipe.
+// The frames a dash charge takes to come back: the sum of the rechargeFrames of the parts (the Booster is
+// the primary source). Pure, like finalSpeed.
 function finalDashRechargeFrames(actor, blueprint) {
-  return definitionOf(actor).dash.rechargeFrames;
+  return fromParts(actor, blueprint, "rechargeFrames");
 }
 
 // The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object

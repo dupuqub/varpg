@@ -40,7 +40,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 | What | Where |
 |---|---|
 | The avatar (radius, acceleration, deceleration, dash recharge) | `DEFINITIONS.actors` in `src/data.js` |
-| Dash charges (the maximum is the sum of `dashCharges` of the parts; the Booster is the primary source) | `DEFINITIONS.parts` in `src/data.js`, computed by `finalDashMaxCharges` |
+| Dash charges and recharge time (sums of `dashCharges` and `rechargeFrames` of the parts; the Booster is the primary source) | `DEFINITIONS.parts` in `src/data.js`, computed by `finalDashMaxCharges` |
 | Mecha parts (weight and specs) and the starter blueprint | `DEFINITIONS.parts`, `DEFINITIONS.starterBlueprint` |
 | Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `bodySlam.minDamage`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | How the ground is filled with objects (`cellSize`, `chancePercent`, `safeRadius`, `kinds`) | `DEFINITIONS.terrain.objects` |
@@ -131,6 +131,7 @@ The user asked for the kit with **only what is used now**: weight, speed, health
   - defense (`finalDefense`) = sum of `defense`;
   - dash speed (`finalDashSpeed`) = sum of `dashSpeed`; without any part giving it there is no dash and the charge is kept;
   - maximum dash charges (`finalDashMaxCharges`) = sum of `dashCharges`; the state holds `dash.charges: { now, max }` (the user's structure), filled when the state is created, like the health; without any part giving it there is no charge and no dash;
+  - frames to recharge a charge (`finalDashRechargeFrames`) = sum of `rechargeFrames` (the user's decision, 2026-11-10: at first every number of the dash comes from the Booster);
   - capacity = sum of `capacity`.
 - **Weight (the user's decisions):** its effect on speed must be **direct and easy to perceive**: a fixed amount of speed per unit of weight, shown as such in the audit. The unit label is only flavor for the player.
 - **Capacity (the user's decision):** it belongs to the **torso** and is a **hard limit** on the blueprint, not a speed penalty: the part is not technologically able to carry more (wiring, structure), and weight cannot be stacked without limit. The agent's reading: it works as a **blueprint budget**, so every upgrade has to fit, which creates real choices. Static builds (standing still on auto attack) are **welcome**: the user finds them fun and still challenging to make work.

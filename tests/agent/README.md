@@ -160,7 +160,7 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 | 54 | Taking off a 650 kg arm gives back 0.13 px/frame of speed (650 x 0.0002), a 200 kg head 0.04. | The weight effect is direct and easy to see: kg times a constant. |
 | 55 | Without the Legs the speed would be negative (0.5 - 3700 x 0.0002), and it is 0. | The controls never reverse. |
 | 56 | Without the Torso health is 45 and defense 1; without the Head health is 85 and defense 3. | Each part adds exactly what it gives. |
-| 57 | Without the Booster there is no dash charge (`finalDashMaxCharges` is 0, and a new avatar starts with `{ now: 0, max: 0 }`) and a dash does nothing; with it the maximum is 1 and a new avatar starts full. | A dash, and its charges, come from a part, not from nowhere. |
+| 57 | Without the Booster there is no dash charge (`finalDashMaxCharges` is 0, `finalDashRechargeFrames` is 0 and with it 240, and a new avatar starts with `{ now: 0, max: 0 }`) and a dash does nothing; with it the maximum is 1 and a new avatar starts full. | A dash, and its charges, come from a part, not from nowhere. |
 | 58 | A blueprint of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
 | 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a blueprint. |
 | 60 | The cross-check is clean with the blueprint the run was played with, and finds a difference with another. | The blueprint is an input of the replay, as the seed and the inputs are. |

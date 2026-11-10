@@ -1130,6 +1130,8 @@ test("57 without the Booster there is no dash charge and no dash: the maximum co
     return {
       withBooster: finalDashMaxCharges(avatar, full),
       withoutBooster: finalDashMaxCharges(avatar, noBooster),
+      rechargeWith: finalDashRechargeFrames(avatar, full),
+      rechargeWithout: finalDashRechargeFrames(avatar, noBooster),
       dashSpeed: finalDashSpeed(avatar, noBooster),
       charges: p.dash.charges,
       vx: p.move.velocity.x,
@@ -1138,6 +1140,7 @@ test("57 without the Booster there is no dash charge and no dash: the maximum co
   `);
   assert.strictEqual(result.withBooster, 1);
   assert.strictEqual(result.withoutBooster, 0);
+  assert.deepStrictEqual([result.rechargeWith, result.rechargeWithout], [240, 0]); // the recharge time is the Booster's too
   assert.strictEqual(result.dashSpeed, 0);
   assert.deepStrictEqual(plain(result.charges), { now: 0, max: 0 }); // nothing to spend, nothing to recharge
   assert.strictEqual(result.vx, 0.25); // only the normal acceleration (a dash would have set 12)

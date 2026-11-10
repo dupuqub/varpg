@@ -30,15 +30,12 @@ const DEFINITIONS = {
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
       // What is here is the base of each value. The avatar does not read it while it plays: createAvatar
       // (src/sim.js) gives the avatar its own copy of each one, through a final function (finalRadius,
-      // finalAcceleration, finalDeceleration, finalDashRechargeFrames), so any of them can change in a run.
+      // finalAcceleration, finalDeceleration), so any of them can change in a run.
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. The sizes of the objects are measured against it.
       acceleration: 0.25, // target: top speed in 0.2 s = 3 / 0.25 = 12 frames. A power of two, so the sums are exact
       deceleration: 0.125, // target: stops in 0.4 s (twice the time of speeding up, so it slides) = 3 / 0.125 = 24 frames. Also exact
-      dash: {
-        // The dash strength and the maximum of charges come from the parts (the Booster: dashSpeed 12 and
-        // dashCharges 1, see "parts" below).
-        rechargeFrames: 240, // anchor: the user's old project (4 s) = 240 frames at 60 steps per second
-      },
+      // Every number of the dash (strength, maximum of charges, frames to recharge) comes from the parts, the
+      // Booster (see "parts" below).
 
       // The health and the dash charges are not here: a new avatar gets the maximum health and the maximum charges
       // of its blueprint (createChamber1State).
@@ -127,6 +124,7 @@ const DEFINITIONS = {
   //   speed     px/frame added to the top speed        health    added to the maximum health
   //   defense   taken off every hit                    dashSpeed px/frame of the dash (the Booster)
   //   dashCharges how many charges of dash the blueprint has at most (the Booster)
+  //   rechargeFrames frames a spent dash charge takes to come back (the Booster)
   //   capacity  kg the blueprint can carry (the Torso)
   // Radar, Magnet, the shield (Generator) and the weapons are not here: nothing uses them yet.
   // weight: anchor, the proportions of the user's old project (0.2 / 0.3 / 0.1 / 0.4 / 0.6 / 0.1 / 0.1,
@@ -141,6 +139,8 @@ const DEFINITIONS = {
   //   of an object), or it could cross an object in one frame.
   // dashCharges: anchor, the user's old project (1 charge). The user's decision: the charges come from the parts that
   //   have them, primarily the Booster. Without one there is no charge, so no dash.
+  // rechargeFrames: anchor, the user's old project (4 s) = 240 frames at 60 steps per second. The user's decision: all
+  //   the numbers of the dash come from the Booster at first.
   // capacity: anchor and rule, the user's 6 t, the 5 t of the starter blueprint plus 20%.
   parts: {
     "shoulder-r": { name: "Shoulder R", weight: 450, specs: {} },
@@ -151,7 +151,7 @@ const DEFINITIONS = {
     torso: { name: "Torso", weight: 900, specs: { health: 55, defense: 2, speed: 0.5, capacity: 6000 } },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, defense: 1, speed: 3.5 } },
     generator: { name: "Generator", weight: 200, specs: {} },
-    booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1 } },
+    booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1, rechargeFrames: 240 } },
   },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
