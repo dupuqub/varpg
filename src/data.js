@@ -14,7 +14,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 8;
+const DEFINITIONS_VERSION = 9;
 
 const DEFINITIONS = {
   actors: {
@@ -22,7 +22,6 @@ const DEFINITIONS = {
       name: "Player",
       // The maximum health, the defense, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
-      attack: 10, // guess: a loose number, not used yet (the attack of a body slam will come from the weight)
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. Every rock radius is measured against it.
       acceleration: 0.25, // target: top speed in 0.2 s = 3 / 0.25 = 12 frames. A power of two, so the sums are exact
       deceleration: 0.125, // target: stops in 0.4 s (twice the time of speeding up, so it slides) = 3 / 0.125 = 24 frames. Also exact
@@ -33,7 +32,7 @@ const DEFINITIONS = {
       },
 
       initial: {
-        health: { current: 100 }, // rule: the maximum health of the starter build (15 + 55 + 30); a test checks it
+        health: { current: 0 }, // set to the maximum health of the build when the state is created (createChamber1State)
         position: { x: 0, y: 0 },
         cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
         move: {
@@ -154,6 +153,16 @@ const DEFINITIONS = {
   // The build a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
   starterBuild: {
     parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
+  },
+
+  // What Chamber 1 has besides the avatar and the rocks.
+  chamber1: {
+    // The training dummy, straight up from the start.
+    // position: rule, 130 px. A dash hits only while its speed is above bodySlam.minImpact (6): from 12, falling
+    //   0.5 per frame, that is 12 frames and 111 px. At 130 px the dummy is touched after 98 px (130 minus the two
+    //   radii), with an impact of 7, so the first dash can hit it. It is also inside the rocks' safe zone
+    //   (200 px minus the largest rock radius 20 and the dummy radius 16 = 164), so no rock can overlap it.
+    actors: [{ id: "dummy_1", type: "dummy", position: { x: 0, y: -130 } }],
   },
 
   // How the ground is filled (provisional values, to be tuned).

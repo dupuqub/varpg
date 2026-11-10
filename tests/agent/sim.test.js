@@ -355,9 +355,9 @@ test("18 a new actor is a copy of the initial state in the definitions, and owns
     const initial = DEFINITIONS.actors.player.initial;
     return {
       sameAsInitial: JSON.stringify({ id: "b", type: "player", ...initial }) === JSON.stringify(b),
-      definitionsUntouched: initial.position.x === 0 && initial.health.current === 100
+      definitionsUntouched: initial.position.x === 0 && initial.health.current === 0
         && initial.move.direction.x === 0 && initial.move.velocity.x === 0,
-      otherUntouched: b.position.x === 0 && b.health.current === 100
+      otherUntouched: b.position.x === 0 && b.health.current === 0
         && b.move.direction.x === 0 && b.move.velocity.x === 0,
       idFirst: Object.keys(a).slice(0, 2).join(","),
     };
@@ -962,7 +962,7 @@ test("50 the attack: weight x 0.001, only above an impact of 6; the damage never
 
 test("51 health stops at 0 (there is no death yet)", () => {
   const health = run(`
-    const p = createActor("p", "player");
+    const p = createChamber1State().actors[0]; // starts with 100
     applyDamage(p, 60);
     applyDamage(p, 60);
     return p.health.current;
@@ -1011,10 +1011,11 @@ test("53 the starter build adds up to the values the avatar had before parts: sp
       weight: totalWeight(full), capacity: sumSpec(full, "capacity"),
       speed: finalSpeed(avatar, full), health: finalMaxHealth(avatar, full),
       defense: finalDefense(avatar, full), dash: finalDashSpeed(avatar, full),
-      startsFull: avatar.health.current === finalMaxHealth(avatar, full),
+      startsFull: createChamber1State(1, 1, full).actors[0].health.current,
+      startsFullWithoutHead: createChamber1State(1, 1, without("head")).actors[0].health.current,
     };
   `);
-  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, defense: 3, dash: 12, startsFull: true });
+  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, defense: 3, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
 });
 
 test("54 weight takes speed away directly: taking off a 650 kg arm gives back 650 x 0.0002 = 0.13 px/frame", () => {

@@ -44,7 +44,7 @@ let accumulatedMs = 0;
 function startChamber1() {
   stopChamber1();
   run = createRun(1);
-  state = createChamber1State(run.id);
+  state = createChamber1State(run.id, 1, run.build);
   runHistory = createHistory(state, run.build);
   lastTimestamp = null;
   accumulatedMs = 0;

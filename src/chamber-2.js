@@ -30,7 +30,7 @@ function scriptedInputs(count) {
 // Plays the inputs from a new Chamber 1 state and records the history.
 function playScripted(inputs) {
   const run = createRun(1);
-  const state = createChamber1State(run.id);
+  const state = createChamber1State(run.id, 1, run.build);
   const history = createHistory(state, run.build);
   for (const input of inputs) {
     step(state, input, run.build);
@@ -115,8 +115,8 @@ function dataText() {
     JSON.stringify(DEFINITIONS, null, 2),
     buildText(createRun(1).build),
     "initial state of Chamber 1:",
-    JSON.stringify(createChamber1State(createRun(1).id), null, 2),
-    rocksText(createChamber1State(createRun(1).id).seed),
+    JSON.stringify(createChamber1State(1, 1, createRun(1).build), null, 2),
+    rocksText(createChamber1State().seed),
   ].join("\n");
 }
 

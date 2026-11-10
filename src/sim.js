@@ -348,11 +348,23 @@ function createRun(id) {
   return { id, build };
 }
 
-// Initial state of Chamber 1: only the player, standing at the center of the world.
+// Initial state of Chamber 1: the avatar at the center of the world, with the full health of
+// its build, and the other actors listed in DEFINITIONS.chamber1.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
-function createChamber1State(runId = 1, seed = 1) {
+// build: the build of the run, used only to give the avatar its starting health.
+function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBuild) {
+  const avatar = createActor(PLAYER_ID, "player");
+  avatar.health.current = finalMaxHealth(avatar, build);
+
+  const others = DEFINITIONS.chamber1.actors.map((entry) => {
+    const actor = createActor(entry.id, entry.type);
+    actor.position.x = entry.position.x;
+    actor.position.y = entry.position.y;
+    return actor;
+  });
+
   const state = {
     run: runId,
     frame: 0,
@@ -388,14 +400,8 @@ function createChamber1State(runId = 1, seed = 1) {
     // so a faster dash or a bigger rock needs a bigger cell. windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
-    // The avatar, and a training dummy straight up from it, 130 px from the start. A dash only hits (impact
-    // above 6) in its first 10 frames, because it slows down by 0.5 per frame from 12; in those frames it
-    // covers 104 px, so the dummy (touching at 32 px from its center) is the first thing a dash can hit, and
-    // with an impact of 7. It is also inside the safe zone (200 px, minus the largest rock radius 20 and the
-    // dummy radius 16), so no rock can overlap it.
-    actors: [createActor(PLAYER_ID, "player"), createActor("dummy_1", "dummy")],
+    actors: [avatar, ...others],
   };
-  state.actors[1].position.y = -130;
 
   assertValidGrid(state.grid);
   return state;
