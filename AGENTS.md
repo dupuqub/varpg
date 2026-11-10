@@ -45,6 +45,8 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 | Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `bodySlam.minDamage`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | How the ground is filled with objects (`cellSize`, `chancePercent`, `safeRadius`, `kinds`) | `DEFINITIONS.terrain.objects` |
 | Objects (rock, Shroom: each entry is a set of ranges, `size` `{ min, max }`, `healthRange`, and `weightPerRadius`; the Shroom also has `bounce`) | `DEFINITIONS.objects` |
+| The Dummy (`size`, `healthRange`, `weightPerRadius`, `speed`) | `DEFINITIONS.actors.dummy` in `src/data.js` |
+| How many Dummies, how far from the avatar they start, how many places are tried (`count`, `safeRadius`, `placementTries`) | `DEFINITIONS.terrain.dummies` in `src/data.js` |
 | Collision grid (`cellSize`, `windowWidth`, `windowHeight`) | `state.grid`, set in `createChamber1State` in `src/sim.js` |
 | `OVERSPEED_TOLERANCE` | `src/sim.js` |
 | `HISTORY_SIZE` | `src/history.js` |
@@ -247,7 +249,7 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 - Every X time, Y spawn. For each map, exactly what appears and when is known in advance.
 - At first, all actors want to attack the player.
-- An actor that leaves the window reappears on the opposite side. So there is a limited number of actors always present, almost all on screen.
+- An actor that leaves the window reappears on the opposite side. So there is a limited number of actors always present, almost all on screen. **Implemented for the Dummies** (see "The Dummy" below).
 
 ### Collision grid
 
@@ -262,11 +264,25 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
   3. Nobody crosses the seam: actors on opposite edges are not neighbors. It is invisible, because the seam is off screen.
   4. The ground is infinite. Only the population is bounded.
   5. To see the limits of the universe, a debug zoom-out is the way; drawing every cell only produces noise. (The user no longer wants to see the collision boxes, and the overlay was removed.)
-- No collision uses the grid yet: the collision with objects finds them by the formula, and collision between moving actors does not exist.
+- No collision uses the grid yet: the collision with objects finds them by the formula, and the Dummies test every pair by brute force (`collideDummies`), written so the grid can replace it.
+- The wrap exists for the Dummies only (`wrapIntoWindow`): the window is the real area of the game, and a Dummy that leaves it on one side comes back on the opposite side. The invariant for every actor is still not checked.
+
+### The Dummy
+
+The user's idea (2026-11-10): a test actor that does not attack, made to see many things colliding. Numbers are in `src/data.js` (`DEFINITIONS.actors.dummy` and `DEFINITIONS.terrain.dummies`), with their reasons; nothing is repeated here.
+
+- **Made by the seed, lives in the state.** `createDummies` (called by `createChamber1State`) makes `count` Dummies through `finalizeObject("dummy", …)`, the same function as everything else. The seed rolls radius, health, first angle and position (the salts 11 to 15 are in the code, with the number of the Dummy and the try). Its speed comes from its recipe through `finalSpeed`, and the Dummy carries it. Ids are `dummy_0`, `dummy_1`, and so on.
+- **Where:** inside the window of the collision grid around the avatar (the real area of the game, the user's decision). A place that is taken (another Dummy, an object, too close to the avatar) is refused and the seed tries another; after `placementTries` the game fails loudly.
+- **How it moves:** it walks in a straight line at its speed (no acceleration), pointing at `wander.angle`, in whole degrees. `wander` is `{ index, angle, turns }`. At every **new** collision (with an object that is still whole, with the avatar, or with another Dummy) it gets a new angle, `hash(seed, index, turns) % 360` (the user's `rand(360)`, but from the seed, so the run is reproducible). A pair that was already touching in the last frame still pushes it out, but does not turn it (the same contact rule as the avatar's hits).
+- **Sine and cosine** come from our own series (`sinDegrees`, `cosDegrees`), with additions and multiplications only, because `Math.sin` may differ in the last digits between browsers.
+- **Wrap:** a Dummy that leaves the window comes back on the opposite side (`wrapIntoWindow`), around the avatar wherever it is.
+- **Collisions only change the angle.** A Dummy collision pushes the Dummy out (the avatar and the objects are not pushed; two Dummies are pushed half each) and turns it. **No damage is done yet**, by or to a Dummy, and the avatar is not pushed by a Dummy. These two points are provisional and the user has not decided them.
+- **Drawn** as blue circles by `drawDummies` in `src/render.js`. The window is twice the screen, so about a quarter of the Dummies are on screen at a time.
+- Tests: 80 to 92 in `tests/agent/README.md`.
 
 ### Actor
 
-An actor is any entity that can act in combat. Today the avatar is the only one. A thing without `move` (a trap, for example) would be a static actor, but none exists, so nothing in the game handles it.
+An actor is any entity that can act in combat. Today the avatar and the Dummy are the only ones. A thing without `move` (a trap, for example) would be a static actor, but none exists, so nothing in the game handles it.
 
 An actor **in the state** holds **its own value for everything it uses** (the user's rule, 2026-11-10: "always check the object itself", everything can change in a run: a druid that becomes a giant bear, a bigger mecha): `id`, `type`, `radius`, `position`, `cell`, `health` (`{ now, max }`, the user's mold: almost everything has a now and a max), and, if it has them, `move` (`direction`, `velocity`), `acceleration`, `deceleration` and `dash` (`charges: { now, max }`, `recharge`, `rechargeFrames`). The avatar does not read its definition while it plays (a test proves it): `createAvatar` gives it a copy of each value, made by a final function (`finalRadius`, `finalAcceleration`, `finalDeceleration`, `finalDashRechargeFrames`, `finalDashMaxCharges`, `finalMaxHealth`), and the rest of the code reads the actor. The definitions only hold the base (and the parameters of creation); the shape of each type is its `initial` in `src/data.js`. The maximum health, defense, top speed and dash speed of the avatar come from the parts of its blueprint. An object (rock, Shroom) also holds its own `weight` and `bounce` (the user's decision, 2026-11-10: "use the formula when making the object, and then it becomes the reference"): `finalizeObject` computes them from its own radius with `finalWeight` and `finalBounce`, and the collision reads `object.weight` and `object.bounce`, never the definition. The avatar holds its `weight` too (the total weight of its blueprint) and a `bounce` of 0. The attack (`finalAttack`) reads the `weight` of the attacker. What the avatar still computes every frame from the blueprint (not stored): top speed, dash speed, defense.
 

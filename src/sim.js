@@ -107,7 +107,7 @@ function assertValidBlueprint(blueprint) {
 //   It grows with the radius, so it works because every object has a size.
 // - The objects the seed places (terrain.objects.kinds) must exist.
 function assertValidDefinitions() {
-  for (const [id, object] of Object.entries(DEFINITIONS.objects)) {
+  for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy })) {
     const where = "the object " + id;
     if (!object.size) throw new Error("The object " + id + " needs a size: { min, max }, the range of its radius");
     const { min, max } = object.size;
@@ -120,6 +120,9 @@ function assertValidDefinitions() {
     const health = object.healthRange;
     if (!health || !Number.isInteger(health.min) || !Number.isInteger(health.max) || health.min < 1 || health.min > health.max) {
       throw new Error("The healthRange of " + where + " needs whole numbers, 1 or more, with min not above max: " + JSON.stringify(health));
+    }
+    if (object.speed !== undefined && !(object.speed > 0)) {
+      throw new Error("The speed of " + where + " must be above 0, and it is " + object.speed);
     }
     if (object.bounce !== undefined) {
       const bounce = object.bounce;
@@ -145,6 +148,7 @@ function assertValidDefinitions() {
 // It is a function, not a stored value, so buffs can be applied here, in order, later.
 // It must stay pure: the result depends only on the arguments and the definitions.
 function finalSpeed(actor, blueprint) {
+  if (!isAvatar(actor)) return definitionOf(actor).speed ?? 0; // not the avatar: its recipe (a Dummy), or none (no parts, no weight penalty)
   const weightPenalty = totalWeight(blueprint) * DEFINITIONS.constants.weightSpeedPenalty;
   return Math.max(0, fromParts(actor, blueprint, "speed") - weightPenalty);
 }
@@ -465,6 +469,177 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
   }
 }
 
+// ---- Dummies ----
+// A Dummy is an actor made by the seed (like an object, from the ranges of its entry), but it lives in the
+// state, because it moves. It has `wander: { index, angle, turns }`: its number among the Dummies, the angle it
+// walks at (whole degrees, 0 to 359) and how many times it has turned. It walks in a straight line at its own
+// speed, and at every new collision it picks another angle: hash(seed, index, turns), so the same run always
+// turns the same way (nothing here is Math.random).
+
+// The sine of a whole number of degrees, from additions and multiplications only (a series), so it is the same in
+// every browser (Math.sin is allowed to differ in the last digits). The error is below 1e-11.
+function sinDegrees(degrees) {
+  let d = ((degrees % 360) + 360) % 360;
+  if (d > 180) d -= 360;
+  if (d > 90) d = 180 - d;
+  if (d < -90) d = -180 - d;
+  const radians = (d * Math.PI) / 180;
+  const square = radians * radians;
+  let term = radians;
+  let sum = radians;
+  for (let n = 1; n <= 8; n++) {
+    term *= -square / ((2 * n) * (2 * n + 1));
+    sum += term;
+  }
+  return sum;
+}
+
+function cosDegrees(degrees) {
+  return sinDegrees(90 - degrees);
+}
+
+// Points the Dummy at its angle: the direction is the unit vector of the angle, and the velocity is the
+// direction times its own speed (a Dummy always walks at its speed, there is no speeding up).
+function setHeading(dummy) {
+  const { direction, velocity } = dummy.move;
+  direction.x = cosDegrees(dummy.wander.angle);
+  direction.y = sinDegrees(dummy.wander.angle);
+  velocity.x = direction.x * dummy.speed;
+  velocity.y = direction.y * dummy.speed;
+}
+
+// A new random angle, from 0 to 359, for the next stretch of the walk.
+function turnDummy(state, dummy) {
+  dummy.wander.turns += 1;
+  dummy.wander.angle = hashInts(state.seed, dummy.wander.index, dummy.wander.turns, 16) % 360;
+  setHeading(dummy);
+}
+
+// The real area of the game is the window of the grid around the avatar: windowWidth x windowHeight cells.
+// An actor that leaves it on one side comes back on the opposite side (and the same for up and down).
+function wrapIntoWindow(actor, player, grid) {
+  const width = grid.windowWidth * grid.cellSize;
+  const height = grid.windowHeight * grid.cellSize;
+  const dx = actor.position.x - player.position.x;
+  const dy = actor.position.y - player.position.y;
+  if (dx < -width / 2) actor.position.x += width;
+  else if (dx >= width / 2) actor.position.x -= width;
+  if (dy < -height / 2) actor.position.y += height;
+  else if (dy >= height / 2) actor.position.y -= height;
+}
+
+// True if a circle at (x, y) with this radius overlaps the avatar, another Dummy already placed, or an object.
+function isPlaceTaken(state, x, y, radius) {
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const safe = DEFINITIONS.terrain.dummies.safeRadius + radius;
+  const fromAvatarX = x - player.position.x;
+  const fromAvatarY = y - player.position.y;
+  if (fromAvatarX * fromAvatarX + fromAvatarY * fromAvatarY < safe * safe) return true;
+
+  for (const other of state.actors) {
+    if (!other.wander) continue;
+    const reach = radius + other.radius;
+    const dx = x - other.position.x;
+    const dy = y - other.position.y;
+    if (dx * dx + dy * dy < reach * reach) return true;
+  }
+
+  const margin = objectMargin();
+  return objectsInArea(state.seed, x - radius - margin, y - radius - margin, x + radius + margin, y + radius + margin).some((object) => {
+    const reach = radius + object.radius;
+    const dx = x - object.position.x;
+    const dy = y - object.position.y;
+    return dx * dx + dy * dy < reach * reach;
+  });
+}
+
+// Makes the Dummies of a new state, by the seed, inside the window of the grid around the avatar. For each one the
+// seed rolls (salts 11 to 15, with the number of the Dummy and the try): radius, position, health and first angle.
+// A place is refused when it is taken (isPlaceTaken); the seed then tries another, up to placementTries times.
+function createDummies(state) {
+  const rules = DEFINITIONS.terrain.dummies;
+  const recipe = DEFINITIONS.actors.dummy;
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const width = state.grid.windowWidth * state.grid.cellSize;
+  const height = state.grid.windowHeight * state.grid.cellSize;
+
+  for (let index = 0; index < rules.count; index++) {
+    let placed = false;
+    for (let attempt = 0; attempt < rules.placementTries && !placed; attempt++) {
+      const radius = rollInRange(state.seed, index, attempt, 11, recipe.size.min, recipe.size.max);
+      const x = player.position.x - width / 2 + radius + (hashInts(state.seed, index, attempt, 12) % (width - 2 * radius));
+      const y = player.position.y - height / 2 + radius + (hashInts(state.seed, index, attempt, 13) % (height - 2 * radius));
+      if (isPlaceTaken(state, x, y, radius)) continue;
+
+      const health = rollInRange(state.seed, index, attempt, 14, recipe.healthRange.min, recipe.healthRange.max);
+      const angle = hashInts(state.seed, index, attempt, 15) % 360;
+      const dummy = finalizeObject("dummy", { position: { x, y }, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
+      dummy.speed = finalSpeed(dummy);
+      setHeading(dummy);
+      state.actors.push(dummy);
+      placed = true;
+    }
+    if (!placed) throw new Error("No free place for the Dummy " + index + " after " + rules.placementTries + " tries");
+  }
+}
+
+// Moves a Dummy (it is already pointing at its angle) and wraps it around the window.
+function moveDummy(state, dummy, player) {
+  dummy.position.x += dummy.move.velocity.x;
+  dummy.position.y += dummy.move.velocity.y;
+  wrapIntoWindow(dummy, player, state.grid);
+}
+
+// Pushes a Dummy out of one thing it overlaps, and turns it if this is a new contact (it was not touching in the last
+// frame). If the other thing is a Dummy too, both are pushed half way and both turn. The avatar and the objects are
+// not pushed. No damage is done yet: a Dummy collision only changes the angle.
+function touchDummy(state, lastContacts, dummy, other, key, otherIsDummy) {
+  const dx = dummy.position.x - other.position.x;
+  const dy = dummy.position.y - other.position.y;
+  const touching = dummy.radius + other.radius;
+  if (dx * dx + dy * dy >= touching * touching) return;
+
+  const isNewContact = !lastContacts.includes(key);
+  state.contacts.push(key);
+
+  // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const normalX = distance === 0 ? 1 : dx / distance;
+  const normalY = distance === 0 ? 0 : dy / distance;
+  const overlap = touching - distance;
+  const share = otherIsDummy ? 0.5 : 1;
+  dummy.position.x += normalX * overlap * share;
+  dummy.position.y += normalY * overlap * share;
+  if (otherIsDummy) {
+    other.position.x -= normalX * overlap * share;
+    other.position.y -= normalY * overlap * share;
+  }
+
+  if (isNewContact) {
+    turnDummy(state, dummy);
+    if (otherIsDummy) turnDummy(state, other);
+  }
+}
+
+// The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
+// the Dummies after it in the list (so each pair is looked at once). It brute-forces the pairs (100 Dummies are
+// about five thousand pairs); the collision grid is meant to replace this.
+function collideDummies(state, lastContacts) {
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const dummies = state.actors.filter((actor) => actor.wander);
+
+  for (let i = 0; i < dummies.length; i++) {
+    const dummy = dummies[i];
+    for (const object of objectsNear(state, dummy)) {
+      touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), false);
+    }
+    touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, false);
+    for (let j = i + 1; j < dummies.length; j++) {
+      touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, true);
+    }
+  }
+}
+
 // What a run has besides its state: an id, and the blueprint (what the player
 // chose before the run). The blueprint is an input of the run, not a state, so it
 // is not inside the snaps. It starts as the starter blueprint (DEFINITIONS.starterBlueprint),
@@ -529,6 +704,7 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
   };
 
   assertValidGrid(state.grid);
+  createDummies(state);
   return state;
 }
 
@@ -579,6 +755,10 @@ function step(state, input, blueprint) {
   state.contacts = [];
   for (const actor of state.actors) {
     if (!actor.move) continue;
+    if (actor.wander) {
+      moveDummy(state, actor, player);
+      continue;
+    }
     const { direction, velocity } = actor.move;
     const speed = finalSpeed(actor, blueprint);
 
@@ -608,7 +788,10 @@ function step(state, input, blueprint) {
     collideWithObjects(state, actor, blueprint, lastContacts);
   }
 
-  // 3. Cells: where every actor is, relative to the player.
+  // 3. The Dummies collide (with objects, the avatar and each other) and turn.
+  collideDummies(state, lastContacts);
+
+  // 4. Cells: where every actor is, relative to the player.
   // Every actor must already have a "cell" (it fails loudly if one does not).
   for (const actor of state.actors) {
     actor.cell.x = cellIndex(actor.position.x - player.position.x, state.grid.cellSize);

@@ -4,6 +4,7 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
+const DUMMY_COLOR = "#3d8bff"; // the Dummies are blue circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
 function draw(context, state, blueprint) {
@@ -19,6 +20,7 @@ function draw(context, state, blueprint) {
   drawReferenceGrid(context, player.position.x, player.position.y);
 
   drawObjects(context, state, player);
+  drawDummies(context, state, player);
 
   const radius = player.radius;
 
@@ -63,6 +65,21 @@ function drawObjects(context, state, player) {
     if (state.damagedObjects[objectKey(object)] !== undefined) {
       drawHealthLabel(context, screenX, screenY - radius - 8, objectHealth(state, object), object.health.max);
     }
+  }
+}
+
+// The Dummies that fall on the screen, as blue circles (the camera is on the avatar, which is in the center).
+function drawDummies(context, state, player) {
+  const { width, height } = context.canvas;
+  context.fillStyle = DUMMY_COLOR;
+  for (const actor of state.actors) {
+    if (!actor.wander) continue;
+    const screenX = actor.position.x - player.position.x + width / 2;
+    const screenY = actor.position.y - player.position.y + height / 2;
+    if (screenX < -actor.radius || screenX > width + actor.radius || screenY < -actor.radius || screenY > height + actor.radius) continue;
+    context.beginPath();
+    context.arc(screenX, screenY, actor.radius, 0, Math.PI * 2);
+    context.fill();
   }
 }
 

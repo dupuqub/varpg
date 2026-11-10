@@ -773,7 +773,7 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
   `);
   assert.strictEqual(result.seed, 5);
   assert.strictEqual(result.defaultSeed, 1);
-  assert.deepStrictEqual(plain(result.actors), ["avatar"]); // the avatar is the only thing in the state
+  assert.deepStrictEqual(plain(result.actors), ["avatar", ...Array(100).fill("dummy")]); // the avatar and the 100 Dummies are the only things in the state
   assert.ok(!result.keys.includes("objects") && !result.keys.includes("rocks"));
   assert.strictEqual(result.outOfRange, 0);
   const radii = [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
@@ -1281,9 +1281,10 @@ test("66 touching again after separating is a new collision and hurts again; the
     player.position.x = 0; player.position.y = ${ROCK.y};
     for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 } });
     const first = s.damagedObjects["0,1"];
-    const whileTouching = JSON.stringify(s.contacts);
+    const ofAvatar = () => JSON.stringify(s.contacts.filter((contact) => contact.startsWith("avatar_1|"))); // the Dummies have contacts of their own
+    const whileTouching = ofAvatar();
     for (let i = 0; i < 20; i++) step(s, { move: { x: -1, y: 0 } }); // walks away: no contact
-    const apart = JSON.stringify(s.contacts);
+    const apart = ofAvatar();
     for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 } }); // comes back: a new collision
     return { first, second: s.damagedObjects["0,1"], whileTouching, apart, json: JSON.stringify(s) };
   `);
@@ -1395,7 +1396,7 @@ test("74 a size that is not whole, or has a min above the max, stops the game wh
   }
 });
 
-test("75 everything is made by finalizeObject: an unknown type is refused, an object gets the radius the seed rolled, and the avatar is the only actor type", () => {
+test("75 everything is made by finalizeObject: an unknown type is refused, an object gets the radius the seed rolled, and the actor types are the avatar and the Dummy", () => {
   const result = run(`
     const attempt = (type) => { try { finalizeObject(type, {}); return "ok"; } catch (error) { return error.message; } };
     const rock = finalizeObject("rock", { radius: 28, health: { now: 12, max: 12 }, position: { x: 1, y: 2 }, square: { x: 0, y: 0 } });
@@ -1407,7 +1408,7 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
       fromSeed: JSON.stringify(objectsInArea(1, -960, -540, 960, 540)[0]),
     };
   `);
-  assert.deepStrictEqual(plain(result.actors), ["avatar"]);
+  assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy"]);
   assert.match(result.unknown, /Unknown type: nope/);
   assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0 });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
@@ -1463,4 +1464,333 @@ test("79 the avatar plays only with its own values: while stepping, the definiti
   `);
   assert.ok(!result.reads.includes("avatar"), "the avatar's definition was read while stepping"); // an object being made from the seed reads its own recipe, the avatar never does
   assert.ok(result.x > 100);
+});
+
+// ---- The Dummies ----
+// Most of these tests use a game without objects (chancePercent 0), so the only collisions are the ones the test sets up.
+
+const EMPTY = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0"));
+
+// A state with the avatar and only the Dummies of the given numbers, in the game without objects.
+const ALONE = `
+  function alone(...numbers) {
+    const s = createChamber1State(1, 1);
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "dummy_" + n))];
+    return s;
+  }
+  function face(dummy, angle) { dummy.wander.angle = angle; setHeading(dummy); }
+`;
+
+test("80 the seed makes 100 Dummies, each inside its ranges (radius 16 to 32, health 100, speed from the recipe), inside the window of the grid, the same every time", () => {
+  const result = run(`
+    const s = createChamber1State(1, 7);
+    const again = createChamber1State(1, 7);
+    const other = createChamber1State(1, 8);
+    const dummies = s.actors.filter((actor) => actor.wander);
+    const width = s.grid.windowWidth * s.grid.cellSize;
+    const height = s.grid.windowHeight * s.grid.cellSize;
+    const avatar = s.actors[0].position;
+    let bad = 0;
+    const angles = new Set();
+    const radii = new Set();
+    for (const d of dummies) {
+      if (!Number.isInteger(d.radius) || d.radius < 16 || d.radius > 32) bad++;
+      if (d.health.now !== 100 || d.health.max !== 100) bad++;
+      if (!Number.isInteger(d.wander.angle) || d.wander.angle < 0 || d.wander.angle > 359 || d.wander.turns !== 0) bad++;
+      if (d.speed !== 2) bad++;
+      if (Math.abs(Math.hypot(d.move.velocity.x, d.move.velocity.y) - 2) > 1e-9) bad++;
+      if (Math.abs(d.position.x - avatar.x) > width / 2 - d.radius || Math.abs(d.position.y - avatar.y) > height / 2 - d.radius) bad++;
+      angles.add(d.wander.angle);
+      radii.add(d.radius);
+    }
+    return {
+      count: dummies.length,
+      first: dummies[0].id,
+      last: dummies[99].id,
+      bad,
+      angles: angles.size,
+      radii: radii.size,
+      same: JSON.stringify(s) === JSON.stringify(again),
+      differs: JSON.stringify(s.actors) !== JSON.stringify(other.actors),
+    };
+  `);
+  assert.strictEqual(result.count, 100);
+  assert.deepStrictEqual([result.first, result.last], ["dummy_0", "dummy_99"]);
+  assert.strictEqual(result.bad, 0);
+  assert.ok(result.angles > 50, "the angles are not varied: " + result.angles);
+  assert.ok(result.radii > 10, "the radii are not varied: " + result.radii);
+  assert.ok(result.same, "the same seed must give the same Dummies");
+  assert.ok(result.differs, "another seed must give other Dummies");
+});
+
+test("81 no Dummy starts on top of another Dummy, an object, or near the avatar", () => {
+  const result = run(`
+    let overlaps = 0;
+    let tooClose = 0;
+    for (let seed = 1; seed <= 5; seed++) {
+      const s = createChamber1State(1, seed);
+      const dummies = s.actors.filter((actor) => actor.wander);
+      const objects = objectsInArea(seed, -2200, -1300, 2200, 1300);
+      for (let i = 0; i < dummies.length; i++) {
+        const a = dummies[i];
+        const fromAvatar = Math.hypot(a.position.x - s.actors[0].position.x, a.position.y - s.actors[0].position.y);
+        if (fromAvatar < DEFINITIONS.terrain.dummies.safeRadius + a.radius) tooClose++;
+        for (let j = i + 1; j < dummies.length; j++) {
+          if (Math.hypot(a.position.x - dummies[j].position.x, a.position.y - dummies[j].position.y) < a.radius + dummies[j].radius) overlaps++;
+        }
+        for (const object of objects) {
+          if (Math.hypot(a.position.x - object.position.x, a.position.y - object.position.y) < a.radius + object.radius) overlaps++;
+        }
+      }
+    }
+    return { overlaps, tooClose };
+  `);
+  assert.deepStrictEqual(plain(result), { overlaps: 0, tooClose: 0 });
+});
+
+test("82 without a collision a Dummy walks in a straight line at its own speed, and keeps its angle", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const d = s.actors[1];
+    face(d, 37);
+    d.position.x = 600; d.position.y = 100;
+    const start = { x: d.position.x, y: d.position.y };
+    const velocity = { x: d.move.velocity.x, y: d.move.velocity.y };
+    for (let i = 0; i < 60; i++) step(s, { move: { x: 0, y: 0 } });
+    return { dx: d.position.x - start.x, dy: d.position.y - start.y, expectedX: 60 * velocity.x, expectedY: 60 * velocity.y, angle: d.wander.angle, turns: d.wander.turns, speed: Math.hypot(d.move.velocity.x, d.move.velocity.y) };
+  `, EMPTY);
+  assert.ok(Math.abs(result.dx - result.expectedX) < 1e-9 && Math.abs(result.dy - result.expectedY) < 1e-9);
+  assert.deepStrictEqual([result.angle, result.turns], [37, 0]);
+  assert.ok(Math.abs(result.speed - 2) < 1e-9);
+});
+
+test("83 at a collision with an object the Dummy is pushed out and picks a new angle from the seed: hash(seed, number, turns) % 360", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const d = s.actors[1];
+    face(d, 90); // walking down (y grows downward), toward the rock at ${ROCK.x},${ROCK.y}
+    d.position.x = ${ROCK.x}; d.position.y = ${ROCK.y} - ${ROCK.radius} - d.radius - 30;
+    let frames = 0;
+    while (d.wander.turns === 0 && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
+    const hitRock = s.contacts.includes("dummy_0|rock ${ROCK.key}");
+    const distance = Math.hypot(d.position.x - ${ROCK.x}, d.position.y - ${ROCK.y});
+    return {
+      frames, hitRock, turns: d.wander.turns, angle: d.wander.angle, expected: hashInts(1, 0, 1, 16) % 360,
+      gap: distance - (d.radius + ${ROCK.radius}), damaged: JSON.stringify(s.damagedObjects), health: d.health.now,
+      length: Math.hypot(d.move.direction.x, d.move.direction.y),
+    };
+  `);
+  assert.ok(result.hitRock, "the first collision was not with the rock");
+  assert.strictEqual(result.turns, 1);
+  assert.strictEqual(result.angle, result.expected);
+  assert.ok(result.gap > -1e-9, "the Dummy is still inside the rock: " + result.gap);
+  assert.strictEqual(result.damaged, "{}"); // a Dummy collision only changes the angle (no damage yet)
+  assert.strictEqual(result.health, 100);
+  assert.ok(Math.abs(result.length - 1) < 1e-9);
+});
+
+test("84 every new angle is rolled from hash(seed, number, turns): the same sequence for the same Dummy, whole degrees from 0 to 359, and varied", () => {
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    const d = s.actors.find((actor) => actor.id === "dummy_3");
+    const angles = [];
+    for (let i = 0; i < 40; i++) { turnDummy(s, d); angles.push(d.wander.angle); }
+    const expected = [];
+    for (let turns = 1; turns <= 40; turns++) expected.push(hashInts(1, 3, turns, 16) % 360);
+    return { angles, expected, turns: d.wander.turns, length: Math.hypot(d.move.direction.x, d.move.direction.y), distinct: new Set(angles).size };
+  `);
+  assert.deepStrictEqual(result.angles, result.expected);
+  assert.strictEqual(result.turns, 40);
+  assert.ok(result.angles.every((angle) => Number.isInteger(angle) && angle >= 0 && angle <= 359));
+  assert.ok(result.distinct > 20, "the angles are not varied: " + result.distinct);
+  assert.ok(Math.abs(result.length - 1) < 1e-9);
+});
+
+test("85 only a NEW contact turns the Dummy: a pair that was touching in the last frame still pushes it out, but the angle stays", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const d = s.actors[1];
+    const avatar = s.actors[0];
+    const key = "dummy_0|" + AVATAR_ID;
+    const overlap = () => { d.position.x = avatar.position.x + 16 + d.radius - 5; d.position.y = avatar.position.y; };
+    overlap();
+    touchDummy(s, [key], d, avatar, key, false); // was touching: no new angle
+    const kept = d.wander.turns;
+    const gap = Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius);
+    overlap();
+    touchDummy(s, [], d, avatar, key, false); // new contact: a new angle
+    return { kept, turned: d.wander.turns, gap, avatar: JSON.stringify(avatar.position), contacts: s.contacts };
+  `, EMPTY);
+  assert.strictEqual(result.kept, 0);
+  assert.strictEqual(result.turned, 1);
+  assert.ok(Math.abs(result.gap) < 1e-9, "the Dummy was not pushed to just touching: " + result.gap);
+  assert.strictEqual(result.avatar, '{"x":0,"y":0}'); // the avatar is never pushed by a Dummy
+  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|avatar_1", "dummy_0|avatar_1"]);
+});
+
+test("86 two Dummies that collide are pushed half way each and both pick a new angle", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0, 1);
+    const [, a, b] = s.actors;
+    face(a, 0); face(b, 180); // toward each other
+    a.position.x = 600; a.position.y = 0;
+    b.position.x = 600 + a.radius + b.radius - 10; b.position.y = 0;
+    const middle = (a.position.x + b.position.x) / 2;
+    step(s, { move: { x: 0, y: 0 } });
+    return {
+      turns: [a.wander.turns, b.wander.turns],
+      gap: Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) - (a.radius + b.radius),
+      middle: (a.position.x + b.position.x) / 2 - middle,
+      contacts: s.contacts,
+    };
+  `, EMPTY);
+  assert.deepStrictEqual(plain(result.turns), [1, 1]);
+  assert.ok(Math.abs(result.gap) < 1e-9, "not just touching: " + result.gap);
+  assert.ok(Math.abs(result.middle) < 1e-9, "the pair moved as a whole: " + result.middle); // each moved the same amount
+  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1"]);
+});
+
+test("87 a Dummy that bumps into the avatar turns and is pushed out, and the avatar keeps its position and its health", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const [avatar, d] = s.actors;
+    face(d, 180);
+    d.position.x = avatar.position.x + 16 + d.radius + 1; d.position.y = avatar.position.y;
+    step(s, { move: { x: 0, y: 0 } });
+    return { turns: d.wander.turns, gap: Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius), avatar: JSON.stringify(avatar.position), health: avatar.health.now };
+  `, EMPTY);
+  assert.strictEqual(result.turns, 1);
+  assert.ok(Math.abs(result.gap) < 1e-9);
+  assert.strictEqual(result.avatar, '{"x":0,"y":0}');
+  assert.strictEqual(result.health, 100);
+});
+
+test("88 leaving the window of the grid on one side brings a Dummy back on the opposite side, in both axes, around the avatar wherever it is", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const [avatar, d] = s.actors;
+    const width = s.grid.windowWidth * s.grid.cellSize;
+    const height = s.grid.windowHeight * s.grid.cellSize;
+    const after = (dx, dy, px = 0, py = 0) => {
+      avatar.position.x = px; avatar.position.y = py;
+      d.position.x = px + dx; d.position.y = py + dy;
+      wrapIntoWindow(d, avatar, s.grid);
+      return { x: d.position.x - px, y: d.position.y - py };
+    };
+    const cases = {
+      left: after(-width / 2 - 1, 0),
+      right: after(width / 2, 0),
+      up: after(0, -height / 2 - 1),
+      down: after(0, height / 2),
+      insideLeft: after(-width / 2, 0), // exactly on the edge: still inside
+      awayFromStart: after(-width / 2 - 1, 10, 1000, -500),
+    };
+    // Through step: walking left across the edge keeps the angle and the speed.
+    face(d, 180);
+    avatar.position.x = 0; avatar.position.y = 0;
+    d.position.x = -width / 2 + 1; d.position.y = 0;
+    step(s, { move: { x: 0, y: 0 } });
+    return { width, height, cases, throughStep: { x: d.position.x, angle: d.wander.angle, turns: d.wander.turns, vx: d.move.velocity.x } };
+  `, EMPTY);
+  const { width, height, cases } = result;
+  assert.deepStrictEqual(plain(cases.left), { x: width / 2 - 1, y: 0 });
+  assert.deepStrictEqual(plain(cases.right), { x: -width / 2, y: 0 });
+  assert.deepStrictEqual(plain(cases.up), { x: 0, y: height / 2 - 1 });
+  assert.deepStrictEqual(plain(cases.down), { x: 0, y: -height / 2 });
+  assert.deepStrictEqual(plain(cases.insideLeft), { x: -width / 2, y: 0 });
+  assert.deepStrictEqual(plain(cases.awayFromStart), { x: width / 2 - 1, y: 10 });
+  assert.ok(Math.abs(result.throughStep.x - (width / 2 - 1)) < 1e-9, "x after the step: " + result.throughStep.x);
+  assert.deepStrictEqual([result.throughStep.angle, result.throughStep.turns], [180, 0]);
+  assert.ok(Math.abs(result.throughStep.vx + 2) < 1e-9);
+});
+
+test("89 the sine and cosine of whole degrees (own series, no Math.sin): unit length, the known values, and negative degrees", () => {
+  const result = run(`
+    let worst = 0;
+    for (let degrees = 0; degrees < 360; degrees++) {
+      worst = Math.max(worst, Math.abs(Math.hypot(cosDegrees(degrees), sinDegrees(degrees)) - 1));
+    }
+    return {
+      worst,
+      sin: [0, 30, 90, 180, 270, -30, 390].map(sinDegrees),
+      cos: [0, 60, 90, 180, 270].map(cosDegrees),
+    };
+  `);
+  assert.ok(result.worst < 1e-10, "length error " + result.worst);
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-10, actual + " is not " + expected);
+  [0, 0.5, 1, 0, -1, -0.5, 0.5].forEach((expected, i) => near(result.sin[i], expected));
+  [1, 0.5, 0, -1, 0].forEach((expected, i) => near(result.cos[i], expected));
+});
+
+test("90 after 600 frames of play every Dummy is still inside the window around the avatar, the Dummies did collide, nobody was hurt, and the state is still plain JSON", () => {
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    let outside = 0;
+    for (let frame = 0; frame < 600; frame++) {
+      step(s, { move: { x: 1, y: 0 } });
+      if (frame % 100 === 99) {
+        const width = s.grid.windowWidth * s.grid.cellSize;
+        const height = s.grid.windowHeight * s.grid.cellSize;
+        for (const d of s.actors.filter((actor) => actor.wander)) {
+          const dx = d.position.x - s.actors[0].position.x;
+          const dy = d.position.y - s.actors[0].position.y;
+          if (!(dx >= -width / 2 && dx < width / 2 && dy >= -height / 2 && dy < height / 2)) outside++;
+          if (!Number.isFinite(d.position.x) || !Number.isFinite(d.position.y)) outside++;
+        }
+      }
+    }
+    const dummies = s.actors.filter((actor) => actor.wander);
+    return {
+      outside,
+      turns: dummies.reduce((sum, d) => sum + d.wander.turns, 0),
+      healthy: dummies.every((d) => d.health.now === 100),
+      json: JSON.stringify(s),
+    };
+  `);
+  assert.strictEqual(result.outside, 0);
+  assert.ok(result.turns > 20, "the Dummies hardly collided: " + result.turns);
+  assert.ok(result.healthy);
+  assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
+});
+
+test("91 a run with 100 Dummies is reproducible: the same inputs give the same state, and the cross-check of the replay is clean", () => {
+  const result = run(`
+    const play = () => {
+      const s = createChamber1State(1, 3);
+      const h = createHistory(s, createRun(1).blueprint);
+      for (let frame = 0; frame < 300; frame++) {
+        const input = { move: { x: frame % 120 < 60 ? 1 : 0, y: frame % 90 < 45 ? 1 : -1 } };
+        step(s, input);
+        recordFrame(h, s, input);
+      }
+      return { json: JSON.stringify(s), check: crossCheck(h) };
+    };
+    const first = play();
+    const second = play();
+    return { same: first.json === second.json, check: first.check };
+  `);
+  assert.ok(result.same, "two runs with the same inputs ended differently");
+  assert.strictEqual(result.check, null);
+});
+
+test("92 the speed of a Dummy comes from its recipe through finalSpeed (and a thing without a speed has 0); a speed that is not above 0 stops the game when it loads", () => {
+  const patch = (speed) => (text) => text.replace("      speed: 2,\n", "      speed: " + speed + ",\n");
+  assert.throws(() => loadGame(patch(0)), /speed of the object dummy.*0/);
+  assert.throws(() => loadGame(patch(-1)), /speed of the object dummy/);
+  const fast = loadGame(patch(3));
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    const d = s.actors[1];
+    return { speed: d.speed, length: Math.hypot(d.move.velocity.x, d.move.velocity.y), final: finalSpeed(d), none: finalSpeed({ id: "x_1", type: "rock" }) };
+  `, fast);
+  assert.strictEqual(result.speed, 3);
+  assert.ok(Math.abs(result.length - 3) < 1e-9);
+  assert.strictEqual(result.final, 3);
+  assert.strictEqual(result.none, 0);
 });

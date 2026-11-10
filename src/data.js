@@ -1,6 +1,7 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
-// There are three things in it: the avatar (the only actor), and two objects, the Rock and the Shroom.
+// There are four things in it: two actors, the avatar and the Dummy, and two objects, the Rock and the Shroom.
 // The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
+// The Dummy is an actor made by the seed from the ranges of its entry, like an object (see "terrain" below).
 // Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object
 // is a single fixed value, and nothing is placed by hand. A value that is not used by anything does not belong here:
 // it is deleted, and it comes back when something uses it.
@@ -20,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 21;
+const DEFINITIONS_VERSION = 22;
 
 const DEFINITIONS = {
   actors: {
@@ -47,6 +48,31 @@ const DEFINITIONS = {
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
         },
         dash: { recharge: 0 }, // recharge = frames since the last charge started coming back
+      },
+    },
+
+    // The Dummy (the user's idea, a test actor): it does not attack, it only walks in a straight line and, at every
+    // collision, picks a new random angle (see createDummies and collideWanderers in src/sim.js). Like an object, it is
+    // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
+    // size: the user's values, 16 to 32, the same as the objects, written here on their own.
+    // weightPerRadius: guess, the same number as the objects', written here on their own. Nothing reads the
+    //   weight of a Dummy yet (it does no damage).
+    // healthRange: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
+    // speed: guess, 2 px/frame (120 px per second), slower than the avatar (3), so the avatar can catch one.
+    //   Like the others, it goes through a final function (finalSpeed) into the Dummy, which carries it.
+    dummy: {
+      name: "Dummy",
+      size: { min: 16, max: 32 },
+      weightPerRadius: 100,
+      healthRange: { min: 100, max: 100 },
+      speed: 2,
+      initial: {
+        position: { x: 0, y: 0 }, // set by the seed
+        cell: { x: 0, y: 0 }, // grid cell relative to the avatar, set every frame
+        move: {
+          direction: { x: 0, y: 0 }, // the unit vector of the angle it is walking at
+          velocity: { x: 0, y: 0 }, // direction x speed, in pixels per frame
+        },
       },
     },
   },
@@ -167,6 +193,14 @@ const DEFINITIONS = {
       safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
       kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer; the user's decision: 50/50 for now, a correction for later)
     },
+
+    // The Dummies of Chamber 1: where the seed puts them is the real area of the game, the window of the
+    // collision grid around the avatar (state.grid), and they wrap around its edges (see wrapIntoWindow).
+    // count: the user's number, 100 on the screen "to see them colliding a lot".
+    // safeRadius: guess, the same reason as the objects' (the first dash cannot hit one): no Dummy starts closer than this to the avatar.
+    // placementTries: rule, how many places the seed tries for one Dummy before giving up (the game fails loudly instead
+    //   of placing it on top of something). A guess for the number.
+    dummies: { count: 100, safeRadius: 200, placementTries: 50 },
   },
 };
 
