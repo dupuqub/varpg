@@ -28,17 +28,16 @@ function draw(context, state, blueprint) {
   context.fill();
 
   drawDashStatus(context, player);
-  drawHealth(context, player, blueprint);
+  drawHealth(context, player);
 }
 
 // The health as plain text in the bottom-left corner, above the dash: "HEALTH 97/100".
 // One decimal, because a hit can be a fraction.
-function drawHealth(context, player, blueprint) {
-  const maxHealth = finalMaxHealth(player, blueprint);
+function drawHealth(context, player) {
   context.font = "24px monospace";
   context.textBaseline = "bottom";
   context.fillStyle = AVATAR_COLOR;
-  context.fillText(`HEALTH ${player.health.current.toFixed(1)}/${maxHealth}`, 24, context.canvas.height - 56);
+  context.fillText(`HEALTH ${player.health.now.toFixed(1)}/${player.health.max}`, 24, context.canvas.height - 56);
 }
 
 // The objects that fall on the screen (rocks, Shrooms), as circles of the color of their type.

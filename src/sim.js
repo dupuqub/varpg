@@ -47,7 +47,8 @@ function createAvatar(blueprint) {
   avatar.dash.rechargeFrames = finalDashRechargeFrames(avatar, blueprint);
   const maxCharges = finalDashMaxCharges(avatar, blueprint);
   avatar.dash.charges = { now: maxCharges, max: maxCharges };
-  avatar.health = { current: finalMaxHealth(avatar, blueprint) };
+  const maxHealth = finalMaxHealth(avatar, blueprint);
+  avatar.health = { now: maxHealth, max: maxHealth };
   return avatar;
 }
 
@@ -240,7 +241,7 @@ function damageOf(attacker, hit, target, blueprint) {
 
 // Takes damage off the health. Health stops at 0 (there is no death yet).
 function applyDamage(actor, damage) {
-  actor.health.current = Math.max(0, actor.health.current - damage);
+  actor.health.now = Math.max(0, actor.health.now - damage);
 }
 
 // An actor counts as faster than its top speed only above this margin, so the

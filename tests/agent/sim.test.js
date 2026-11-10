@@ -304,7 +304,7 @@ test("16 the definitions are frozen, the state only points to them, and it carri
   // The avatar carries its own copy of each value, made by the final functions: it does not read the definitions while it plays.
   assert.deepStrictEqual([result.radius, result.acceleration, result.deceleration, result.rechargeFrames, result.weight, result.bounce], [16, 0.25, 0.125, 240, 5000, 0]);
   assert.strictEqual(result.hasBaseSpeed, false);
-  assert.deepStrictEqual(plain(result.health), { current: 100 });
+  assert.deepStrictEqual(plain(result.health), { now: 100, max: 100 });
   assert.strictEqual(result.speed, 3);
 });
 
@@ -324,14 +324,14 @@ test("17 unknown types fail loudly, and a type without 'move' is static", () => 
   const withTrap = loadGame((text) => {
     const patched = text.replace(
       "const DEFINITIONS = {\n  actors: {",
-      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", maxHealth: 1, attack: 5, defense: 0, radius: 10, initial: { health: { current: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", maxHealth: 1, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
     );
     assert.notStrictEqual(patched, text, "the patch of data.js should apply");
     return patched;
   });
   const trap = run('return finalizeObject("trap", {}, undefined, "trap_1");', withTrap);
   assert.strictEqual("move" in trap, false);
-  assert.strictEqual(trap.health.current, 1);
+  assert.strictEqual(trap.health.now, 1);
 
   const walker = run('return createAvatar(createRun(1).blueprint);', withTrap);
   assert.strictEqual("move" in walker, true);
@@ -357,13 +357,13 @@ test("18 a new avatar is a copy of the initial state in the definitions plus its
     a.move.direction.x = 1;
     a.move.velocity.x = 2;
     a.dash.charges.now = 0;
-    a.health.current = 1;
+    a.health.now = 1;
     const initial = DEFINITIONS.actors.avatar.initial;
     const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
     return {
       copiesInitial: same(b.position, initial.position) && same(b.cell, initial.cell) && same(b.move, initial.move) && b.dash.recharge === initial.dash.recharge,
       definitionsUntouched: initial.position.x === 0 && initial.move.direction.x === 0 && initial.move.velocity.x === 0 && !("charges" in initial.dash),
-      otherUntouched: b.position.x === 0 && b.move.direction.x === 0 && b.move.velocity.x === 0 && b.dash.charges.now === 1 && b.health.current === 100,
+      otherUntouched: b.position.x === 0 && b.move.direction.x === 0 && b.move.velocity.x === 0 && b.dash.charges.now === 1 && b.health.now === 100,
       idFirst: Object.keys(a).slice(0, 2).join(","),
     };
   `);
@@ -836,7 +836,7 @@ function hitShroom(radius, { speed = 3, dash = false, gap = 1 } = {}) {
     p.move.velocity.y = ${dash ? 0 : speed};
     step(s, { move: { x: 0, y: 1 }, dash: ${dash} });
     const health = s.damagedObjects["${shroom.key}"] ?? ${shroom.maxHealth};
-    return { dy: p.position.y - ${shroom.y}, vy: p.move.velocity.y, avatar: p.health.current, shroomLoss: ${shroom.maxHealth} - health };
+    return { dy: p.position.y - ${shroom.y}, vy: p.move.velocity.y, avatar: p.health.now, shroomLoss: ${shroom.maxHealth} - health };
   `);
 }
 
@@ -962,7 +962,7 @@ function slamInto(x, y) {
     const p = s.actors[0];
     p.position.x = ${x}; p.position.y = ${y};
     step(s, { move: { x: 1, y: 0 }, dash: true });
-    return { avatar: p.health.current, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, vx: p.move.velocity.x };
+    return { avatar: p.health.now, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, vx: p.move.velocity.x };
   `);
 }
 
@@ -973,7 +973,7 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the rock loses 2.5, th
     p.position.x = 55; p.position.y = ${ROCK.y}; // touching the rock
     p.move.velocity.x = 3;
     step(s, { move: { x: 1, y: 0 } });
-    return { avatar: p.health.current, damagedObjects: s.damagedObjects, vx: p.move.velocity.x };
+    return { avatar: p.health.now, damagedObjects: s.damagedObjects, vx: p.move.velocity.x };
   `);
   assert.strictEqual(result.avatar, 99); // 2800 x 0.001 x 3 / 6 = 1.4, minus 3 is below the minimum damage, 1
   assert.deepStrictEqual(plain(result.damagedObjects), { "0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
@@ -999,7 +999,7 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
     p.position.x = 76; p.position.y = 418; // the glancing blow of test 43
     p.move.velocity.x = 3;
     step(s, { move: { x: 1, y: 0 } });
-    return { avatar: p.health.current, damagedObjects: s.damagedObjects };
+    return { avatar: p.health.now, damagedObjects: s.damagedObjects };
   `);
   assert.strictEqual(result.avatar, 99); // the attack is below the defense, so the minimum damage 1
   const loss = 10 - result.damagedObjects["0,1"];
@@ -1042,7 +1042,7 @@ test("51 health stops at 0 (there is no death yet)", () => {
     const p = createChamber1State().actors[0]; // starts with 100
     applyDamage(p, 60);
     applyDamage(p, 60);
-    return p.health.current;
+    return p.health.now;
   `);
   assert.strictEqual(health, 0);
 });
@@ -1058,7 +1058,7 @@ test("52 the cross-check stays clean in a run where both sides are hurt, and the
       step(s, input, full);
       recordFrame(h, s, input);
     }
-    return { check: crossCheck(h), health: p.health.current, damagedObjects: s.damagedObjects };
+    return { check: crossCheck(h), health: p.health.now, damagedObjects: s.damagedObjects };
   `);
   assert.ok(result.health < 100, "the run never hurt the avatar");
   assert.ok(Number.isFinite(result.health));
@@ -1088,8 +1088,8 @@ test("53 the starter blueprint adds up to the values the avatar had before parts
       weight: totalWeight(full), capacity: sumSpec(full, "capacity"),
       speed: finalSpeed(avatar, full), health: finalMaxHealth(avatar, full),
       defense: finalDefense(avatar, full), dash: finalDashSpeed(avatar, full),
-      startsFull: createChamber1State(1, 1, full).actors[0].health.current,
-      startsFullWithoutHead: createChamber1State(1, 1, without("head")).actors[0].health.current,
+      startsFull: createChamber1State(1, 1, full).actors[0].health.now,
+      startsFullWithoutHead: createChamber1State(1, 1, without("head")).actors[0].health.now,
     };
   `);
   assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, defense: 3, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
@@ -1212,9 +1212,9 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
     s.damagedObjects["0,1"] = 5; // the rock at 99,456 has 5 left
     p.position.x = 53; p.position.y = ${ROCK.y};
     step(s, { move: { x: 1, y: 0 }, dash: true }); // 5 - 10: it breaks (health stops at 0)
-    const afterHit = { broken: s.damagedObjects["0,1"], vx: p.move.velocity.x, x: p.position.x, health: p.health.current };
+    const afterHit = { broken: s.damagedObjects["0,1"], vx: p.move.velocity.x, x: p.position.x, health: p.health.now };
     for (let i = 0; i < 40; i++) step(s, { move: { x: 1, y: 0 } });
-    return { afterHit, x: p.position.x, health: p.health.current };
+    return { afterHit, x: p.position.x, health: p.health.now };
   `);
   assert.strictEqual(result.afterHit.broken, 0);
   assert.strictEqual(result.afterHit.vx, 12); // no bounce and no stop
@@ -1264,9 +1264,9 @@ test("65 pressing into a rock hurts it once, at the arrival (no bounce, so no se
     const player = s.actors[0];
     player.position.x = 0; player.position.y = ${ROCK.y};
     for (let i = 0; i < 100; i++) step(s, { move: { x: 1, y: 0 } }); // walks right into the rock and keeps pressing
-    const settled = { rock: s.damagedObjects["0,1"], avatar: player.health.current, x: player.position.x };
+    const settled = { rock: s.damagedObjects["0,1"], avatar: player.health.now, x: player.position.x };
     for (let i = 0; i < 200; i++) step(s, { move: { x: 1, y: 0 } }); // keeps pressing
-    return { settled, afterPressing: { rock: s.damagedObjects["0,1"], avatar: player.health.current, x: player.position.x } };
+    return { settled, afterPressing: { rock: s.damagedObjects["0,1"], avatar: player.health.now, x: player.position.x } };
   `);
   // The collision at impact 3: the rock loses 5000 x 0.001 x 3 / 6 = 2.5. The avatar loses the minimum damage 1
   // (the rock's attack, 2800 x 0.001 x 3 / 6 = 1.4, is below its defense 3). Without a bounce nothing else triggers.
@@ -1358,7 +1358,7 @@ test("72 a rock with weight 0 and health 1 is harmless and breaks at the first h
     const p = s.actors[0];
     p.position.x = 53; p.position.y = ${ROCK.y}; // touching the rock at 99,456, which is now a box
     step(s, { move: { x: 1, y: 0 }, dash: true });
-    return { avatar: p.health.current, box: s.damagedObjects["0,1"], vx: p.move.velocity.x };
+    return { avatar: p.health.now, box: s.damagedObjects["0,1"], vx: p.move.velocity.x };
   `, box);
   assert.strictEqual(result.avatar, 100); // attack 0: no damage, not even the minimum
   assert.strictEqual(result.box, 0); // the avatar hit it for 10 (minimum damage 1 would be enough)
