@@ -45,10 +45,10 @@ function startChamber1() {
   stopChamber1();
   run = createRun(1);
   state = createChamber1State(run.id);
-  runHistory = createHistory(state);
+  runHistory = createHistory(state, run.build);
   lastTimestamp = null;
   accumulatedMs = 0;
-  draw(context, state);
+  draw(context, state, run.build);
   animationId = requestAnimationFrame(loop);
 }
 
@@ -75,7 +75,7 @@ function loop(timestamp) {
   accumulatedMs = Math.min(accumulatedMs - STEP_MS, STEP_MS);
 
   const input = readInput();
-  step(state, input);
+  step(state, input, run.build);
   recordFrame(runHistory, state, input);
-  draw(context, state);
+  draw(context, state, run.build);
 }

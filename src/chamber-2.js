@@ -29,10 +29,11 @@ function scriptedInputs(count) {
 
 // Plays the inputs from a new Chamber 1 state and records the history.
 function playScripted(inputs) {
-  const state = createChamber1State(createRun(1).id);
-  const history = createHistory(state);
+  const run = createRun(1);
+  const state = createChamber1State(run.id);
+  const history = createHistory(state, run.build);
   for (const input of inputs) {
-    step(state, input);
+    step(state, input, run.build);
     recordFrame(history, state, input);
   }
   return { state, history };
@@ -62,7 +63,7 @@ function simulationCheckText() {
 
   // A cross-check that cannot fail proves nothing, so also change one snap on
   // purpose and see whether the cross-check notices.
-  const tampered = { snaps: history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))), inputs: history.inputs };
+  const tampered = { snaps: history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))), inputs: history.inputs, build: history.build };
   tampered.snaps[50].actors[0].position.x += 0.1;
 
   const player = first.state.actors[0];
@@ -90,12 +91,29 @@ function rocksText(seed) {
   ].join("\n");
 }
 
+// The build of a run and the arithmetic of each final value of the avatar, as plain sums.
+function buildText(build) {
+  const avatar = createActor(PLAYER_ID, "player");
+  const weight = totalWeight(build);
+  const penalty = DEFINITIONS.constants.weightSpeedPenalty;
+  return [
+    "build (the parts of the avatar):",
+    ...partsOf(build).map((part, index) => `  ${build.parts[index]}: ${part.weight} kg, specs ${JSON.stringify(part.specs)}`),
+    `total weight: ${weight} kg, capacity: ${sumSpec(build, "capacity")} kg`,
+    `top speed: ${sumSpec(build, "speed")} - ${weight} x ${penalty} = ${finalSpeed(avatar, build)}`,
+    `maximum health: ${sumSpec(build, "health")} = ${finalMaxHealth(avatar, build)}`,
+    `defense: ${sumSpec(build, "defense")} = ${finalDefense(avatar, build)}`,
+    `dash speed: ${sumSpec(build, "dashSpeed")} = ${finalDashSpeed(avatar, build)}`,
+  ].join("\n");
+}
+
 function dataText() {
   return [
     "DATA",
     `definitions version: ${DEFINITIONS_VERSION}`,
     "definitions:",
     JSON.stringify(DEFINITIONS, null, 2),
+    buildText(createRun(1).build),
     "initial state of Chamber 1:",
     JSON.stringify(createChamber1State(createRun(1).id), null, 2),
     rocksText(createChamber1State(createRun(1).id).seed),

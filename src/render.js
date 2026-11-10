@@ -6,7 +6,7 @@ const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
 const ROCK_COLOR = "#5a5f66";
 
-function draw(context, state) {
+function draw(context, state, build) {
   const { width, height } = context.canvas;
   const player = state.actors.find((actor) => actor.id === PLAYER_ID);
 
@@ -28,13 +28,13 @@ function draw(context, state) {
   context.fill();
 
   drawDashStatus(context, player);
-  drawHealth(context, player);
+  drawHealth(context, player, build);
 }
 
 // The health as plain text in the bottom-left corner, above the dash: "HEALTH 97/100".
 // One decimal, because a hit can be a fraction.
-function drawHealth(context, player) {
-  const maxHealth = definitionOf(player).maxHealth;
+function drawHealth(context, player, build) {
+  const maxHealth = finalMaxHealth(player, build);
   context.font = "24px monospace";
   context.textBaseline = "bottom";
   context.fillStyle = PLAYER_COLOR;

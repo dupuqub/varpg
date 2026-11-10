@@ -126,9 +126,24 @@ Rule: `damage = max(0, finalAttack - finalDefense)`. The attack of a collision i
 | 51 | Health stops at 0. | There is no death yet; health must never go below zero. |
 | 52 | The cross-check stays clean in a run where the avatar is hurt, and the health is a finite number. | Damage must replay identically (determinism). |
 
+### The kit of parts
+
+The avatar's final values are the sum of the specs of the parts in its build (starter build: nine parts, 5000 kg). Most of the other tests play with the starter build: the test file passes it to `step` by default.
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 53 | The starter build adds up to weight 5000, capacity 6000, speed 3, health 100, defense 3, dash 12, and the avatar starts with full health. | The kit keeps the values the avatar had before parts, so nothing felt changes. |
+| 54 | Taking off a 650 kg arm gives back 0.13 px/frame of speed (650 x 0.0002), a 200 kg head 0.04. | The weight effect is direct and easy to see: kg times a constant. |
+| 55 | Without the Legs the speed would be negative (0.5 - 3700 x 0.0002), and it is 0. | The controls never reverse. |
+| 56 | Without the Torso health is 45 and defense 1; without the Head health is 85 and defense 3. | Each part adds exactly what it gives. |
+| 57 | Without the Booster a dash does nothing and the charge is kept. | A dash comes from a part, not from nowhere. |
+| 58 | A build of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
+| 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a build. |
+| 60 | The cross-check is clean with the build the run was played with, and finds a difference with another. | The build is an input of the replay, as the seed and the inputs are. |
+
 ## Proof that the tests can fail
 
-While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. Tests that never fail would be worthless.
+While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. For the kit, ignoring the weight in `finalSpeed` made 17 tests fail (5 to 8, 16, 28 to 32, 41, 43, 47, 53 to 55 and 60), and removing the guard for a dash strength of 0 made test 57 fail. Tests that never fail would be worthless.
 
 ## Adding a test
 

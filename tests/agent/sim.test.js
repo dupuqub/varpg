@@ -25,6 +25,9 @@ function loadGame(patchData = (text) => text) {
     const text = name === "data.js" ? patchData(readSource(name)) : readSource(name);
     vm.runInContext(text, context);
   }
+  // The rules need the build of the run as the third argument of step. Most tests do not care
+  // which one, so here step plays with the starter build unless a test passes another.
+  vm.runInContext("const realStep = step; step = (state, input, build = createRun(1).build) => realStep(state, input, build);", context);
   return context;
 }
 
@@ -272,20 +275,20 @@ test("16 the definitions are frozen, the state only points to them, and it carri
   const result = run(`
     const s = createChamber1State();
     const player = s.actors[0];
-    const before = DEFINITIONS.actors.player.baseSpeed;
-    DEFINITIONS.actors.player.baseSpeed = 99; // ignored: frozen
-    DEFINITIONS.actors.other = { baseSpeed: 1 }; // ignored: frozen
+    const before = DEFINITIONS.actors.player.radius;
+    DEFINITIONS.actors.player.radius = 99; // ignored: frozen
+    DEFINITIONS.actors.other = { radius: 1 }; // ignored: frozen
     return {
       version: s.definitionsVersion,
       expectedVersion: DEFINITIONS_VERSION,
       frozen: Object.isFrozen(DEFINITIONS) && Object.isFrozen(DEFINITIONS.actors.player),
-      unchanged: DEFINITIONS.actors.player.baseSpeed === before && !("other" in DEFINITIONS.actors),
+      unchanged: DEFINITIONS.actors.player.radius === before && !("other" in DEFINITIONS.actors),
       type: player.type,
       hasRadius: "radius" in player,
       hasBaseSpeed: "baseSpeed" in player,
       health: player.health,
       radius: definitionOf(player).radius,
-      speed: finalSpeed(player),
+      speed: finalSpeed(player, createRun(1).build),
     };
   `);
   assert.strictEqual(result.version, result.expectedVersion);
@@ -363,13 +366,13 @@ test("18 a new actor is a copy of the initial state in the definitions, and owns
   assert.strictEqual(result.idFirst, "id,type");
 });
 
-test("19 the run and the state: the state carries the run id, and the build is empty and outside the state", () => {
+test("19 the run and the state: the state carries the run id, and the build is the starter build and outside the state", () => {
   const result = run(`
     const r = createRun(7);
     const s = createChamber1State(r.id);
-    return { run: r, stateRun: s.run, defaultRun: createChamber1State().run, hasBuild: "build" in s };
+    return { run: r, stateRun: s.run, defaultRun: createChamber1State().run, hasBuild: "build" in s, starterParts: DEFINITIONS.starterBuild.parts };
   `);
-  assert.deepStrictEqual(plain(result.run), { id: 7, build: {} });
+  assert.deepStrictEqual(plain(result.run), { id: 7, build: { parts: plain(result.starterParts) } });
   assert.strictEqual(result.stateRun, 7);
   assert.strictEqual(result.defaultRun, 1);
   assert.strictEqual(result.hasBuild, false);
@@ -380,7 +383,7 @@ test("19 the run and the state: the state carries the run id, and the build is e
 test("20 history: two aligned lists, index 0 is the oldest, and the snaps are copies", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     const first = { snaps: h.snaps.length, inputs: h.inputs.length, firstInput: h.inputs[0] };
     for (let i = 0; i < 5; i++) {
       const input = { move: { x: 1, y: 0 } };
@@ -409,7 +412,7 @@ test("20 history: two aligned lists, index 0 is the oldest, and the snaps are co
 test("21 history keeps only the last 100, and the oldest (index 0) leaves first", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 250; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -435,7 +438,7 @@ test("21 history keeps only the last 100, and the oldest (index 0) leaves first"
 test("22 cross-check: a normal run matches, even after the window has slid", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 300; i++) {
       const angle = i * 0.37;
       const input = { move: { x: Math.cos(angle), y: Math.sin(angle) } };
@@ -450,7 +453,7 @@ test("22 cross-check: a normal run matches, even after the window has slid", () 
 test("23 cross-check: a changed snap is found, with the exact frame and field", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 120; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -469,10 +472,10 @@ test("24 cross-check also catches a rule that is not repeatable (hidden state ou
   // Here finalSpeed secretly counts its calls. The recording and the replay see different counters.
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     let counter = 0;
     const original = finalSpeed;
-    finalSpeed = (actor) => (counter++ >= 60 ? 0.1 : original(actor));
+    finalSpeed = (actor, build) => (counter++ >= 60 ? 0.1 : original(actor, build));
     for (let i = 0; i < 90; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -491,7 +494,7 @@ test("24 cross-check also catches a rule that is not repeatable (hidden state ou
 test("25 discardAfter: going back and playing again drops what came after, and the lists stay aligned", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 30; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -640,7 +643,7 @@ test("32 running diagonally at the top speed and then releasing brakes at 0.125 
 test("33 the cross-check stays clean in a run with dashes", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 400; i++) {
       const angle = i * 0.21;
       const input = { move: { x: Math.cos(angle), y: Math.sin(angle) }, dash: i % 70 === 5 };
@@ -854,7 +857,7 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
     const s = createChamber1State();
     const p = s.actors[0];
     p.position.x = 100; p.position.y = 444; // next to the stone at 159,444
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     let touchingFrames = 0;
     for (let i = 0; i < 300; i++) {
       const input = { move: { x: i % 60 < 40 ? 1 : -0.5, y: i % 90 < 30 ? 0.3 : -0.2 }, dash: i % 80 === 10 };
@@ -914,13 +917,13 @@ test("49 pressing against a still rock does no damage, and a graze does almost n
 
 test("50 the damage function: attack minus defense, never below 0 (it never heals)", () => {
   const result = run(`
-    const p = createActor("p", "player");
+    const p = createActor(PLAYER_ID, "player"); // only the avatar gets the defense of the parts
     const rock = { type: "stone", position: { x: 0, y: 0 } };
     return {
-      defense: finalDefense(p),
+      defense: finalDefense(p, createRun(1).build),
       attack: finalAttack(rock, { impact: 5 }),
-      damage: damageOf(rock, { impact: 5 }, p),
-      weak: damageOf(rock, { impact: 1 }, p),
+      damage: damageOf(rock, { impact: 5 }, p, createRun(1).build),
+      weak: damageOf(rock, { impact: 1 }, p, createRun(1).build),
     };
   `);
   assert.deepStrictEqual(plain(result), { defense: 3, attack: 10, damage: 7, weak: 0 });
@@ -941,7 +944,7 @@ test("52 the cross-check stays clean in a run where the avatar is hurt, and the 
     const s = createChamber1State();
     const p = s.actors[0];
     p.position.x = 100; p.position.y = 444; // next to the stone at 159,444
-    const h = createHistory(s);
+    const h = createHistory(s, createRun(1).build);
     for (let i = 0; i < 300; i++) {
       const input = { move: { x: i % 60 < 40 ? 1 : -0.5, y: i % 90 < 30 ? 0.3 : -0.2 }, dash: i % 80 === 10 };
       step(s, input);
@@ -952,4 +955,112 @@ test("52 the cross-check stays clean in a run where the avatar is hurt, and the 
   assert.ok(result.health < 100, "the run never hurt the avatar");
   assert.ok(Number.isFinite(result.health));
   assert.strictEqual(result.check, null);
+});
+
+// ---- The kit of parts ----
+// The final values of the avatar are the SUM of the specs of the parts in its build.
+// Starter build: 9 parts, 5000 kg. Top speed 3.5 + 0.5 - 5000 x 0.0002 = 3; health 15 + 55 + 30 = 100;
+// defense 2 + 1 = 3; dash 12; capacity 6000.
+
+// Runs code with "avatar", "full" (the starter build) and "without(id)" (the starter build minus one part).
+function withBuilds(code) {
+  return run(`
+    const avatar = createActor(PLAYER_ID, "player");
+    const full = createRun(1).build;
+    const without = (id) => ({ parts: full.parts.filter((part) => part !== id) });
+    ${code}
+  `);
+}
+
+test("53 the starter build adds up to the values the avatar had before parts: speed 3, health 100, defense 3, dash 12, 5000 kg", () => {
+  const result = withBuilds(`
+    return {
+      weight: totalWeight(full), capacity: sumSpec(full, "capacity"),
+      speed: finalSpeed(avatar, full), health: finalMaxHealth(avatar, full),
+      defense: finalDefense(avatar, full), dash: finalDashSpeed(avatar, full),
+      startsFull: avatar.health.current === finalMaxHealth(avatar, full),
+    };
+  `);
+  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, defense: 3, dash: 12, startsFull: true });
+});
+
+test("54 weight takes speed away directly: taking off a 650 kg arm gives back 650 x 0.0002 = 0.13 px/frame", () => {
+  const result = withBuilds(`
+    return {
+      withoutArm: finalSpeed(avatar, without("arm-r")),
+      withoutHead: finalSpeed(avatar, without("head")), // 200 kg: 0.04
+    };
+  `);
+  assert.ok(Math.abs(result.withoutArm - 3.13) < 1e-9, "without an arm: " + result.withoutArm);
+  assert.ok(Math.abs(result.withoutHead - 3.04) < 1e-9, "without the head: " + result.withoutHead);
+});
+
+test("55 without the legs the speed is the Torso's 0.5 minus the weight, and it never goes below 0", () => {
+  const speed = withBuilds("return finalSpeed(avatar, without('legs'));"); // 0.5 - 3700 x 0.0002 = -0.24
+  assert.strictEqual(speed, 0);
+});
+
+test("56 taking a part off changes health and defense by exactly what it gave", () => {
+  const result = withBuilds(`
+    return {
+      noTorso: { health: finalMaxHealth(avatar, without("torso")), defense: finalDefense(avatar, without("torso")) },
+      noHead: { health: finalMaxHealth(avatar, without("head")), defense: finalDefense(avatar, without("head")) },
+    };
+  `);
+  assert.deepStrictEqual(plain(result), { noTorso: { health: 45, defense: 1 }, noHead: { health: 85, defense: 3 } });
+});
+
+test("57 without the Booster there is no dash, and the charge is kept", () => {
+  const result = withBuilds(`
+    const noBooster = without("booster");
+    const s = createChamber1State();
+    const p = s.actors[0];
+    step(s, { move: { x: 1, y: 0 }, dash: true }, noBooster);
+    return { dashSpeed: finalDashSpeed(avatar, noBooster), charges: p.dash.charges, vx: p.move.velocity.x };
+  `);
+  assert.strictEqual(result.dashSpeed, 0);
+  assert.strictEqual(result.charges, 1); // nothing spent
+  assert.strictEqual(result.vx, 0.25); // only the normal acceleration (a dash would have set 12)
+});
+
+test("58 a build over the capacity of the Torso is refused, and so is an unknown part", () => {
+  const result = withBuilds(`
+    const attempt = (build) => { try { assertValidBuild(build); return "accepted"; } catch (error) { return error.message; } };
+    return {
+      starter: attempt(full), // 5000 kg of 6000
+      tooHeavy: attempt({ parts: [...full.parts, "legs", "legs"] }), // 7600 kg
+      unknown: attempt({ parts: [...full.parts, "wings"] }),
+    };
+  `);
+  assert.strictEqual(result.starter, "accepted");
+  assert.strictEqual(result.tooHeavy, "The build weighs 7600 kg and can carry only 6000 kg");
+  assert.strictEqual(result.unknown, "Unknown part: wings");
+});
+
+test("59 only the avatar has a build: another actor of the same type gets nothing from the parts", () => {
+  const result = withBuilds(`
+    const other = createActor("other_1", "player");
+    return { speed: finalSpeed(other, full), health: finalMaxHealth(other, full), defense: finalDefense(other, full) };
+  `);
+  assert.deepStrictEqual(plain(result), { speed: 0, health: 0, defense: 0 });
+});
+
+test("60 the build is an input of the replay: the cross-check is clean with the right build and finds a difference with another", () => {
+  const result = withBuilds(`
+    const s = createChamber1State();
+    const noArm = without("arm-r");
+    const h = createHistory(s, noArm);
+    for (let i = 0; i < 60; i++) {
+      const input = { move: { x: 1, y: 0 } };
+      step(s, input, noArm);
+      recordFrame(h, s, input);
+    }
+    const right = crossCheck(h);
+    h.build = full; // replay with a build that is not the one the run was played with
+    const wrong = crossCheck(h);
+    return { right, wrong, top: s.actors[0].move.velocity.x };
+  `);
+  assert.strictEqual(result.right, null);
+  assert.ok(result.wrong !== null, "a different build must change the replay");
+  assert.ok(Math.abs(result.top - 3.13) < 1e-9); // the run really used the lighter build
 });

@@ -1,6 +1,6 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
 // For each actor type it has:
-// - the fixed values (radius, base speed, ...);
+// - the fixed values (radius, acceleration, ...);
 // - "initial": the state of a new actor of that type. createActor copies it.
 // The state only points here by id (actor.type), so it stays small.
 // Read-only: it is frozen below, so nothing can change it by accident.
@@ -14,28 +14,26 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 6;
+const DEFINITIONS_VERSION = 7;
 
 const DEFINITIONS = {
   actors: {
     player: {
       name: "Player",
-      maxHealth: 100, // guess (health and damage are not defined yet)
-      attack: 10, // guess: loose numbers, ATTACK and DEFENSE are not defined yet
-      defense: 3, // guess
+      // The maximum health, the defense, the top speed and the dash strength of the
+      // avatar are not here: they are the sum of what its parts give (see "parts" below).
+      attack: 10, // guess: a loose number, not used yet (the attack of a body slam will come from the weight)
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. Every rock radius is measured against it.
-      baseSpeed: 3, // target: top speed in pixels per frame. 3 x 60 = 180 px per second, so the 1920 px screen is crossed in about 10.7 s
       acceleration: 0.25, // target: top speed in 0.2 s = 3 / 0.25 = 12 frames. A power of two, so the sums are exact
       deceleration: 0.125, // target: stops in 0.4 s (twice the time of speeding up, so it slides) = 3 / 0.125 = 24 frames. Also exact
       dash: {
-        speed: 12, // target: 4 x the top speed. With overspeedDecay it lasts (12 - 3) / 0.5 = 18 frames (0.3 s) and covers about 142 px, 4.4 avatar widths.
-        //            rule: must stay below 28 (the avatar radius + the smallest rock radius), or it could cross a rock in one frame
+        // The dash strength comes from the parts (the Booster: dashSpeed 12, see "parts" below).
         maxCharges: 1, // anchor: the user's old project (1 charge)
         rechargeFrames: 240, // anchor: the user's old project (4 s) = 240 frames at 60 steps per second
       },
 
       initial: {
-        health: { current: 100 },
+        health: { current: 100 }, // rule: the maximum health of the starter build (15 + 55 + 30); a test checks it
         position: { x: 0, y: 0 },
         cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
         move: {
@@ -87,6 +85,45 @@ const DEFINITIONS = {
     // head-on (12) hurts 24 - 3 = 21 (a fifth of the health), and a graze or pressing
     // against a rock (impact below 1.5) hurts 0.
     impactAttack: 2,
+
+    // Pixels per frame taken off the top speed for each kg the avatar carries.
+    // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that
+    // takes 0.1 px/frame is a 500 kg arm (500 x 0.0002 = 0.1). Direct and easy to see in the audit.
+    weightSpeedPenalty: 0.0002,
+  },
+
+  // The mecha parts. A part has a weight (kg) and specs, and the avatar's final values are the SUM
+  // of the specs of the parts in its build (src/sim.js: sumSpec). Specs used so far:
+  //   speed     px/frame added to the top speed        health    added to the maximum health
+  //   defense   taken off every hit                    dashSpeed px/frame of the dash (the Booster)
+  //   capacity  kg the build can carry (the Torso)
+  // Radar, Magnet, the shield (Generator) and the weapons are not here: nothing uses them yet.
+  // weight: anchor, the proportions of the user's old project (0.2 / 0.3 / 0.1 / 0.4 / 0.6 / 0.1 / 0.1,
+  //   total 2.3) scaled to a total of 5000 kg (two large cars), rounded to tens.
+  // health: target, the old proportions (Head 20, Torso 80, Legs 40 = 1 : 4 : 2) scaled to a total of 100,
+  //   the health the avatar already had, so the damage numbers of the rocks do not change.
+  // defense: guess, the old project had none; a total of 3 keeps the damage numbers of the rocks (Torso 2, Legs 1).
+  // speed: target, 3.5 + 0.5 - 5000 x 0.0002 = 3 px/frame (180 px per second, the 1920 px screen in about 10.7 s),
+  //   the speed the avatar already had. The Legs are the primary source, the Torso a small part (the user's decision).
+  // dashSpeed: target, 4 x the top speed. With overspeedDecay it lasts (12 - 3) / 0.5 = 18 frames (0.3 s) and
+  //   covers about 142 px, 4.4 avatar widths. rule: must stay below 28 (the avatar radius + the smallest rock
+  //   radius), or it could cross a rock in one frame.
+  // capacity: anchor and rule, the user's 6 t, the 5 t of the starter build plus 20%.
+  parts: {
+    "shoulder-r": { name: "Shoulder R", weight: 450, specs: {} },
+    "shoulder-l": { name: "Shoulder L", weight: 450, specs: {} },
+    "arm-r": { name: "Arm R", weight: 650, specs: {} },
+    "arm-l": { name: "Arm L", weight: 650, specs: {} },
+    head: { name: "Head", weight: 200, specs: { health: 15 } },
+    torso: { name: "Torso", weight: 900, specs: { health: 55, defense: 2, speed: 0.5, capacity: 6000 } },
+    legs: { name: "Legs", weight: 1300, specs: { health: 30, defense: 1, speed: 3.5 } },
+    generator: { name: "Generator", weight: 200, specs: {} },
+    booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12 } },
+  },
+
+  // The build a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
+  starterBuild: {
+    parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
   },
 
   // How the ground is filled (provisional values, to be tuned).
