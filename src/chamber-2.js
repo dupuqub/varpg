@@ -93,7 +93,7 @@ function objectsText(seed) {
 
 // The blueprint of a run and the arithmetic of each final value of the avatar, as plain sums.
 function blueprintText(blueprint) {
-  const avatar = createActor(AVATAR_ID, "avatar");
+  const avatar = createAvatar(blueprint);
   const weight = totalWeight(blueprint);
   const penalty = DEFINITIONS.constants.weightSpeedPenalty;
   return [
@@ -105,6 +105,7 @@ function blueprintText(blueprint) {
     `defense: ${sumSpec(blueprint, "defense")} = ${finalDefense(avatar, blueprint)}`,
     `dash speed: ${sumSpec(blueprint, "dashSpeed")} = ${finalDashSpeed(avatar, blueprint)}`,
     `dash charges (maximum): ${sumSpec(blueprint, "dashCharges")} = ${finalDashMaxCharges(avatar, blueprint)}`,
+    `radius: ${finalRadius(avatar, blueprint)}, acceleration: ${finalAcceleration(avatar, blueprint)}, deceleration: ${finalDeceleration(avatar, blueprint)}, dash recharge: ${finalDashRechargeFrames(avatar, blueprint)} frames (all from the recipe of the avatar)`,
   ].join("\n");
 }
 

@@ -59,9 +59,9 @@ node --test
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 16 | The definitions are frozen (changes are ignored), the state keeps only `type` (no radius or base speed), and it carries the version of the definitions. | The state is only what changes. Fixed values live in the definitions, and nothing may alter them during a run. |
-| 17 | Unknown actor types raise an error. A type without `move` (a trap) does not move. | A typo in a type must not create a ghost actor. Static actors are simply actors without `move`. |
-| 18 | A new actor (the avatar) is a copy of the initial state of its type, and changing it never changes the definitions or another actor. | If actors shared numbers with the definitions, one change would leak into all. |
+| 16 | The definitions are frozen (changes are ignored), the avatar carries its own radius, acceleration, deceleration and dash recharge (16, 0.25, 0.125, 240) and no base speed, and the state carries the version of the definitions. | The actor holds its own values; the definitions only hold the base. |
+| 17 | Unknown types raise an error (`finalizeObject`, `definitionOf`). A type without `move` (a trap, added by a patched copy of the data) does not move. | A typo in a type must not create a ghost actor. A thing without `move` simply does not walk. |
+| 18 | A new avatar (`createAvatar`) is a copy of the initial state of its type plus its final values, and changing it never changes the definitions or another avatar. | If actors shared numbers with the definitions, one change would leak into all. |
 | 19 | The run id is in the state, and the blueprint is empty and outside the state. | The blueprint is an input of the run, not a state (a project decision). |
 
 ### Run history
@@ -144,10 +144,11 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 72 | A rock with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
 | 73 | The objects are the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100 and `healthRange: { min: 10, max: 20 }`, and nothing else unused: the rock has exactly `name`, `size`, `weightPerRadius`, `healthRange`; the Shroom the same plus `bounce` `{ min: 0.2, max: 1 }`. | Each object is complete and unique, with no fixed health, no initial state and no placeholder. |
 | 74 | A size with a radius that is not whole, a min above the max, or a weight modifier that is not whole stops the game when it loads, for the rock and for the Shroom, each on its own; weight 0 is allowed. | The check is real, for every object. |
-| 75 | The avatar is the only actor type: `createActor` refuses `rock` and `shroom`, because only the seed makes objects. The avatar keeps the radius of its definition. | Objects cannot be made by hand by accident. |
+| 75 | `finalizeObject` makes everything: an unknown type is refused, a rock gets the radius and health it was rolled, and the first object of seed 1 comes out of the same function. The avatar is the only actor type, with radius 16. | One function, one shape, for the avatar and for every object. |
 | 76 | The Shroom's bounce grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The rock has none. | The bounce rule the user chose, in numbers. |
 | 77 | A bounce above 1 or not a `{ min, max }`, a bounce minimum above the maximum, a `healthRange` with a 0, a half number or a minimum above the maximum, or an object without a size makes the game fail when it loads. | A bounce never ejects (the user's rule), the ranges are real, and a missing size is a clear error. |
 | 78 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
+| 79 | While the avatar steps far from every object, nothing reads a definition (`definitionOf` is spied on and is never called). | The avatar plays only with its own values (the user's rule). |
 
 ### The kit of parts
 

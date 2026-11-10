@@ -20,7 +20,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 20;
+const DEFINITIONS_VERSION = 21;
 
 const DEFINITIONS = {
   actors: {
@@ -28,6 +28,9 @@ const DEFINITIONS = {
       name: "Avatar",
       // The maximum health, the defense, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
+      // What is here is the base of each value. The avatar does not read it while it plays: createAvatar
+      // (src/sim.js) gives the avatar its own copy of each one, through a final function (finalRadius,
+      // finalAcceleration, finalDeceleration, finalDashRechargeFrames), so any of them can change in a run.
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. The sizes of the objects are measured against it.
       acceleration: 0.25, // target: top speed in 0.2 s = 3 / 0.25 = 12 frames. A power of two, so the sums are exact
       deceleration: 0.125, // target: stops in 0.4 s (twice the time of speeding up, so it slides) = 3 / 0.125 = 24 frames. Also exact

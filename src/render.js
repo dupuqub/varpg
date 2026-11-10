@@ -20,7 +20,7 @@ function draw(context, state, blueprint) {
 
   drawObjects(context, state, player);
 
-  const radius = definitionOf(player).radius;
+  const radius = radiusOf(player);
 
   context.fillStyle = AVATAR_COLOR;
   context.beginPath();
@@ -81,9 +81,8 @@ function drawHealthLabel(context, x, y, current, maximum) {
 // "DASH 1/1  READY", or "DASH 0/1  57/240" while a charge is coming back
 // (frames since it started, out of the frames it needs).
 function drawDashStatus(context, player) {
-  const rules = definitionOf(player).dash;
   const { charges, recharge } = player.dash;
-  const status = charges.now < charges.max ? `${recharge}/${rules.rechargeFrames}` : "";
+  const status = charges.now < charges.max ? `${recharge}/${player.dash.rechargeFrames}` : "";
   const ready = charges.now > 0 ? "READY" : "";
 
   context.font = "24px monospace";

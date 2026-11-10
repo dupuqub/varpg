@@ -17,15 +17,36 @@ function findDefinition(type) {
   return DEFINITIONS.actors[type] ?? DEFINITIONS.objects[type];
 }
 
-// A new actor: a copy of the "initial" state of its type (src/data.js). It only holds what changes during a
-// run. Only actors are created this way; the objects come from the seed (see objectInSquare).
-function createActor(id, type) {
-  const definition = DEFINITIONS.actors[type];
-  if (!definition) throw new Error("Unknown actor type: " + type);
+// The complete object of a type: the one function that makes anything that exists in a run. It takes
+// - the type (the recipe in src/data.js),
+// - the rolls: what the seed decided for this one (position, radius, health...), or nothing,
+// - the blueprint of the run, when the thing has one (only the avatar does),
+// - the id, when it has one (the avatar).
+// Every value of the object is final here: it comes from a final function, and from here on the code reads it
+// from the object, never from the definitions. The copy of "initial" through JSON makes the object own its
+// numbers, so changing one object never changes the definitions or another object.
+function finalizeObject(type, rolls, blueprint, id) {
+  const recipe = findDefinition(type);
+  if (!recipe) throw new Error("Unknown type: " + type);
 
-  // The copy through JSON makes every actor own its numbers, so changing one
-  // actor never changes the definitions (or another actor).
-  return { id, type, ...JSON.parse(JSON.stringify(definition.initial)) };
+  const object = id === undefined ? { type } : { id, type };
+  Object.assign(object, JSON.parse(JSON.stringify(recipe.initial ?? {})), JSON.parse(JSON.stringify(rolls)));
+  object.radius = finalRadius(object, blueprint);
+  return object;
+}
+
+// The avatar of a new run: the object of its type, with every value final: the movement, the dash (its
+// recharge and its charges, full at the start) and the health (full at the start). All of them come from
+// final functions, so the blueprint decides them, and they can change during the run.
+function createAvatar(blueprint) {
+  const avatar = finalizeObject("avatar", {}, blueprint, AVATAR_ID);
+  avatar.acceleration = finalAcceleration(avatar, blueprint);
+  avatar.deceleration = finalDeceleration(avatar, blueprint);
+  avatar.dash.rechargeFrames = finalDashRechargeFrames(avatar, blueprint);
+  const maxCharges = finalDashMaxCharges(avatar, blueprint);
+  avatar.dash.charges = { now: maxCharges, max: maxCharges };
+  avatar.health = { current: finalMaxHealth(avatar, blueprint) };
+  return avatar;
 }
 
 // ---- Parts and the blueprint ----
@@ -144,10 +165,30 @@ function finalMaxHealth(actor, blueprint) {
   return fromParts(actor, blueprint, "health");
 }
 
-// The radius of something, in pixels: its own "radius" (an object from the seed, which rolled it), or the
-// radius of its definition (the avatar).
+// The radius of an object, in pixels: what the seed rolled for it, or the base radius of its recipe (the
+// avatar). The size is a final value like the others, so a part or an effect can change it later.
+function finalRadius(object, blueprint) {
+  return object.radius ?? definitionOf(object).radius;
+}
+
+// How fast the avatar speeds up toward its wanted speed, in pixels per frame, every frame. Base from the recipe.
+function finalAcceleration(actor, blueprint) {
+  return definitionOf(actor).acceleration;
+}
+
+// How fast the avatar slows down toward a stop, in pixels per frame, every frame. Base from the recipe.
+function finalDeceleration(actor, blueprint) {
+  return definitionOf(actor).deceleration;
+}
+
+// The frames a dash charge takes to come back. Base from the recipe.
+function finalDashRechargeFrames(actor, blueprint) {
+  return definitionOf(actor).dash.rechargeFrames;
+}
+
+// The radius of something, in pixels, as the object has it: it is in the object, not in the definitions.
 function radiusOf(thing) {
-  return thing.radius ?? definitionOf(thing).radius;
+  return thing.radius;
 }
 
 // The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object
@@ -215,12 +256,11 @@ const OVERSPEED_TOLERANCE = 1e-9;
 //    Without a direction (or without a dash strength) nothing happens and the charge is kept.
 // Returns true if the actor dashed in this frame.
 function updateDash(actor, wantsDash, blueprint) {
-  const rules = definitionOf(actor).dash;
   const dash = actor.dash;
 
   if (dash.charges.now < dash.charges.max) {
     dash.recharge += 1;
-    if (dash.recharge >= rules.rechargeFrames) {
+    if (dash.recharge >= dash.rechargeFrames) {
       dash.charges.now += 1;
       dash.recharge = 0;
     }
@@ -306,7 +346,7 @@ function objectInSquare(seed, squareX, squareY) {
   const definition = DEFINITIONS.objects[type];
   const maxHealth = rollInRange(seed, squareX, squareY, 5, definition.healthRange.min, definition.healthRange.max);
   const radius = rollInRange(seed, squareX, squareY, 6, definition.size.min, definition.size.max);
-  return { type, position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth };
+  return finalizeObject(type, { position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth });
 }
 
 // Every object whose center is inside the area (world coordinates), in a fixed
@@ -441,12 +481,9 @@ function createRun(id) {
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
-// blueprint: the blueprint of the run, used only to give the avatar its starting health and dash charges.
+// blueprint: the blueprint of the run, used only to make the avatar (createAvatar).
 function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
-  const avatar = createActor(AVATAR_ID, "avatar");
-  avatar.health = { current: finalMaxHealth(avatar, blueprint) };
-  const maxCharges = finalDashMaxCharges(avatar, blueprint);
-  avatar.dash.charges = { now: maxCharges, max: maxCharges };
+  const avatar = createAvatar(blueprint);
 
   const state = {
     run: runId,
@@ -544,7 +581,6 @@ function step(state, input, blueprint) {
   for (const actor of state.actors) {
     if (!actor.move) continue;
     const { direction, velocity } = actor.move;
-    const definition = definitionOf(actor);
     const speed = finalSpeed(actor, blueprint);
 
     // In the frame of a dash the actor moves at the full dash speed, and the
@@ -561,7 +597,7 @@ function step(state, input, blueprint) {
     if (currentSpeed > speed + OVERSPEED_TOLERANCE) {
       rate = DEFINITIONS.constants.overspeedDecay;
     } else {
-      rate = wantsToMove ? definition.acceleration : definition.deceleration;
+      rate = wantsToMove ? actor.acceleration : actor.deceleration;
     }
 
     const target = { x: direction.x * speed, y: direction.y * speed };
