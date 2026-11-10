@@ -1,5 +1,5 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
-// There are three things in it: the avatar (the only actor), and two objects, the rock and the Shroom.
+// There are three things in it: the avatar (the only actor), and two objects, the Rock and the Shroom.
 // The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
 // Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object
 // is a single fixed value, and nothing is placed by hand. A value that is not used by anything does not belong here:
@@ -51,7 +51,7 @@ const DEFINITIONS = {
     },
   },
 
-  // The objects (the user's idea): rocks, Shrooms, and later boxes, logs, houses... Each entry is a complete
+  // The objects (the user's idea): Rocks, Shrooms, and later boxes, logs, houses... Each entry is a complete
   // configuration of that object, with its own numbers (nothing is shared between entries). An entry is a set of
   // ranges: the seed rolls one value inside each range for every object it places (see objectInSquare in
   // src/sim.js), so no object has a fixed number. An object is not stored in the state until it is hurt.
@@ -64,10 +64,10 @@ const DEFINITIONS = {
   //   user's rule). It is a { min, max } that grows linearly with the radius, from min at the smallest radius
   //   to max at the largest (see finalBounce in src/sim.js).
   objects: {
-    // The rock.
+    // The Rock.
     // size (the user's values): min 16, max 32, the avatar's radius up to twice it. weightPerRadius 100 (the user's
     //   value): the weight goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg.
-    // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map.
+    // healthRange: the user's first numbers, "between 10 and 20" for a Rock of the first map.
     rock: {
       name: "Rock",
       size: { min: 16, max: 32 },
@@ -75,9 +75,9 @@ const DEFINITIONS = {
       healthRange: { min: 10, max: 20 },
     },
 
-    // The Shroom (the user's idea): a rock that bounces, and a bigger one bounces more.
-    // size and weightPerRadius: the same numbers the user gave for the rock, written here on their own: min 16, max 32, 100 kg per pixel.
-    // healthRange: guess, the same numbers as the rock's, written here on their own. To be tuned by playing.
+    // The Shroom (the user's idea): a Rock that bounces, and a bigger one bounces more.
+    // size and weightPerRadius: the same numbers the user gave for the Rock, written here on their own: min 16, max 32, 100 kg per pixel.
+    // healthRange: guess, the same numbers as the Rock's, written here on their own. The user's decision: keep it for now, as a guess; it is a correction for later.
     // bounce (the user's values): 0.2 at the smallest radius and 1 at the largest, in a straight line:
     //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
     shroom: {
@@ -165,7 +165,7 @@ const DEFINITIONS = {
       cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one object in each
       chancePercent: 35, // target: about 11 objects on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in)
       safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
-      kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer)
+      kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer; the user's decision: 50/50 for now, a correction for later)
     },
   },
 };
