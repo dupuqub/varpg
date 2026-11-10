@@ -38,7 +38,8 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 ### Theme: mechas
 
 - The game is about mechas. Instead of armor, as in Path of Exile and Diablo, the character has parts: left arm, right arm, left leg, right leg, etc.
-- The user will provide the full list of parts later. Do not invent parts before that.
+- The user will provide the full list of parts later. Do not invent parts before that. The old project had nine: shoulder R and L, arm R and L, head, torso, legs, generator and booster.
+- **What each part is for (the user's decisions):** the **Legs** are the primary source of speed; the **Booster** is the dash; the **Generator** is the shield; the four **arms and shoulders** carry the automatic weapons; the **Core (the torso)** is a wildcard: it can be anything, even another mechanic of the game, and **the skill tree lives in it** ("the core is the skill tree"). The Core also has the weight capacity (see "Open items") and a small contribution to speed. The role of the head is not decided. Any part can add to speed and to the dash strength.
 
 ### Screens
 
