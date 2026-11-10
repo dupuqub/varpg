@@ -3,14 +3,13 @@
 
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
-const PLAYER_COLOR = "#ffffff";
+const AVATAR_COLOR = "#ffffff";
 const ROCK_COLOR = "#5a5f66";
-const DUMMY_COLOR = "#8a6d3b";
 const SHROOM_COLOR = "#a8445c";
 
 function draw(context, state, build) {
   const { width, height } = context.canvas;
-  const player = state.actors.find((actor) => actor.id === PLAYER_ID);
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   context.fillStyle = "#000000";
   context.fillRect(0, 0, width, height);
@@ -25,7 +24,7 @@ function draw(context, state, build) {
 
   const radius = definitionOf(player).radius;
 
-  context.fillStyle = PLAYER_COLOR;
+  context.fillStyle = AVATAR_COLOR;
   context.beginPath();
   context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
@@ -40,7 +39,7 @@ function drawHealth(context, player, build) {
   const maxHealth = finalMaxHealth(player, build);
   context.font = "24px monospace";
   context.textBaseline = "bottom";
-  context.fillStyle = PLAYER_COLOR;
+  context.fillStyle = AVATAR_COLOR;
   context.fillText(`HEALTH ${player.health.current.toFixed(1)}/${maxHealth}`, 24, context.canvas.height - 56);
 }
 
@@ -70,7 +69,7 @@ function drawRocks(context, state, player) {
   }
 }
 
-// The still actors of the state (the training dummy): a circle and its health above it.
+// The still actors of the state (the Shroom): a circle and its health above it.
 function drawStaticActors(context, state, player, build) {
   const { width, height } = context.canvas;
   for (const actor of state.actors) {
@@ -79,7 +78,7 @@ function drawStaticActors(context, state, player, build) {
     const screenY = actor.position.y - player.position.y + height / 2;
     const radius = radiusOf(actor);
 
-    context.fillStyle = actor.type === "shroom" ? SHROOM_COLOR : DUMMY_COLOR;
+    context.fillStyle = SHROOM_COLOR;
     context.beginPath();
     context.arc(screenX, screenY, radius, 0, Math.PI * 2);
     context.fill();
@@ -92,7 +91,7 @@ function drawHealthLabel(context, x, y, current, maximum) {
   context.font = "16px monospace";
   context.textAlign = "center";
   context.textBaseline = "bottom";
-  context.fillStyle = PLAYER_COLOR;
+  context.fillStyle = AVATAR_COLOR;
   context.fillText(`${current.toFixed(1)}/${maximum}`, x, y);
   context.textAlign = "left"; // the other texts are drawn from the left
 }
@@ -108,7 +107,7 @@ function drawDashStatus(context, player) {
 
   context.font = "24px monospace";
   context.textBaseline = "bottom";
-  context.fillStyle = charges > 0 ? PLAYER_COLOR : "#888888";
+  context.fillStyle = charges > 0 ? AVATAR_COLOR : "#888888";
   context.fillText(`DASH ${charges}/${rules.maxCharges}  ${ready}${status}`, 24, context.canvas.height - 24);
 }
 

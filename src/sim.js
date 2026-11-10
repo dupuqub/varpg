@@ -2,7 +2,7 @@
 // It knows nothing about the screen, keyboard, mouse or browser, only numbers.
 // That way it runs the same in the browser and in Node.
 
-const PLAYER_ID = "player_1";
+const AVATAR_ID = "avatar_1";
 
 // The fixed values of an actor (radius, base speed, ...) live in DEFINITIONS
 // (src/data.js). The actor only keeps its type, and what changes.
@@ -54,7 +54,7 @@ function createActor(id, type, radius) {
 // Only the avatar has a build: any other actor only has its definition.
 
 function isAvatar(actor) {
-  return actor.id === PLAYER_ID;
+  return actor.id === AVATAR_ID;
 }
 
 // The definitions of the parts of a build. An unknown id fails loudly.
@@ -93,50 +93,40 @@ function assertValidBuild(build) {
 
 // Fails loudly if a definition breaks a rule of the library. It runs once, when this file is loaded, so a
 // bad definition stops the game before the first frame.
-// - Every weight is a whole number of kg, zero or more (the user's rule): the weight of a part, and for a
-//   still thing the weightPerRadius and the radii of its size (so weightPerRadius x radius is whole). Zero is
+// - Every weight is a whole number of kg, zero or more (the user's rule): the weight of a part, and for an
+//   object the weightPerRadius and the radii of its size (so weightPerRadius x radius is whole). Zero is
 //   allowed and has a meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
 // - A size is { min, max }: whole radii, 1 or more, with min not above max.
 // - A bounce is never above 1 (the user's rule: more would eject whoever hits it, like a spring). A { min, max }
-//   needs a size, because it grows with the radius.
-// - Rocks (terrain.rocks.kinds) have a fixed size for now (the rolled radius is not implemented), and a radius
-//   that fits the margin, or rocks of neighbor squares could overlap.
+//   bounce grows with the radius, so it works because every object has a size.
+// - The objects the seed places (terrain.rocks.kinds) must exist and have a healthRange.
 function assertValidDefinitions() {
-  const validStill = (where, definition) => {
-    const { min, max } = definition.size;
-    if (!(Number.isInteger(definition.weightPerRadius) && definition.weightPerRadius >= 0)) {
-      throw new Error("The weight of " + where + " (weightPerRadius) must be a whole number of kg, 0 or more, and it is " + definition.weightPerRadius);
+  for (const [id, object] of Object.entries(DEFINITIONS.objects)) {
+    const where = "the object " + id;
+    if (!object.size) throw new Error("The object " + id + " needs a size: { min, max }, the range of its radius");
+    const { min, max } = object.size;
+    if (!(Number.isInteger(object.weightPerRadius) && object.weightPerRadius >= 0)) {
+      throw new Error("The weight of " + where + " (weightPerRadius) must be a whole number of kg, 0 or more, and it is " + object.weightPerRadius);
     }
     if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || min > max) {
       throw new Error("The size of " + where + " needs whole radii, 1 or more, with min not above max: " + min + " to " + max);
     }
-    if (definition.bounce !== undefined) {
-      const bounce = definition.bounce;
+    if (object.bounce !== undefined) {
+      const bounce = object.bounce;
       const values = typeof bounce === "number" ? [bounce] : [bounce.min, bounce.max];
       if (!values.every((value) => value >= 0 && value <= 1) || (typeof bounce !== "number" && bounce.min > bounce.max)) {
         throw new Error("The bounce of " + where + " must go from 0 to 1, with min not above max: " + JSON.stringify(bounce));
       }
     }
-  };
-
-  for (const [id, definition] of Object.entries(DEFINITIONS.actors)) {
-    if (definition.size) validStill("the actor type " + id, definition);
-    else if (definition.bounce !== undefined && typeof definition.bounce !== "number") {
-      throw new Error("The bounce of the actor type " + id + " grows with the radius, so it needs a size");
-    }
   }
-  for (const [id, object] of Object.entries(DEFINITIONS.objects)) validStill("the object " + id, object);
   for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
     if (!(Number.isInteger(part.weight) && part.weight >= 0)) {
       throw new Error("The weight of the part " + id + " must be a whole number of kg, 0 or more, and it is " + part.weight);
     }
   }
-
-  const rules = DEFINITIONS.terrain.rocks;
-  for (const kind of rules.kinds) {
-    const { min, max } = findDefinition(kind).size;
-    if (min !== max) throw new Error("The rock kind " + kind + " has a range of radius, and the seed does not roll it yet");
-    if (max > rules.margin) throw new Error("The radius of the rock kind " + kind + " is above terrain.rocks.margin, so rocks could overlap");
+  for (const kind of DEFINITIONS.terrain.rocks.kinds) {
+    const object = DEFINITIONS.objects[kind];
+    if (!object || !object.healthRange) throw new Error("terrain.rocks.kinds has " + kind + ", which is not an object with a healthRange");
   }
 }
 
@@ -303,6 +293,12 @@ function hashInts(seed, x, y, salt) {
   return h >>> 0;
 }
 
+// How far from the center of its square a rock must stay, so rocks of neighbor squares never overlap: the
+// largest radius a rock can have. Computed from the objects the seed places, never stored.
+function rockMargin() {
+  return Math.max(...DEFINITIONS.terrain.rocks.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
+}
+
 // The rock in one square of the world, or null if that square has none.
 // A rock is { type, position: { x, y }, square: { x, y }, radius, maxHealth }. Its position and
 // maxHealth are whole numbers; the square says which rock it is (see damageRock), and
@@ -312,16 +308,17 @@ function rockInSquare(seed, squareX, squareY) {
 
   if (hashInts(seed, squareX, squareY, 1) % 100 >= rules.chancePercent) return null;
 
-  const room = rules.cellSize - 2 * rules.margin;
-  const x = squareX * rules.cellSize + rules.margin + (hashInts(seed, squareX, squareY, 2) % room);
-  const y = squareY * rules.cellSize + rules.margin + (hashInts(seed, squareX, squareY, 3) % room);
+  const margin = rockMargin();
+  const room = rules.cellSize - 2 * margin;
+  const x = squareX * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 2) % room);
+  const y = squareY * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 3) % room);
   if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
 
   const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
-  const { min, max } = findDefinition(type).healthRange;
+  const object = DEFINITIONS.objects[type];
+  const { min, max } = object.healthRange;
   const maxHealth = min + (hashInts(seed, squareX, squareY, 5) % (max - min + 1));
-  // The radius is not rolled yet: the kinds have a fixed size (assertValidDefinitions), so it is that one.
-  const radius = findDefinition(type).size.min;
+  const radius = object.size.min + (hashInts(seed, squareX, squareY, 6) % (object.size.max - object.size.min + 1));
   return { type, position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth };
 }
 
@@ -372,7 +369,7 @@ function damageRock(state, rock, damage) {
 // not the broken ones) in the fixed order of rocksInArea, then the static actors of the state.
 // Only rocks close enough to touch are looked at: the largest rock radius is the margin.
 function staticsNear(state, actor) {
-  const reach = radiusOf(actor) + DEFINITIONS.terrain.rocks.margin;
+  const reach = radiusOf(actor) + rockMargin();
   const rocks = rocksInArea(
     state.seed,
     actor.position.x - reach,
@@ -469,7 +466,7 @@ function createRun(id) {
 // only identifies the snap (two runs both have a "frame 300").
 // build: the build of the run, used only to give the avatar its starting health.
 function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBuild) {
-  const avatar = createActor(PLAYER_ID, "player");
+  const avatar = createActor(AVATAR_ID, "avatar");
   avatar.health.current = finalMaxHealth(avatar, build);
 
   const others = DEFINITIONS.chamber1.actors.map((entry) => {
@@ -514,8 +511,10 @@ function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBui
     //   How far outside the screen actors can be is not decided yet (it depends
     //   on where they spawn). A bigger window costs almost nothing: what costs
     //   is the number of actors tested, not the area.
-    // cellSize 64 = rule: 2 x (largest radius 20 + largest speed 12), exactly at the limit,
-    // so a faster dash or a bigger rock needs a bigger cell. windowWidth x windowHeight = rule: twice the screen (see above).
+    // cellSize 64: the old rule, 2 x (largest radius 20 + largest speed 12), was exactly at the limit. It is NOT met any
+    // more: rocks and Shrooms go up to a radius of 32, so the rule asks for 2 x (32 + 12) = 88. Nothing reads the cells
+    // for collision yet, so nothing breaks, but the value must change before something does (the user decides).
+    // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
     actors: [avatar, ...others],
@@ -556,7 +555,7 @@ function isInWindow(grid, cell) {
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 // build = the build of the run (see createRun). It is not in the state, so it is an argument.
 function step(state, input, build) {
-  const player = state.actors.find((actor) => actor.id === PLAYER_ID);
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
@@ -580,7 +579,7 @@ function step(state, input, build) {
     // slowing down starts in the next frame.
     let dashed = false;
     if (actor.dash) {
-      const wantsDash = actor.id === PLAYER_ID && input.dash === true;
+      const wantsDash = actor.id === AVATAR_ID && input.dash === true;
       dashed = updateDash(actor, wantsDash, build);
     }
 

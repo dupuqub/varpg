@@ -93,7 +93,7 @@ function rocksText(seed) {
 
 // The build of a run and the arithmetic of each final value of the avatar, as plain sums.
 function buildText(build) {
-  const avatar = createActor(PLAYER_ID, "player");
+  const avatar = createActor(AVATAR_ID, "avatar");
   const weight = totalWeight(build);
   const penalty = DEFINITIONS.constants.weightSpeedPenalty;
   return [

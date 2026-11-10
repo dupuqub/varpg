@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Combat is only the collision with rocks so far (tests 47 to 52). There are no enemies, weapons or shield yet.
+- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet.
 
 ## The tests, one by one
 
@@ -97,59 +97,58 @@ node --test
 | 36 | Looking at a small area finds exactly the rocks that a big area has inside that same region. | A rock must not depend on where you look from, or rocks would pop in and out while walking. |
 | 37 | No rock is closer than 200 px to the starting point, for 40 different seeds (and rocks do start right after that). | The avatar must never begin inside a rock. |
 | 38 | No two rocks overlap, for 5 seeds. | The formula keeps each rock inside its own square, with a margin. |
-| 39 | **Known answer:** seed 1 gives 12 rocks on the first screen, the first a stone at 172,-435 (radius 16, health 17) and the last a stone at 854,418 (health 12). Every rock is a stone for now. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the ROCKS lines of DATA in Chamber 2). |
-| 40 | The state keeps only the seed (not the rocks), and every rock kind is a valid static actor with a fixed size that fits the margin. | The state stays small, and the library data cannot break the formula by accident. |
+| 39 | **Known answer:** seed 1 gives 10 rocks on the first screen, the first a rock at 136,-375 (radius 16, health 17) and the last a rock at 99,456 (radius 28, health 10). | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the ROCKS lines of DATA in Chamber 2). |
+| 40 | The state keeps only the seed (not the rocks). Every rock rolls a whole radius inside the size of its object (over 5 seeds all of 16 to 32 show up), `rockMargin()` is the largest radius (32), and every rock kind is a valid still object. | The state stays small, the radius comes from the seed, and the library data cannot break the formula by accident. |
 
 ### Collision with rocks
 
-These tests use the stone of seed 1 at 159,444 (radius 16, no bounce) and a Shroom that each test places by hand, 100 px below the start. The avatar has radius 16. Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32.
+These tests use the rock of seed 1 at 99,456 (radius 28, 2800 kg, health 10, no bounce, called ROCK in the test file) and a Shroom that each test places by hand, 100 px below the start. The avatar has radius 16. Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32.
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 41 | Head-on at 3 px/frame: the stone stops you (0); a Shroom sends you back at 0.6 (radius 16), 1.8 (24) or 3 (32). | The bounce rule, in numbers you can check by hand: `-bounce x speed`, with the bounce growing with the radius. |
-| 42 | After the hit the avatar is exactly touching the thing (127 = 159 - (16 + 16) for the stone; 68 and 52 for a Shroom of radius 16 and 32). | The push-out puts it just outside, not inside and not far away. |
-| 43 | Glancing blow on the stone: the part of the velocity going into the rock is 0, the part along the rock is unchanged, and the speed kept is more than 80%. | The angle matters and bounce 0 slides, it is not friction (the user's definition). |
-| 44 | A dash into the stone stops (0). A dash into a Shroom of radius 32 (bounce 1) comes back at -12, the full dash speed. (Every stone is given 50 health here, so the dash does not break it.) | The dash and the collision work together. |
+| 41 | Head-on at 3 px/frame: the rock stops you (0); a Shroom sends you back at 0.6 (radius 16), 1.8 (24) or 3 (32). | The bounce rule, in numbers you can check by hand: `-bounce x speed`, with the bounce growing with the radius. |
+| 42 | After the hit the avatar is exactly touching the thing (55 = 99 - (28 + 16) for the rock; 68 and 52 for a Shroom of radius 16 and 32). | The push-out puts it just outside, not inside and not far away. |
+| 43 | Glancing blow on the rock: the part of the velocity going into the rock is 0, the part along the rock is unchanged, and the speed kept is more than 80%. | The angle matters and bounce 0 slides, it is not friction (the user's definition). |
+| 44 | A dash into the rock stops (0). A dash into a Shroom of radius 32 (bounce 1) comes back at -12, the full dash speed. (Every rock is given 50 health here, so the dash does not break it.) | The dash and the collision work together. |
 | 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
-| 46 | The cross-check stays clean in a run that really hits the stone. | The collision must replay identically (determinism). |
+| 46 | The cross-check stays clean in a run that really hits the rock. | The collision must replay identically (determinism). |
 
 ### Body slam: damage from collisions
 
-Rule: a collision (a pair that was not touching in the last frame, with an impact of at least 1) is a hit; friction is not, and nothing triggers below an impact of 1. A hit costs at least 1, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (4800 kg, health 10), the boulder at 172,-435 (6000 kg, health 17) and the rubber rock at 711,-63 (3600 kg, health 15).
+Rule: a collision (a pair that was not touching in the last frame, with an impact of at least 1) is a hit; friction is not, and nothing triggers below an impact of 1. A hit costs at least 1, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(1, attack - defense)` when there is an attack (0 without). The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rock of seed 1 at 99,456 (2800 kg, health 10).
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 47 | Walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5 (10 - 7.5), the avatar the minimum damage 1 (2.5 - 3 is below 1), and it still stops. | Any contact above the minimum impact hits, but weakly. The bounce is a separate rule. |
-| 48 | A dash (impact 12) into the stone costs the avatar 6.6 (4800 kg: attack 9.6, minus defense 3) and the stone 10 (it breaks). Into a Shroom of radius 16 (1600 kg, attack 3.2, below the defense) it costs 1, into one of radius 32 (3200 kg, attack 6.4) it costs 3.4; the Shroom loses 10 in both. | A hit hurts both sides, each with its own weight, and at least 1. |
-| 49 | A glancing blow (impact about 1.7) hurts the stone, but less than the head-on walk of test 47; the avatar loses 1. | Only the part of the speed going into the rock counts. |
-| 50 | The attack at impact 12 is 9.6 for the stone (300 x radius 16 = 4800 kg), 10 for the avatar (5000 kg), 8.7 for a lighter avatar; 4.8 at the reference impact 6, 2.4 at 3, 0 at no impact. The damage on the avatar is 1 from a Shroom of radius 16 (attack 3.2) and 3.4 from one of radius 32 (6.4 - 3). | The formula in numbers you can check by hand. |
+| 47 | Walking into the rock at 3 px/frame is a weak hit: the rock loses 2.5 (10 - 7.5), the avatar the minimum damage 1 (its attack, 1.4, is below the defense 3), and it still stops. | Any contact above the minimum impact hits, but weakly. The bounce is a separate rule. |
+| 48 | A dash (impact 12) into the rock costs the avatar 2.6 (2800 kg: attack 5.6, minus defense 3) and the rock 10 (it breaks). Into a Shroom of radius 16 (1600 kg, attack 3.2, below the defense) it costs 1, into one of radius 32 (3200 kg, attack 6.4) it costs 3.4; the Shroom loses 10 in both. | A hit hurts both sides, each with its own weight, and at least 1. |
+| 49 | A glancing blow (impact about 1.4) hurts the rock, but less than the head-on walk of test 47; the avatar loses 1. | Only the part of the speed going into the rock counts. |
+| 50 | The attack at impact 12 is 5.6 for the rock (100 x radius 28 = 2800 kg), 10 for the avatar (5000 kg), 8.7 for a lighter avatar; 2.8 at the reference impact 6, 1.4 at 3, 0 at no impact. The damage on the avatar is 1 from a Shroom of radius 16 (attack 3.2) and 3.4 from one of radius 32 (6.4 - 3). | The formula in numbers you can check by hand. |
 | 51 | Health stops at 0. | There is no death yet. |
 | 52 | The cross-check stays clean in a run where both avatar and rock are hurt, and the state stays plain numbers. | Damage must replay identically (determinism). |
 
-### Rocks with health, and the training dummy
+### Rocks with health, and the weight of a still object
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 61 | A hurt rock is stored by its square (`"2,-1": 5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
-| 62 | A rock with 5 left breaks when a dash hits it (the avatar loses 6.6): no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
+| 61 | A hurt rock is stored by its square (`"0,1": 7.5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
+| 62 | A rock with 5 left breaks when a dash hits it (the avatar loses 2.6): no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
 | 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
-| 64 | The weight of a still actor is `weightPerRadius` x radius, a whole number: stone 4800, dummy 4800, Shroom 1600 (radius 16), 2400 (24), 3200 (32). `weightRangeOf` gives 1600 to 3200 for the Shroom and for the rock. Twice the radius is twice the weight. | The weight follows the radius, not the area (the user's decision), and nothing is rounded. |
-| 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 24.17 (5000 x 0.001 x 7 / 6 = 5.83) and the avatar from 100 to 97.4 (the dummy, 4800 kg, hits back for 5.6, minus 3). The avatar stops (the dummy has no bounce) and the dummy does not move. | The first combat test works from the very first dash. |
-| 66 | Pressing into the dummy hurts it once, at the arrival (27.5 left, the avatar at 99), and nothing more after 300 frames of pressing (no bounce, so no second collision). At 0 health the dummy stays and still collides. | Only real collisions hurt. |
-| 67 | After walking away (no contact) and coming back, the second collision hurts again; the contacts list is plain state (`["player_1|dummy_1"]` while touching, empty when apart). | A new collision is a new hit. |
-| 68 | The attack comes from the weight alone: a thing with `weightPerRadius` 0 has attack 0 and damage 0 at any impact (not even the minimum damage); the same stone with its weight attacks 9.6 at impact 12 and costs the avatar 6.6. | There is no flag for who hits; weight 0 is harmless (the user removed `doesDamage`). |
-| 69 | A hit always costs at least 1: attack 0.8 (Shroom of radius 16 at impact 3) against defense 3 costs 1; attack 6.4 (radius 32 at impact 12) costs 3.4; no impact costs 0. | The defense never makes the target immune. |
-| 70 | An impact below 1 (0.75, into a Shroom of radius 32, bounce 1) triggers nothing: no damage, no bounce, the avatar stops. | The collision threshold. |
-| 71 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius`, `size.min` and `size.max` of every still actor and object. | The rule holds for the real data. |
-| 72 | A `weightPerRadius` of 300.5, a radius of 16.5 or a part weight of -1 makes the game fail when it loads; a `weightPerRadius` of 0 loads and gives weight 0. | The check is real, and weight 0 is allowed. |
-| 73 | A still actor with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
-| 74 | The list of still objects has the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100, `initial` and name (1600 to 3200 kg). Only the Shroom has a bounce, `{ min: 0.2, max: 1 }`; the rock has the health range 10 to 20. | Each object is complete and unique. |
-| 75 | A size with a radius that is not whole, a min above the max, or a weight modifier that is not whole stops the game when it loads, for the rock and for the Shroom, each on its own; weight 0 is allowed. | The check is real, for every object. |
-| 76 | A still actor gets its own radius: a stone or dummy gets 16 by itself, a Shroom needs one from 16 to 32 (15, 33, 20.5 and none are refused), and the avatar has none (it keeps its definition's). | Every instance knows its size; the range is checked. |
-| 77 | The Shroom's bounce grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The stone and the dummy have none. | The bounce rule the user chose, in numbers. |
-| 78 | A bounce above 1, a minimum above the maximum, or a `{ min, max }` bounce without a size makes the game fail when it loads. | A bounce never ejects (the user's rule). |
-| 79 | Chamber 1 has a Shroom of radius 24 at 130 px to the left. The first dash left hits it, comes back at about 0.6 of the speed, and the state stays plain JSON. | The Shroom works in the real chamber. |
-| 80 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
+| 64 | The weight of a still object is `weightPerRadius` x radius, a whole number: rock of radius 28 is 2800, Shroom 1600 (radius 16), 2400 (24), 3200 (32). `weightRangeOf` gives 1600 to 3200 for the Shroom and for the rock. Twice the radius is twice the weight. | The weight follows the radius, not the area (the user's decision), and nothing is rounded. |
+| 65 | Pressing into the rock hurts it once, at the arrival (7.5 left, the avatar at 99, stopped at 55), and nothing more after 300 frames of pressing (no bounce, so no second collision). | Only real collisions hurt. |
+| 66 | After walking away (no contact) and coming back, the second collision hurts again; the contacts list is plain state (`["avatar_1|rock 0,1"]` while touching, empty when apart). | A new collision is a new hit. |
+| 67 | The attack comes from the weight alone: a rock with `weightPerRadius` 0 has attack 0 and damage 0 at any impact (not even the minimum damage); the same rock with its weight attacks 5.6 at impact 12 and costs the avatar 2.6. | There is no flag for who hits; weight 0 is harmless (the user removed `doesDamage`). |
+| 68 | A hit always costs at least 1: attack 0.8 (Shroom of radius 16 at impact 3) against defense 3 costs 1; attack 6.4 (radius 32 at impact 12) costs 3.4; no impact costs 0. | The defense never makes the target immune. |
+| 69 | An impact below 1 (0.75, into a Shroom of radius 32, bounce 1) triggers nothing: no damage, no bounce, the avatar stops. | The collision threshold. |
+| 70 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius`, `size.min` and `size.max` of every object. | The rule holds for the real data. |
+| 71 | A `weightPerRadius` of 100.5, a radius of 16.5 or a part weight of -1 makes the game fail when it loads; a `weightPerRadius` of 0 loads and gives weight 0. | The check is real, and weight 0 is allowed. |
+| 72 | A rock with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
+| 73 | The objects are the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100, `initial` and name (1600 to 3200 kg). Only the Shroom has a bounce, `{ min: 0.2, max: 1 }`; the rock has the health range 10 to 20. | Each object is complete and unique. |
+| 74 | A size with a radius that is not whole, a min above the max, or a weight modifier that is not whole stops the game when it loads, for the rock and for the Shroom, each on its own; weight 0 is allowed. | The check is real, for every object. |
+| 75 | A still object gets its own radius: it must be given one from 16 to 32 (15, 33, 20.5 and none are refused), and the avatar has none (it keeps its definition's). | Every instance knows its size; the range is checked. |
+| 76 | The Shroom's bounce grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The rock has none. | The bounce rule the user chose, in numbers. |
+| 77 | A bounce above 1, a minimum above the maximum, or an object without a size makes the game fail when it loads. | A bounce never ejects (the user's rule), and a missing size is a clear error. |
+| 78 | Chamber 1 has a Shroom of radius 24 at 130 px to the left. The first dash left hits it, comes back at about 0.6 of the speed, and the state stays plain JSON. | The Shroom works in the real chamber. |
+| 79 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
 
 ### The kit of parts
 
