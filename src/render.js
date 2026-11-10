@@ -20,7 +20,7 @@ function draw(context, state, blueprint) {
 
   drawObjects(context, state, player);
 
-  const radius = radiusOf(player);
+  const radius = player.radius;
 
   context.fillStyle = AVATAR_COLOR;
   context.beginPath();
@@ -53,7 +53,7 @@ function drawObjects(context, state, player) {
   for (const object of objects) {
     const screenX = object.position.x - left;
     const screenY = object.position.y - top;
-    const radius = radiusOf(object);
+    const radius = object.radius;
 
     context.fillStyle = OBJECT_COLORS[object.type];
     context.beginPath();

@@ -290,6 +290,8 @@ test("16 the definitions are frozen, the state only points to them, and it carri
       acceleration: player.acceleration,
       deceleration: player.deceleration,
       rechargeFrames: player.dash.rechargeFrames,
+      weight: player.weight,
+      bounce: player.bounce,
       hasBaseSpeed: "baseSpeed" in player,
       health: player.health,
       speed: finalSpeed(player, createRun(1).blueprint),
@@ -300,7 +302,7 @@ test("16 the definitions are frozen, the state only points to them, and it carri
   assert.strictEqual(result.unchanged, true);
   assert.strictEqual(result.type, "avatar");
   // The avatar carries its own copy of each value, made by the final functions: it does not read the definitions while it plays.
-  assert.deepStrictEqual([result.radius, result.acceleration, result.deceleration, result.rechargeFrames], [16, 0.25, 0.125, 240]);
+  assert.deepStrictEqual([result.radius, result.acceleration, result.deceleration, result.rechargeFrames, result.weight, result.bounce], [16, 0.25, 0.125, 240, 5000, 0]);
   assert.strictEqual(result.hasBaseSpeed, false);
   assert.deepStrictEqual(plain(result.health), { current: 100 });
   assert.strictEqual(result.speed, 3);
@@ -725,7 +727,7 @@ test("38 rocks never overlap each other", () => {
   assert.strictEqual(overlaps, 0);
 });
 
-test("39 known answer: seed 1 gives 10 objects on the first screen, the first a Shroom of radius 16 at 136,-375 with 17 health, the last a rock of radius 28 at 99,456", () => {
+test("39 known answer: seed 1 gives 10 objects on the first screen, the first a Shroom of radius 16 at 136,-375 with 17 health, weight 1600 and bounce 0.2, the last a rock of radius 28 at 99,456, weight 2800 and bounce 0", () => {
   // If this fails after a change to the formula or the hash, every map changed.
   // If it fails on another machine or browser, the hash is not exact there.
   const result = run(`
@@ -733,8 +735,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17 });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, maxHealth: 10 });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17, weight: 1600, bounce: 0.2 });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, maxHealth: 10, weight: 2800, bounce: 0 });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -1006,19 +1008,19 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
 
 test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage never goes below 0", () => {
   const result = withBlueprints(`
-    const rock = { type: "rock", radius: 28, position: { x: 0, y: 0 } };
-    const small = { type: "shroom", radius: 16 }; // 1600 kg
-    const large = { type: "shroom", radius: 32 }; // 3200 kg
-    const lighter = without("arm-r"); // 4350 kg
+    const rock = finalizeObject("rock", { radius: 28 });
+    const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
+    const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
+    const lighterAvatar = createAvatar(without("arm-r")); // 4350 kg
     return {
       defense: finalDefense(avatar, full),
-      rockWeight: weightOf(rock, full),
-      rock: finalAttack(rock, { impact: 12 }, full),
-      atReference: finalAttack(rock, { impact: 6 }, full),
-      walking: finalAttack(rock, { impact: 3 }, full),
-      noImpact: finalAttack(rock, { impact: 0 }, full),
-      avatar: finalAttack(avatar, { impact: 12 }, full),
-      lighterAvatar: finalAttack(avatar, { impact: 12 }, lighter),
+      rockWeight: rock.weight,
+      rock: finalAttack(rock, { impact: 12 }),
+      atReference: finalAttack(rock, { impact: 6 }),
+      walking: finalAttack(rock, { impact: 3 }),
+      noImpact: finalAttack(rock, { impact: 0 }),
+      avatar: finalAttack(avatar, { impact: 12 }),
+      lighterAvatar: finalAttack(lighterAvatar, { impact: 12 }),
       smallDamage: damageOf(small, { impact: 12 }, avatar, full),
       largeDamage: damageOf(large, { impact: 12 }, avatar, full),
     };
@@ -1241,12 +1243,11 @@ test("63 every rock rolls its own health from the seed: whole numbers from 10 to
 
 test("64 the weight of an object is weightPerRadius x radius, a whole number: twice the radius, twice the weight", () => {
   const result = run(`
-    const blueprint = createRun(1).blueprint;
     return {
-      rock: weightOf({ type: "rock", radius: 28 }, blueprint),
-      small: weightOf({ type: "shroom", radius: 16 }, blueprint),
-      middle: weightOf({ type: "shroom", radius: 24 }, blueprint),
-      large: weightOf({ type: "shroom", radius: 32 }, blueprint),
+      rock: finalizeObject("rock", { radius: 28 }).weight,
+      small: finalizeObject("shroom", { radius: 16 }).weight,
+      middle: finalizeObject("shroom", { radius: 24 }).weight,
+      large: finalizeObject("shroom", { radius: 32 }).weight,
     };
   `);
   assert.deepStrictEqual(plain(result), { rock: 2800, small: 1600, middle: 2400, large: 3200 });
@@ -1292,10 +1293,10 @@ test("66 touching again after separating is a new collision and hurts again; the
 test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 has attack 0 and damage 0 at any impact, the same thing with weight does hit", () => {
   const weightless = loadGame((text) => text.replace('name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,', 'name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 0,'));
   const probe = `
-    const rock = { type: "rock", radius: 28, position: { x: 0, y: 0 } };
+    const rock = finalizeObject("rock", { radius: 28 });
     const full = createRun(1).blueprint;
     const avatar = createAvatar(full);
-    return { attack: finalAttack(rock, { impact: 12 }, full), damage: damageOf(rock, { impact: 12 }, avatar, full) };
+    return { attack: finalAttack(rock, { impact: 12 }), damage: damageOf(rock, { impact: 12 }, avatar, full) };
   `;
   assert.deepStrictEqual(plain(run(probe, weightless)), { attack: 0, damage: 0 }); // no minimum damage either: there is no attack
   const normal = run(probe);
@@ -1305,8 +1306,8 @@ test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 
 
 test("68 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
   const result = withBlueprints(`
-    const small = { type: "shroom", radius: 16 }; // 1600 kg
-    const large = { type: "shroom", radius: 32 }; // 3200 kg
+    const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
+    const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
     return {
       weak: damageOf(small, { impact: 3 }, avatar, full), // attack 0.8, defense 3
       strong: damageOf(large, { impact: 12 }, avatar, full), // attack 6.4, defense 3
@@ -1343,7 +1344,7 @@ test("71 a weight that is not a whole number (or is negative) stops the game whe
   assert.throws(() => loadGame(patch("{ min: 16.5, max: 32 }", 100)), /object rock/);
   assert.throws(() => loadGame((text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,')), /part head.*-1/);
   const box = loadGame(patch("{ min: 16, max: 32 }", 0));
-  assert.strictEqual(run("return weightOf({ type: 'rock', radius: 28 }, createRun(1).blueprint);", box), 0);
+  assert.strictEqual(run("return finalizeObject('rock', { radius: 28 }).weight;", box), 0);
 });
 
 test("72 a rock with weight 0 and health 1 is harmless and breaks at the first hit, and the avatar goes through it", () => {
@@ -1405,16 +1406,16 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   `);
   assert.deepStrictEqual(plain(result.actors), ["avatar"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, maxHealth: 12 });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, maxHealth: 12, weight: 2800, bounce: 0 });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17 }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
   const result = run(`
     const bounces = [];
-    for (let radius = 16; radius <= 32; radius++) bounces.push(bounceOf({ type: "shroom", radius }));
-    return { bounces, rock: bounceOf({ type: "rock", radius: 28 }) };
+    for (let radius = 16; radius <= 32; radius++) bounces.push(finalizeObject("shroom", { radius }).bounce);
+    return { bounces, rock: finalizeObject("rock", { radius: 28 }).bounce };
   `);
   assert.ok(Math.abs(result.bounces[0] - 0.2) < 1e-9);
   assert.ok(Math.abs(result.bounces[8] - 0.6) < 1e-9); // radius 24
@@ -1447,7 +1448,7 @@ test("78 the rock and the Shroom share nothing: changing the size of one in the 
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
 
-test("79 the avatar plays only with its own values: while stepping, nothing reads the definition of the avatar", () => {
+test("79 the avatar plays only with its own values: while stepping, the definition of the avatar is never read", () => {
   const result = run(`
     const s = createChamber1State();
     const reads = [];
@@ -1457,6 +1458,6 @@ test("79 the avatar plays only with its own values: while stepping, nothing read
     definitionOf = original;
     return { reads, x: s.actors[0].position.x };
   `);
-  assert.deepStrictEqual(plain(result.reads), []); // far from every object: only the avatar's own numbers were used
+  assert.ok(!result.reads.includes("avatar"), "the avatar's definition was read while stepping"); // an object being made from the seed reads its own recipe, the avatar never does
   assert.ok(result.x > 100);
 });

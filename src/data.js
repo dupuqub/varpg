@@ -65,7 +65,7 @@ const DEFINITIONS = {
   // bounce (how much of the speed of whoever hits it comes back, 0 = none, 1 = all) exists only on the Shroom for
   //   now (the user's decision). It is never above 1, or the thing would eject whoever hits it, like a spring (the
   //   user's rule). It is a { min, max } that grows linearly with the radius, from min at the smallest radius
-  //   to max at the largest (see bounceOf in src/sim.js).
+  //   to max at the largest (see finalBounce in src/sim.js).
   objects: {
     // The rock.
     // size (the user's values): min 16, max 32, the avatar's radius up to twice it. weightPerRadius 100 (the user's

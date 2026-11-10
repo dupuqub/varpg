@@ -32,6 +32,8 @@ function finalizeObject(type, rolls, blueprint, id) {
   const object = id === undefined ? { type } : { id, type };
   Object.assign(object, JSON.parse(JSON.stringify(recipe.initial ?? {})), JSON.parse(JSON.stringify(rolls)));
   object.radius = finalRadius(object, blueprint);
+  object.weight = finalWeight(object, blueprint);
+  object.bounce = finalBounce(object, blueprint);
   return object;
 }
 
@@ -186,27 +188,22 @@ function finalDashRechargeFrames(actor, blueprint) {
   return definitionOf(actor).dash.rechargeFrames;
 }
 
-// The radius of something, in pixels, as the object has it: it is in the object, not in the definitions.
-function radiusOf(thing) {
-  return thing.radius;
-}
-
 // The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object
 // weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
 // (assertValidDefinitions), so the weight is whole and nothing is rounded.
-function weightOf(thing, blueprint) {
-  return isAvatar(thing) ? totalWeight(blueprint) : definitionOf(thing).weightPerRadius * radiusOf(thing);
+function finalWeight(thing, blueprint) {
+  return isAvatar(thing) ? totalWeight(blueprint) : definitionOf(thing).weightPerRadius * thing.radius;
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
 // The bounce { min, max } grows in a straight line with the radius: min at the smallest
 // radius of the size, max at the largest (the Shroom: 0.2 at 16 and 1 at 32).
-function bounceOf(thing) {
+function finalBounce(thing, blueprint) {
   const definition = definitionOf(thing);
   const bounce = definition.bounce;
   if (bounce === undefined) return 0;
   const { min, max } = definition.size;
-  return bounce.min + ((bounce.max - bounce.min) * (radiusOf(thing) - min)) / (max - min);
+  return bounce.min + ((bounce.max - bounce.min) * (thing.radius - min)) / (max - min);
 }
 
 // The attack of a hit (the body slam). "hit" says what happened: for a collision it is
@@ -219,10 +216,10 @@ function bounceOf(thing) {
 // Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
 // can be added later, as terms of the damage trace. Pure: it depends only on its
 // arguments and the definitions. The attacker can be the avatar or an object.
-function finalAttack(attacker, hit, blueprint) {
+function finalAttack(attacker, hit) {
   const rules = DEFINITIONS.constants.bodySlam;
   if (hit.impact <= 0) return 0;
-  return (weightOf(attacker, blueprint) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
+  return (attacker.weight * rules.attackPerKg * hit.impact) / rules.referenceImpact;
 }
 
 // The defense of the avatar: the sum of the defense of its parts. An object has no defense (none was defined).
@@ -235,7 +232,7 @@ function finalDefense(actor, blueprint) {
 // (a hit always costs something). No attack (a weight of 0) means no damage at all.
 // The shield is not here yet.
 function damageOf(attacker, hit, target, blueprint) {
-  const attack = finalAttack(attacker, hit, blueprint);
+  const attack = finalAttack(attacker, hit);
   if (attack <= 0) return 0;
   return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, blueprint));
 }
@@ -395,7 +392,7 @@ function damageObject(state, object, damage) {
 // The objects near the actor that it may touch (the broken ones are gone), in the fixed order of
 // objectsInArea. Only objects close enough to touch are looked at: the largest radius of an object is the margin.
 function objectsNear(state, actor) {
-  const reach = radiusOf(actor) + objectMargin();
+  const reach = actor.radius + objectMargin();
   return objectsInArea(
     state.seed,
     actor.position.x - reach,
@@ -421,10 +418,10 @@ function objectsNear(state, actor) {
 //    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
 function collideWithObjects(state, actor, blueprint, lastContacts) {
-  const radius = radiusOf(actor);
+  const radius = actor.radius;
 
   for (const object of objectsNear(state, actor)) {
-    const touching = radius + radiusOf(object);
+    const touching = radius + object.radius;
     const dx = actor.position.x - object.position.x;
     const dy = actor.position.y - object.position.y;
     if (dx * dx + dy * dy >= touching * touching) continue;
@@ -459,7 +456,7 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
 
     // The part going in is removed; a collision also adds the bounce, anything below the minimum does not.
     if (goingIn < 0) {
-      const factor = collides ? 1 + bounceOf(object) : 1;
+      const factor = collides ? 1 + object.bounce : 1;
       velocity.x -= factor * goingIn * normalX;
       velocity.y -= factor * goingIn * normalY;
     }
