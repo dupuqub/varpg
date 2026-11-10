@@ -40,6 +40,9 @@ let runHistory = null; // the last 100 snaps and inputs. In the console: crossCh
 let animationId = null;
 let lastTimestamp = null;
 let accumulatedMs = 0;
+let fps = 0; // frames drawn in the last full second, shown on the screen
+let fpsFrames = 0;
+let fpsSince = null;
 
 function startChamber1() {
   stopChamber1();
@@ -48,7 +51,10 @@ function startChamber1() {
   runHistory = createHistory(state, run.blueprint);
   lastTimestamp = null;
   accumulatedMs = 0;
-  draw(context, state, run.blueprint);
+  fps = 0;
+  fpsFrames = 0;
+  fpsSince = null;
+  draw(context, state, run.blueprint, fps);
   animationId = requestAnimationFrame(loop);
 }
 
@@ -77,5 +83,14 @@ function loop(timestamp) {
   const input = readInput();
   step(state, input, run.blueprint);
   recordFrame(runHistory, state, input);
-  draw(context, state, run.blueprint);
+  // The fps counter: frames drawn, counted over one second.
+  if (fpsSince === null) fpsSince = timestamp;
+  fpsFrames += 1;
+  if (timestamp - fpsSince >= 1000) {
+    fps = Math.round((fpsFrames * 1000) / (timestamp - fpsSince));
+    fpsFrames = 0;
+    fpsSince = timestamp;
+  }
+
+  draw(context, state, run.blueprint, fps);
 }

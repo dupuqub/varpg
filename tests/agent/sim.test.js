@@ -31,10 +31,21 @@ function loadGame(patchData = (text) => text) {
   return context;
 }
 
+// How many Dummies a game has (the data says how many for the stress test). A patch that does not find the text fails
+// loudly, so a change in the data cannot silently bring back the full count and make every test slow.
+function withDummies(count) {
+  return loadGame((text) => {
+    const original = /dummies: \{ count: \d+,/;
+    if (!original.test(text)) throw new Error("the count of Dummies was not found in src/data.js");
+    return text.replace(original, "dummies: { count: " + count + ",");
+  });
+}
+
 // The game most tests play in has no Dummies (the rock and avatar tests count every hit on a rock, and a wandering
-// Dummy would add its own). The tests of the Dummies, and the ones that need them, use WITH_DUMMIES.
-const context = loadGame((text) => text.replace("dummies: { count: 100,", "dummies: { count: 0,"));
-const WITH_DUMMIES = loadGame();
+// Dummy would add its own). The tests of the Dummies, and the ones that need them, use WITH_DUMMIES, with 100 Dummies
+// and not the real count (the stress test), to stay fast. Ranges, speed and the rest are the real ones.
+const context = withDummies(0);
+const WITH_DUMMIES = withDummies(100);
 
 // Runs code inside the game context, in its own function so names do not clash.
 // Objects made inside the context have another prototype than ours, so a result
@@ -772,11 +783,13 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
       shroom: spread("shroom"),
       margin: objectMargin(),
       kinds: rules.kinds,
+      dummyCount: DEFINITIONS.terrain.dummies.count,
     };
   `, WITH_DUMMIES);
   assert.strictEqual(result.seed, 5);
   assert.strictEqual(result.defaultSeed, 1);
-  assert.deepStrictEqual(plain(result.actors), ["avatar", ...Array(100).fill("dummy")]); // the avatar and the 100 Dummies are the only things in the state
+  assert.deepStrictEqual(plain(result.actors), ["avatar", ...Array(result.dummyCount).fill("dummy")]); // the avatar and the Dummies are the only things in the state
+  assert.strictEqual(result.dummyCount, 100); // (this game has 100, see WITH_DUMMIES)
   assert.ok(!result.keys.includes("objects") && !result.keys.includes("rocks"));
   assert.strictEqual(result.outOfRange, 0);
   const radii = [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
@@ -1486,7 +1499,7 @@ const ALONE = `
   function face(dummy, angle) { dummy.wander.angle = angle; setHeading(dummy); }
 `;
 
-test("80 the seed makes 100 Dummies, each inside its ranges (radius 16 to 32, health 100, speed from the recipe), inside the window of the grid, the same every time", () => {
+test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8 to 16, health 100, speed from the recipe), inside the window of the grid, the same every time", () => {
   const result = run(`
     const s = createChamber1State(1, 7);
     const again = createChamber1State(1, 7);
@@ -1499,7 +1512,7 @@ test("80 the seed makes 100 Dummies, each inside its ranges (radius 16 to 32, he
     const angles = new Set();
     const radii = new Set();
     for (const d of dummies) {
-      if (!Number.isInteger(d.radius) || d.radius < 16 || d.radius > 32) bad++;
+      if (!Number.isInteger(d.radius) || d.radius < 8 || d.radius > 16) bad++;
       if (d.health.now !== 100 || d.health.max !== 100) bad++;
       if (!Number.isInteger(d.wander.angle) || d.wander.angle < 0 || d.wander.angle > 359 || d.wander.turns !== 0) bad++;
       if (d.speed !== 2) bad++;
@@ -1511,7 +1524,7 @@ test("80 the seed makes 100 Dummies, each inside its ranges (radius 16 to 32, he
     return {
       count: dummies.length,
       first: dummies[0].id,
-      last: dummies[99].id,
+      last: dummies[dummies.length - 1].id,
       bad,
       angles: angles.size,
       radii: radii.size,
@@ -1523,7 +1536,7 @@ test("80 the seed makes 100 Dummies, each inside its ranges (radius 16 to 32, he
   assert.deepStrictEqual([result.first, result.last], ["dummy_0", "dummy_99"]);
   assert.strictEqual(result.bad, 0);
   assert.ok(result.angles > 50, "the angles are not varied: " + result.angles);
-  assert.ok(result.radii > 10, "the radii are not varied: " + result.radii);
+  assert.ok(result.radii >= 8, "the radii are not varied: " + result.radii); // 8 to 16 has 9 values
   assert.ok(result.same, "the same seed must give the same Dummies");
   assert.ok(result.differs, "another seed must give other Dummies");
 });

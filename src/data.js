@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 22;
+const DEFINITIONS_VERSION = 23;
 
 const DEFINITIONS = {
   actors: {
@@ -54,15 +54,15 @@ const DEFINITIONS = {
     // The Dummy (the user's idea, a test actor): it does not attack, it only walks in a straight line and, at every
     // collision, picks a new random angle (see createDummies and collideWanderers in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
-    // size: the user's values, 16 to 32, the same as the objects, written here on their own.
-    // weightPerRadius: guess, the same number as the objects', written here on their own. Nothing reads the
-    //   weight of a Dummy yet (it does no damage).
+    // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
+    // weightPerRadius: guess, the same number as the objects', written here on their own. The weight is the attack of
+    //   its body slam (see bodySlam below), so a Dummy hits with 800 to 1600 kg.
     // healthRange: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
     // speed: guess, 2 px/frame (120 px per second), slower than the avatar (3), so the avatar can catch one.
     //   Like the others, it goes through a final function (finalSpeed) into the Dummy, which carries it.
     dummy: {
       name: "Dummy",
-      size: { min: 16, max: 32 },
+      size: { min: 8, max: 16 },
       weightPerRadius: 100,
       healthRange: { min: 100, max: 100 },
       speed: 2,
@@ -196,11 +196,11 @@ const DEFINITIONS = {
 
     // The Dummies of Chamber 1: where the seed puts them is the real area of the game, the window of the
     // collision grid around the avatar (state.grid), and they wrap around its edges (see wrapIntoWindow).
-    // count: the user's number, 100 on the screen "to see them colliding a lot".
+    // count: the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot").
     // safeRadius: guess, the same reason as the objects' (the first dash cannot hit one): no Dummy starts closer than this to the avatar.
     // placementTries: rule, how many places the seed tries for one Dummy before giving up (the game fails loudly instead
     //   of placing it on top of something). A guess for the number.
-    dummies: { count: 100, safeRadius: 200, placementTries: 50 },
+    dummies: { count: 1000, safeRadius: 200, placementTries: 50 },
   },
 };
 

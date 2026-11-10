@@ -167,11 +167,11 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 
 ### The Dummies
 
-Tests 80 to 94 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks.
+Tests 80 to 94 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 80 | The seed makes 100 Dummies (`dummy_0` to `dummy_99`), each with a radius of 16 to 32, health 100 (`now` and `max`), speed 2, a first angle from 0 to 359, inside the window of the grid, and the same every time for the same seed (another seed gives others). | The Dummies come from the seed and their ranges, and nothing is placed by hand. |
+| 80 | The seed makes the Dummies (100 in the test game; the real game has more, for the stress test), `dummy_0` onward, each with a radius of 8 to 16, health 100 (`now` and `max`), speed 2, a first angle from 0 to 359, inside the window of the grid, and the same every time for the same seed (another seed gives others). | The Dummies come from the seed and their ranges, and nothing is placed by hand. |
 | 81 | In five seeds, no Dummy starts on top of another Dummy, on top of an object, or closer to the avatar than the safe distance. | The 100 do not all start already in collision. |
 | 82 | A Dummy with no collision walks 60 frames in a straight line at speed 2, and keeps its angle (37) and its turns (0). | The walk is a straight line. |
 | 83 | A Dummy that walks into the rock of seed 1 hurts it and is hurt by it: at impact 2 both attacks are below 1, so the minimum damage of 1 applies to each (the rock goes from 10 to 9, the Dummy from 100 to 99); it is pushed out until it just touches, its turns become 1 and its new angle is `hash(seed, number, 1, 16) % 360`. | The new angle is rolled from the seed, and a Dummy collision is a hit like the avatar's. |

@@ -231,7 +231,7 @@ The user approved this and noted that everything may change.
 - Gamepad: the browser only exposes it after a button is pressed. The left stick has a radial dead zone (`STICK_DEADZONE`).
 - A faint grid on the ground (the agent's addition): with the camera locked on the avatar, an empty background would make movement invisible. It is unrelated to the collision grid.
 - The loop in `src/main.js` runs at most one step per browser callback. On faster monitors the extra callbacks are ignored, so the game does not speed up. On slow machines it runs in slow motion.
-- The HUD is plain text in the bottom-left corner: the health and the dash (charges, the recharge count, READY). The user asked for numbers only, no visual work for now.
+- The HUD is plain text: the frames per second in the top-right corner (counted over one second in `src/main.js`, drawn by `drawFps`), and, in the bottom-left corner, the health and the dash (charges, the recharge count, READY). The user asked for numbers only, no visual work for now.
 
 ### Run history (two logs)
 

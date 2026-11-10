@@ -7,7 +7,7 @@ const AVATAR_COLOR = "#ffffff";
 const DUMMY_COLOR = "#3d8bff"; // the Dummies are blue circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
-function draw(context, state, blueprint) {
+function draw(context, state, blueprint, fps) {
   const { width, height } = context.canvas;
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
@@ -31,6 +31,17 @@ function draw(context, state, blueprint) {
 
   drawDashStatus(context, player);
   drawHealth(context, player);
+  drawFps(context, fps);
+}
+
+// The frames per second, as plain text in the top-right corner.
+function drawFps(context, fps) {
+  context.font = "24px monospace";
+  context.textAlign = "right";
+  context.textBaseline = "top";
+  context.fillStyle = AVATAR_COLOR;
+  context.fillText(`FPS ${fps}`, context.canvas.width - 24, 24);
+  context.textAlign = "left"; // the other texts are drawn from the left
 }
 
 // The health as plain text in the bottom-left corner, above the dash: "HEALTH 97/100".
