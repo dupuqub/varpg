@@ -1285,3 +1285,22 @@ test("70 below the minimum impact (1) nothing triggers: no damage, no bounce; th
   assert.deepStrictEqual(plain(result.damagedRocks), {});
   assert.strictEqual(result.vx, 0); // not sent back (a bounce of 0.5 x 0.75 would give -0.375)
 });
+
+test("71 every weight in the definitions is a whole number of kg, 0 or more", () => {
+  const weights = run(`
+    return [
+      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.weight !== undefined).map(([id, d]) => [id, d.weight]),
+      ...Object.entries(DEFINITIONS.parts).map(([id, p]) => [id, p.weight]),
+    ];
+  `);
+  assert.ok(weights.length >= 12);
+  for (const [id, weight] of weights) assert.ok(Number.isInteger(weight) && weight >= 0, id + ": " + weight);
+});
+
+test("72 a weight that is not a whole number (or is negative) stops the game when it loads", () => {
+  const brokenActor = (text) => text.replace("weight: 5000,\n      healthRange", "weight: 5000.5,\n      healthRange");
+  const brokenPart = (text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,');
+  assert.throws(() => loadGame(brokenActor), /actor type stone.*5000.5/);
+  assert.throws(() => loadGame(brokenPart), /part head.*-1/);
+  loadGame((text) => text.replace("weight: 5000,\n      healthRange", "weight: 0,\n      healthRange")); // 0 is allowed
+});

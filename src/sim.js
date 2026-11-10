@@ -69,6 +69,20 @@ function assertValidBuild(build) {
   }
 }
 
+// Fails loudly if a definition breaks a rule of the library. For now: every weight (of an actor type
+// and of a part) is a whole number of kg, zero or more (the user's rule). Zero is allowed and has a
+// meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
+// It runs once, when this file is loaded, so a bad definition stops the game before the first frame.
+function assertValidDefinitions() {
+  const check = (where, weight) => {
+    if (weight !== undefined && !(Number.isInteger(weight) && weight >= 0)) {
+      throw new Error("The weight of " + where + " must be a whole number of kg, 0 or more, and it is " + weight);
+    }
+  };
+  for (const [id, definition] of Object.entries(DEFINITIONS.actors)) check("the actor type " + id, definition.weight);
+  for (const [id, part] of Object.entries(DEFINITIONS.parts)) check("the part " + id, part.weight);
+}
+
 // The top speed of an actor in the current frame, in pixels per frame.
 // For the avatar: the sum of the speed of its parts, minus the weight it carries
 // (weight x weightSpeedPenalty). It never goes below 0 (a negative top speed would
@@ -514,3 +528,5 @@ function step(state, input, build) {
 
   state.frame += 1;
 }
+
+assertValidDefinitions();

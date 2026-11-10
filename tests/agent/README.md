@@ -140,6 +140,8 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 68 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 10. | The rule is modular: the flag decides who hits. |
 | 69 | A hit always costs at least 1: attack 1.4 against defense 3 costs 1; attack 5.6 costs 2.6; no impact costs 0. | The defense never makes the target immune. |
 | 70 | An impact below 1 (0.5, into a bounce-0.5 thing) triggers nothing: no damage, no bounce, the avatar stops. | The collision threshold. |
+| 71 | Every weight in the definitions (actor types and parts) is a whole number, 0 or more. | The rule holds for the real data. |
+| 72 | A weight of 5000.5 on the stone, or -1 on the head, makes the game fail when it loads; a weight of 0 loads. | The check is real, and weight 0 is allowed. |
 
 ### The kit of parts
 

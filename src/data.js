@@ -11,6 +11,8 @@
 //   rule    = forced by another number or by a rule of the game
 //   guess   = a placeholder, to be tuned by playing
 // The relations between numbers are collected in AGENTS.md ("Numbers and why").
+// Every weight (actor types and parts) is a whole number of kg, 0 or more: src/sim.js checks it when it loads.
+// A weight of 0 means harmless and easy to break (a branch, a box), see AGENTS.md ("Weight 0").
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
