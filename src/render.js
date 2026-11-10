@@ -5,6 +5,7 @@ const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
 const ROCK_COLOR = "#5a5f66";
+const DUMMY_COLOR = "#8a6d3b";
 
 function draw(context, state, build) {
   const { width, height } = context.canvas;
@@ -19,6 +20,7 @@ function draw(context, state, build) {
   drawReferenceGrid(context, player.position.x, player.position.y);
 
   drawRocks(context, state, player);
+  drawStaticActors(context, state, player, build);
 
   const radius = definitionOf(player).radius;
 
@@ -47,7 +49,8 @@ function drawRocks(context, state, player) {
   const left = player.position.x - width / 2;
   const top = player.position.y - height / 2;
   const padding = 64; // so a rock that is only partly on the screen is also drawn
-  const rocks = rocksInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding);
+  const rocks = rocksInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding)
+    .filter((rock) => !isRockBroken(state, rock)); // a broken rock is gone
 
   for (const rock of rocks) {
     const screenX = rock.position.x - left;
@@ -58,7 +61,39 @@ function drawRocks(context, state, player) {
     context.beginPath();
     context.arc(screenX, screenY, radius, 0, Math.PI * 2);
     context.fill();
+
+    // Only a rock that was hurt shows its health (current/maximum).
+    if (state.damagedRocks[rockKey(rock)] !== undefined) {
+      drawHealthLabel(context, screenX, screenY - radius - 8, rockHealth(state, rock), rock.maxHealth);
+    }
   }
+}
+
+// The still actors of the state (the training dummy): a circle and its health above it.
+function drawStaticActors(context, state, player, build) {
+  const { width, height } = context.canvas;
+  for (const actor of state.actors) {
+    if (actor === player || actor.move) continue;
+    const screenX = actor.position.x - player.position.x + width / 2;
+    const screenY = actor.position.y - player.position.y + height / 2;
+    const radius = definitionOf(actor).radius;
+
+    context.fillStyle = DUMMY_COLOR;
+    context.beginPath();
+    context.arc(screenX, screenY, radius, 0, Math.PI * 2);
+    context.fill();
+    drawHealthLabel(context, screenX, screenY - radius - 8, actor.health.current, finalMaxHealth(actor, build));
+  }
+}
+
+// "current/maximum" as plain text, centered above a point. One decimal, because a hit can be a fraction.
+function drawHealthLabel(context, x, y, current, maximum) {
+  context.font = "16px monospace";
+  context.textAlign = "center";
+  context.textBaseline = "bottom";
+  context.fillStyle = PLAYER_COLOR;
+  context.fillText(`${current.toFixed(1)}/${maximum}`, x, y);
+  context.textAlign = "left"; // the other texts are drawn from the left
 }
 
 // The numbers of the dash, as plain text in the bottom-left corner:

@@ -87,7 +87,7 @@ function rocksText(seed) {
   const rocks = rocksInArea(seed, -960, -540, 960, 540);
   return [
     `rocks on the first screen (seed ${seed}, x from -960 to 960, y from -540 to 540): ${rocks.length}`,
-    ...rocks.map((rock) => `  ${rock.type} at ${rock.position.x},${rock.position.y}`),
+    ...rocks.map((rock) => `  ${rock.type} at ${rock.position.x},${rock.position.y}, health ${rock.maxHealth}`),
   ].join("\n");
 }
 

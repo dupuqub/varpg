@@ -113,18 +113,29 @@ These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 
 | 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
 | 46 | The cross-check stays clean in a run that really hits the stone. | The collision must replay identically (determinism). |
 
-### Damage from rocks
+### Body slam: damage from collisions
 
-Rule: `damage = max(0, finalAttack - finalDefense)`. The attack of a collision is `impact x 2` (`impactAttack`, a guess), the impact being the part of the velocity going into the rock. The defense of the avatar is 3 for now. Health starts at 100.
+Rule: the attack of a collision is the weight of whoever hits x 0.001, and it only happens if the impact (the speed going into the other thing) is greater than 6. `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 47 | Walking head-on into a rock at 3 px/frame costs 3 health (3 x 2 - 3), on the stone, the boulder and the rubber rock alike. | The basic damage in numbers you can check by hand. The bounce changes where you go, not how much it hurts. |
-| 48 | A dash head-on costs 21 health (12 x 2 - 3). | The dash hurts much more than walking. This is the cost of hitting a rock at full speed. |
-| 49 | Pressing against a still rock for 120 frames costs nothing (impact 0.25, attack 0.5, below the defense 3). A glancing blow costs less than 1. | Standing against a rock and sliding along it must not drain health. |
-| 50 | `finalDefense` is 3, `finalAttack` of impact 5 is 10, the damage is 7, and a hit weaker than the defense is 0. | The damage function itself, and that defending never heals. |
-| 51 | Health stops at 0. | There is no death yet; health must never go below zero. |
-| 52 | The cross-check stays clean in a run where the avatar is hurt, and the health is a finite number. | Damage must replay identically (determinism). |
+| 47 | Walking into a rock at 3 px/frame hurts nobody (the impact must be above 6), and the avatar still stops. | Walking must never cost health. The bounce is a separate rule. |
+| 48 | A dash into the stone costs the avatar 2 (5 - 3) and the stone 5; into the boulder 4.8 and 5; into the rubber rock 0 (2.8 - 3 is below 0) and 5. | A hit hurts both sides, each with its own weight. |
+| 49 | A glancing blow does nothing. | Only the part of the speed going into the rock counts. |
+| 50 | The attack is weight x 0.001: 5 for the stone and for the avatar, 4.35 for a lighter avatar. An impact of exactly 6 is not a hit, 6.5 is. The damage never goes below 0. | The formula in numbers you can check by hand, including its edge. |
+| 51 | Health stops at 0. | There is no death yet. |
+| 52 | The cross-check stays clean in a run where both avatar and rock are hurt, and the state stays plain numbers. | Damage must replay identically (determinism). |
+
+### Rocks with health, and the training dummy
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 61 | A hurt rock is stored by its square (`"0,1": 5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
+| 62 | A rock with 5 left breaks when a dash hits it: no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
+| 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
+| 64 | The rock weights follow the area (5000 / 7800 / 2800). | The reason of the weights is checked, not only the values. |
+| 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 25 and the avatar from 100 to 98. The avatar bounces back and the dummy does not move. | The first combat test works from the very first dash. |
+| 66 | Walking into the dummy hurts nobody. At 0 health the dummy stays and still collides. | The dummy is a stable target for testing. |
 
 ### The kit of parts
 
@@ -143,7 +154,7 @@ The avatar's final values are the sum of the specs of the parts in its build (st
 
 ## Proof that the tests can fail
 
-While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. For the kit, ignoring the weight in `finalSpeed` made 17 tests fail (5 to 8, 16, 28 to 32, 41, 43, 47, 53 to 55 and 60), and removing the guard for a dash strength of 0 made test 57 fail. Tests that never fail would be worthless.
+While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. With the impact threshold removed, 47, 49, 50 and 66 fail; with the rock never hurt, 48, 52, 61, 62 and 65 fail. For the kit, ignoring the weight in `finalSpeed` made 17 tests fail (5 to 8, 16, 28 to 32, 41, 43, 47, 53 to 55 and 60), and removing the guard for a dash strength of 0 made test 57 fail. Tests that never fail would be worthless.
 
 ## Adding a test
 

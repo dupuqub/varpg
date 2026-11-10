@@ -14,7 +14,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 7;
+const DEFINITIONS_VERSION = 8;
 
 const DEFINITIONS = {
   actors: {
@@ -48,27 +48,56 @@ const DEFINITIONS = {
     // Rocks: static actors (no "move"). They are not stored in the state: the
     // seed and the formula in "terrain" below say where they are (see rocksInArea).
     // bounce: how much of the speed of whoever hits it comes back (0 = none, 1 = all).
-    // The bounce is not used yet, because there is no collision yet.
     // radius (guess, measured against the avatar's 16): stone = the same size, boulder = 1.25 x, rubber = 0.75 x.
     //   rule: no radius above terrain.rocks.margin (20), or rocks of neighbor squares could overlap.
     // bounce: the three reference points of the range (none, half, all), so the feel of each can be compared.
+    // weight (kg): anchor, proportional to the area (radius squared). The stone has the avatar's radius (16), so it
+    //   weighs the same as the starter build, 5000 kg (the user's first number); boulder 5000 x (20/16)^2 = 7800,
+    //   rubber 5000 x (12/16)^2 = 2800 (rounded to hundreds). A heavier rock hits harder (body slam: attack = weight x 0.001).
+    // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map. Each rock rolls its
+    //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0. Same range for all kinds for now.
     stone: {
       name: "Stone",
       radius: 16,
+      weight: 5000,
+      healthRange: { min: 10, max: 20 },
       bounce: 0,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
     },
     boulder: {
       name: "Boulder",
       radius: 20,
+      weight: 7800,
+      healthRange: { min: 10, max: 20 },
       bounce: 0.5,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
     },
     rubber: {
       name: "Rubber rock",
       radius: 12,
+      weight: 2800,
+      healthRange: { min: 10, max: 20 },
       bounce: 1,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
+    },
+
+    // The training dummy: a still actor (no "move") that receives the avatar's body slam and hits back with its
+    // own weight, to test the attack. Like a rock it does not move, but it is a real actor in the state.
+    // weight: guess, the same as the starter build and the stone, so a hit on it is as strong as a hit on a stone.
+    // maxHealth: guess, 30 = six hits of 5, so a few dashes (one every 4 s) are needed to see it fall to 0. It stays at 0.
+    // defense 0: nothing is taken off the hits. radius: the avatar's. bounce 0.5: the boulder's, half of the speed comes back.
+    dummy: {
+      name: "Training dummy",
+      maxHealth: 30,
+      weight: 5000,
+      defense: 0,
+      radius: 16,
+      bounce: 0.5,
+      initial: {
+        health: { current: 30 },
+        position: { x: 0, y: 0 },
+        cell: { x: 0, y: 0 },
+      },
     },
   },
 
@@ -80,11 +109,12 @@ const DEFINITIONS = {
     // target: a dash of 12 lasts 0.3 s: (12 - 3) / 0.5 = 18 frames. A power of two, so the speed lands exactly on the top speed.
     overspeedDecay: 0.5,
 
-    // The attack of a collision = impact (px/frame going into the rock) x this number.
-    // guess: with 2 and a defense of 3, walking head-on (3) hurts 6 - 3 = 3, a dash
-    // head-on (12) hurts 24 - 3 = 21 (a fifth of the health), and a graze or pressing
-    // against a rock (impact below 1.5) hurts 0.
-    impactAttack: 2,
+    // The body slam: what a collision does. The attack of a collision is the weight of whoever hits (kg) times
+    // attackPerKg, and a hit only happens when the impact (the part of the speed going into the other thing,
+    // in px/frame) is greater than minImpact. These are the user's first numbers, "to begin with":
+    //   attackPerKg 0.001: a weight of 5000 kg hits for 5.
+    //   minImpact 6: guess. The top speed is 3, so walking into something never hurts; a dash (12) does.
+    bodySlam: { attackPerKg: 0.001, minImpact: 6 },
 
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that

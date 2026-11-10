@@ -95,13 +95,23 @@ function finalMaxHealth(actor, build) {
   return (definitionOf(actor).maxHealth ?? 0) + fromParts(actor, build, "health");
 }
 
-// The attack of a hit. "hit" says what happened: for a collision it is
-// { impact }, the part of the velocity that went into the other thing. Like
-// finalSpeed, it is a function so parts and buffs can be added to it later (the
-// terms of the damage trace). Pure: it depends only on its arguments and the definitions.
-// For now only the impact counts, so "attacker" is not read yet (weapons will read it).
-function finalAttack(attacker, hit) {
-  return hit.impact * DEFINITIONS.constants.impactAttack;
+// The weight of an actor, in kg: for the avatar the total weight of its build, for any
+// other actor (or rock) the weight in its definition.
+function weightOf(actor, build) {
+  return isAvatar(actor) ? totalWeight(build) : definitionOf(actor).weight;
+}
+
+// The attack of a hit (the body slam). "hit" says what happened: for a collision it is
+// { impact }, the part of the velocity that went into the other thing, in px/frame.
+// The attack is the weight of the attacker times attackPerKg, but only if the impact is
+// greater than minImpact; otherwise there is no hit and the attack is 0.
+// Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
+// can be added later, as terms of the damage trace. Pure: it depends only on its
+// arguments and the definitions. The attacker can be an actor or a rock ({ type }).
+function finalAttack(attacker, hit, build) {
+  const rules = DEFINITIONS.constants.bodySlam;
+  if (hit.impact <= rules.minImpact) return 0;
+  return weightOf(attacker, build) * rules.attackPerKg;
 }
 
 // The defense of an actor: the definition plus the sum of the defense of the parts.
@@ -113,7 +123,7 @@ function finalDefense(actor, build) {
 // The damage of a hit on a target: finalAttack - finalDefense, never below 0
 // (defending never heals). The shield is not here yet.
 function damageOf(attacker, hit, target, build) {
-  return Math.max(0, finalAttack(attacker, hit) - finalDefense(target, build));
+  return Math.max(0, finalAttack(attacker, hit, build) - finalDefense(target, build));
 }
 
 // Takes damage off the health. Health stops at 0 (there is no death yet).
@@ -193,7 +203,9 @@ function hashInts(seed, x, y, salt) {
 }
 
 // The rock in one square of the world, or null if that square has none.
-// A rock is { type, position: { x, y } }, and its position is a whole number.
+// A rock is { type, position: { x, y }, square: { x, y }, maxHealth }. Its position and
+// maxHealth are whole numbers; the square says which rock it is (see damageRock), and
+// maxHealth is rolled from the seed inside the healthRange of its kind.
 function rockInSquare(seed, squareX, squareY) {
   const rules = DEFINITIONS.terrain.rocks;
 
@@ -205,7 +217,9 @@ function rockInSquare(seed, squareX, squareY) {
   if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
 
   const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
-  return { type, position: { x, y } };
+  const { min, max } = DEFINITIONS.actors[type].healthRange;
+  const maxHealth = min + (hashInts(seed, squareX, squareY, 5) % (max - min + 1));
+  return { type, position: { x, y }, square: { x: squareX, y: squareY }, maxHealth };
 }
 
 // Every rock whose center is inside the area (world coordinates), in a fixed
@@ -224,37 +238,72 @@ function rocksInArea(seed, left, top, right, bottom) {
   return rocks;
 }
 
-// ---- Collision with rocks ----
+// ---- Rocks that are hurt ----
+// A rock comes from the formula with its full health (rock.maxHealth). Only a rock that
+// was hurt is in the state: state.damagedRocks maps "squareX,squareY" to its current health.
+// A rock at 0 is broken: it is not drawn and nothing collides with it any more.
 
-// Pushes an actor out of the rocks it overlaps, and changes its velocity.
-// For each rock that overlaps (circle against circle):
-// 1. The "normal" is the direction from the rock to the actor (a unit vector).
-// 2. The actor is moved along the normal until it just touches the rock.
-// 3. The velocity is split in two: the part that goes INTO the rock (along the
-//    normal) and the part that goes ALONG it. The part going in is replaced by
-//    the bounce of the rock: -bounce x (what was going in). The part along the
-//    rock is not changed, so with bounce 0 the actor slides (it is not friction).
-//    How hard the actor hits depends on the angle: a glancing blow loses little.
-// 4. The part going in is also the impact of the hit: the actor takes the damage
-//    of damageOf (before its velocity is changed).
-// The rocks come from the formula (rocksInArea), in a fixed order. Only rocks
-// close enough to touch are looked at: the largest rock radius is the margin.
-function collideWithRocks(state, actor, build) {
-  const radius = definitionOf(actor).radius;
-  const reach = radius + DEFINITIONS.terrain.rocks.margin;
+function rockKey(rock) {
+  return rock.square.x + "," + rock.square.y;
+}
+
+function rockHealth(state, rock) {
+  return state.damagedRocks[rockKey(rock)] ?? rock.maxHealth;
+}
+
+function isRockBroken(state, rock) {
+  return rockHealth(state, rock) <= 0;
+}
+
+// Takes damage off a rock. Returns true if the rock broke in this hit.
+function damageRock(state, rock, damage) {
+  if (damage <= 0) return false;
+  const current = Math.max(0, rockHealth(state, rock) - damage);
+  state.damagedRocks[rockKey(rock)] = current;
+  return current === 0;
+}
+
+// ---- Collision with still things (rocks and static actors) ----
+
+// Everything still that the actor may touch: the rocks near it (found by the formula,
+// not the broken ones) in the fixed order of rocksInArea, then the static actors of the state.
+// Only rocks close enough to touch are looked at: the largest rock radius is the margin.
+function staticsNear(state, actor) {
+  const reach = definitionOf(actor).radius + DEFINITIONS.terrain.rocks.margin;
   const rocks = rocksInArea(
     state.seed,
     actor.position.x - reach,
     actor.position.y - reach,
     actor.position.x + reach,
     actor.position.y + reach
-  );
+  ).filter((rock) => !isRockBroken(state, rock));
+  const actors = state.actors.filter((other) => other !== actor && !other.move);
+  return [...rocks, ...actors];
+}
 
-  for (const rock of rocks) {
-    const rockDefinition = DEFINITIONS.actors[rock.type];
-    const touching = radius + rockDefinition.radius;
-    const dx = actor.position.x - rock.position.x;
-    const dy = actor.position.y - rock.position.y;
+// Pushes an actor out of the still things it overlaps, hurts both sides, and changes its velocity.
+// For each thing that overlaps (circle against circle):
+// 1. The "normal" is the direction from the thing to the actor (a unit vector).
+// 2. If the actor is going toward the thing, that is a hit, and its impact is the speed
+//    going INTO the thing (along the normal). Each side hurts the other with its own
+//    weight (damageOf, the body slam): the actor takes the damage of the thing, and the
+//    thing takes the damage of the actor. A rock keeps its health in state.damagedRocks,
+//    any other actor in its own health. A rock that breaks has no collision: nothing is
+//    pushed, and the actor keeps its speed and goes on.
+// 3. The actor is moved along the normal until it just touches the thing.
+// 4. The velocity is split in two: the part that goes INTO the thing (along the
+//    normal) and the part that goes ALONG it. The part going in is replaced by
+//    the bounce of the thing: -bounce x (what was going in). The part along the
+//    thing is not changed, so with bounce 0 the actor slides (it is not friction).
+//    How hard the actor hits depends on the angle: a glancing blow loses little.
+function collideWithStatics(state, actor, build) {
+  const radius = definitionOf(actor).radius;
+
+  for (const other of staticsNear(state, actor)) {
+    const otherDefinition = definitionOf(other);
+    const touching = radius + otherDefinition.radius;
+    const dx = actor.position.x - other.position.x;
+    const dy = actor.position.y - other.position.y;
     if (dx * dx + dy * dy >= touching * touching) continue;
 
     // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
@@ -262,18 +311,29 @@ function collideWithRocks(state, actor, build) {
     const normalX = distance === 0 ? 1 : dx / distance;
     const normalY = distance === 0 ? 0 : dy / distance;
 
+    // Negative when the actor is going toward the thing.
+    const velocity = actor.move.velocity;
+    const goingIn = velocity.x * normalX + velocity.y * normalY;
+
+    if (goingIn < 0) {
+      const hit = { impact: -goingIn };
+      if (actor.health) applyDamage(actor, damageOf(other, hit, actor, build));
+      const damage = damageOf(actor, hit, other, build);
+      const isRock = other.square !== undefined;
+      if (isRock) {
+        if (damageRock(state, other, damage)) continue; // the rock broke: no collision
+      } else if (other.health) {
+        applyDamage(other, damage);
+      }
+    }
+
     const overlap = touching - distance;
     actor.position.x += normalX * overlap;
     actor.position.y += normalY * overlap;
 
-    // Negative when the actor is going toward the rock.
-    const velocity = actor.move.velocity;
-    const goingIn = velocity.x * normalX + velocity.y * normalY;
     if (goingIn < 0) {
-      // The hit hurts the actor (if it has health), by how hard it went into the rock.
-      if (actor.health) applyDamage(actor, damageOf(rock, { impact: -goingIn }, actor, build));
-      velocity.x -= (1 + rockDefinition.bounce) * goingIn * normalX;
-      velocity.y -= (1 + rockDefinition.bounce) * goingIn * normalY;
+      velocity.x -= (1 + otherDefinition.bounce) * goingIn * normalX;
+      velocity.y -= (1 + otherDefinition.bounce) * goingIn * normalY;
     }
   }
 }
@@ -302,6 +362,10 @@ function createChamber1State(runId = 1, seed = 1) {
     // It must be a whole number.
     seed,
 
+    // The rocks that were hurt: "squareX,squareY" -> current health (see "Rocks that are hurt").
+    // Empty at the start: every rock has its full health, which comes from the seed.
+    damagedRocks: {},
+
     // Version of the definitions this state was made with (see src/data.js).
     definitionsVersion: DEFINITIONS_VERSION,
 
@@ -324,8 +388,14 @@ function createChamber1State(runId = 1, seed = 1) {
     // so a faster dash or a bigger rock needs a bigger cell. windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
-    actors: [createActor(PLAYER_ID, "player")],
+    // The avatar, and a training dummy straight up from it, 130 px from the start. A dash only hits (impact
+    // above 6) in its first 10 frames, because it slows down by 0.5 per frame from 12; in those frames it
+    // covers 104 px, so the dummy (touching at 32 px from its center) is the first thing a dash can hit, and
+    // with an impact of 7. It is also inside the safe zone (200 px, minus the largest rock radius 20 and the
+    // dummy radius 16), so no rock can overlap it.
+    actors: [createActor(PLAYER_ID, "player"), createActor("dummy_1", "dummy")],
   };
+  state.actors[1].position.y = -130;
 
   assertValidGrid(state.grid);
   return state;
@@ -402,7 +472,7 @@ function step(state, input, build) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithRocks(state, actor, build);
+    collideWithStatics(state, actor, build);
   }
 
   // 3. Cells: where every actor is, relative to the player.
