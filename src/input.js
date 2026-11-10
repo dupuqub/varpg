@@ -1,15 +1,33 @@
 // Input: reads keyboard and gamepad and returns the numbers for the current frame.
 // It knows nothing about the simulation.
 // There is no mouse and no right stick: the weapons aim by themselves, so the
-// player only moves.
+// player only moves, and dashes (Space or the gamepad A button).
 
 const STICK_DEADZONE = 0.15;
 
 const pressedKeys = new Set();
 
-window.addEventListener("keydown", (event) => pressedKeys.add(event.code));
+// A dash is an event ("pressed now"), not a state ("held"), so it is remembered
+// until the next frame reads it.
+let dashPressed = false;
+let padDashWasDown = false;
+
+function inGameView() {
+  return !document.getElementById("screen-chamber-1").hidden;
+}
+
+window.addEventListener("keydown", (event) => {
+  pressedKeys.add(event.code);
+  if (event.code === "Space" && inGameView()) {
+    event.preventDefault(); // otherwise Space would scroll the page or press a focused button
+    if (!event.repeat) dashPressed = true;
+  }
+});
 window.addEventListener("keyup", (event) => pressedKeys.delete(event.code));
-window.addEventListener("blur", () => pressedKeys.clear());
+window.addEventListener("blur", () => {
+  pressedKeys.clear();
+  dashPressed = false;
+});
 
 // Returns the vector with length 1, or null if the vector is zero.
 function normalized(vector) {
@@ -44,7 +62,7 @@ function readStick(pad, xAxis, yAxis) {
   return vector;
 }
 
-// Input for this frame: { move: { x, y } }
+// Input for this frame: { move: { x, y }, dash: true or false }
 function readInput() {
   const pad = firstGamepad();
 
@@ -52,5 +70,11 @@ function readInput() {
   const leftStick = pad ? readStick(pad, 0, 1) : null;
   const move = leftStick || keyboardMove();
 
-  return { move: { x: move.x, y: move.y } };
+  // Dash: Space (remembered since the last frame) or the A button, only on the frame it goes down.
+  const padDashIsDown = Boolean(pad && pad.buttons[0] && pad.buttons[0].pressed);
+  const dash = dashPressed || (padDashIsDown && !padDashWasDown);
+  padDashWasDown = padDashIsDown;
+  dashPressed = false;
+
+  return { move: { x: move.x, y: move.y }, dash };
 }

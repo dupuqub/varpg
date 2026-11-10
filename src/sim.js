@@ -33,6 +33,48 @@ function finalSpeed(actor) {
   return definitionOf(actor).baseSpeed;
 }
 
+// The speed an actor gets right after a dash, in pixels per frame. Like
+// finalSpeed, it is a function so mecha parts can add to it later (any part may
+// contribute to the dash strength). Pure: it depends only on the actor and the definitions.
+function finalDashSpeed(actor) {
+  return definitionOf(actor).dash.speed;
+}
+
+// An actor counts as faster than its top speed only above this margin, so the
+// tiny rounding error of a diagonal (for example 3.0000000000000004) does not.
+const OVERSPEED_TOLERANCE = 1e-9;
+
+// Charges and dash. Called every frame for an actor that has "dash".
+// 1. Recharge: while below the maximum, count frames; when enough have passed, one charge comes back.
+// 2. Dash: if wanted, there is a charge and the actor has a direction, the velocity
+//    becomes the direction (always at full length) times the dash speed, and a charge is spent.
+//    Without a direction nothing happens and the charge is kept.
+// Returns true if the actor dashed in this frame.
+function updateDash(actor, wantsDash) {
+  const rules = definitionOf(actor).dash;
+  const dash = actor.dash;
+
+  if (dash.charges < rules.maxCharges) {
+    dash.recharge += 1;
+    if (dash.recharge >= rules.rechargeFrames) {
+      dash.charges += 1;
+      dash.recharge = 0;
+    }
+  }
+
+  if (!wantsDash || dash.charges === 0) return false;
+
+  const { direction, velocity } = actor.move;
+  const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+  if (length === 0) return false;
+
+  const strength = finalDashSpeed(actor);
+  velocity.x = (direction.x / length) * strength;
+  velocity.y = (direction.y / length) * strength;
+  dash.charges -= 1;
+  return true;
+}
+
 // Moves a velocity toward a target velocity by at most "rate" (pixels per frame),
 // in a straight line, and changes the velocity in place. If the target is
 // within reach, it lands exactly on it. Only arithmetic and a square root
@@ -122,7 +164,7 @@ function isInWindow(grid, cell) {
 }
 
 // Advances the state by one frame. Changes the state in place.
-// input = { move: { x, y } }
+// input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 function step(state, input) {
   const player = state.actors.find((actor) => actor.id === PLAYER_ID);
 
@@ -133,6 +175,7 @@ function step(state, input) {
   // 2. Movement: every actor that has "move" walks, in list order.
   // The velocity does not jump to the wanted value: it speeds up toward it
   // while the actor wants to move, and slows down toward zero when it does not.
+  // Above the top speed (after a dash) it slows down by the fixed overspeedDecay instead.
   // The top speed is asked every frame, because it can change from one frame to the next.
   for (const actor of state.actors) {
     if (!actor.move) continue;
@@ -140,10 +183,25 @@ function step(state, input) {
     const definition = definitionOf(actor);
     const speed = finalSpeed(actor);
 
+    // In the frame of a dash the actor moves at the full dash speed, and the
+    // slowing down starts in the next frame.
+    let dashed = false;
+    if (actor.dash) {
+      const wantsDash = actor.id === PLAYER_ID && input.dash === true;
+      dashed = updateDash(actor, wantsDash);
+    }
+
+    const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
     const wantsToMove = direction.x !== 0 || direction.y !== 0;
+    let rate;
+    if (currentSpeed > speed + OVERSPEED_TOLERANCE) {
+      rate = DEFINITIONS.constants.overspeedDecay;
+    } else {
+      rate = wantsToMove ? definition.acceleration : definition.deceleration;
+    }
+
     const target = { x: direction.x * speed, y: direction.y * speed };
-    const rate = wantsToMove ? definition.acceleration : definition.deceleration;
-    approach(velocity, target, rate);
+    if (!dashed) approach(velocity, target, rate);
 
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;

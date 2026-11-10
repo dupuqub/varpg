@@ -75,9 +75,22 @@ node --test
 | 24 | The cross-check catches a rule that secretly depends on something outside the state (here, a hidden counter). | This is the real purpose of the cross-check: finding non-determinism. |
 | 25 | Going back to an earlier snap and playing again drops the later snaps, and the lists stay aligned. | "Going back and pressing play deletes the future" (a project decision). |
 
+### Dash
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 26 | A dash sets the velocity to the dash speed (12) in the direction held, with the same strength even if the stick is half tilted, and spends the charge. | The basic dash rule. The frame of the dash already moves at 12. |
+| 27 | A dash without a direction does nothing, and the charge is kept. | The user's choice: no wasted charge when there is nowhere to go. |
+| 28 | Holding the direction after a dash, the speed falls 0.5 per frame and reaches the top speed in 18 frames. | The decay is linear and exact (12, 11.5, 11, ... 3), easy to show in the audit. |
+| 29 | Releasing the keys after a dash, it still falls 0.5 per frame down to 3, then brakes at the normal 0.125. | The two rates take turns correctly. |
+| 30 | A charge comes back 240 frames (4 s) after it was spent, and a dash one frame before that does nothing. | The recharge timing, to the exact frame. |
+| 31 | If parts made the dash stronger (20 instead of 12), the decay stays 0.5, so the dash lasts 34 frames instead of 18. | The user's decision: parts add to the dash strength, but the decay is a constant. |
+| 32 | Running diagonally at the top speed and releasing brakes at 0.125, not 0.5. | Guards against a rounding error (3.0000000000000004) being taken as "faster than the top speed". |
+| 33 | The cross-check stays clean in a run that contains dashes. | The dash button is part of the input, so it has to replay identically. |
+
 ## Proof that the tests can fail
 
-While writing them the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of the 25 tests failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. Tests that never fail would be worthless.
+While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. Tests that never fail would be worthless.
 
 ## Adding a test
 

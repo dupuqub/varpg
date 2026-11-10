@@ -124,6 +124,7 @@ The user approved this and noted that everything may change.
 - **Movement has inertia** (the user's requirement, from his earlier project, where movement felt more dynamic): the avatar speeds up and slides to a stop. `move.direction` is what the actor *wants* (the input), and `move.velocity` (`{ x, y }`, pixels per frame) is how it is *really* moving. The velocity is **state** (it has memory), so it is stored. Every frame, in `step`, `approach(velocity, target, rate)` moves the velocity in a straight line toward `target = direction x finalSpeed(actor)`, by at most `rate`, and lands exactly on the target when it is within reach. `rate` is `acceleration` while the actor wants to move (direction not zero) and `deceleration` when it does not. Turning around passes through zero, with no jump. Only arithmetic and `Math.sqrt` (exact in every browser), so it stays deterministic. Then `position += velocity`.
 - `acceleration` and `deceleration` are fixed values in the definitions (pixels per frame, per frame). **Provisional, to be tuned by feel:** 0.25 and 0.125, which give 12 frames (0.2 s) from rest to the top speed 3 and 24 frames (0.4 s) to stop. They are powers of two on purpose, so the numbers add up exactly in floating point and the speed lands on the top speed at a round frame. Later, mecha parts (for example the legs) may change them, in a function like `finalSpeed`.
 - Diagonals: the keyboard input is normalized (0.707), not 0.8 as in the user's old project. Not confirmed by the user.
+- **Dash** (the Booster of the user's old project; keys: Space or the gamepad A button, the user's choice). Implemented in `updateDash` in `src/sim.js`. Pressing it spends one charge and sets `move.velocity` to `direction x dash speed` at once (the direction is always taken at full length, so a half-tilted stick dashes just as hard). While the actor is faster than its top speed, the speed falls by the **constant** `DEFINITIONS.constants.overspeedDecay` (0.5 pixels per frame, every frame) instead of the acceleration or deceleration, down to the top speed, and then normal movement takes over. The frame of the dash already moves at the full dash speed. With dash 12 and top speed 3 that is 18 frames (0.3 s), about 142 px. The dash strength comes from `finalDashSpeed(actor)`, a pure function like `finalSpeed`: **any mecha part may add to it** (the user's decision), but the decay is a constant, never changed by parts or buffs. So a stronger dash is also a longer dash: (strength - top speed) / decay frames. Dash without a direction does nothing and keeps the charge (agent's choice, the user did not object). The dash state is `actor.dash = { charges, recharge }` (`recharge` counts frames while below the maximum, and a charge returns at `rechargeFrames`); the maximum, the recharge time and the dash speed are in the definition: provisional values 1 charge, 240 frames (4 s), speed 12. `OVERSPEED_TOLERANCE` (1e-9) keeps the rounding error of a diagonal from counting as "faster than the top speed". The input is `{ move, dash }`, where `dash` means "pressed in this frame" and is kept in the history with the move. Later the Booster part supplies speed, charges and recharge.
 - **Top speed is dynamic** (the user's requirement): it is read again every frame. The actor has `baseSpeed` (in the definitions) and a `finalSpeed(actor)` function gives the top speed used each frame (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
 - Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
 - Gamepad: the browser only exposes it after a button is pressed. The left stick has a radial dead zone of 0.15.
@@ -184,7 +185,8 @@ Format of an actor **in the state** (provisional, it will change, for example on
   "move": {
     "direction": { "x": 0, "y": 0 },
     "velocity": { "x": 0, "y": 0 }
-  }
+  },
+  "dash": { "charges": 1, "recharge": 0 }
 }
 ```
 
@@ -194,9 +196,12 @@ Its definition, in `src/data.js` (the fixed values, and the initial state that `
 player: {
   name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3,
   acceleration: 0.25, deceleration: 0.125,
+  dash: { speed: 12, maxCharges: 1, rechargeFrames: 240 },
   initial: { health: { current: 100 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 },
-             move: { direction: { x: 0, y: 0 }, velocity: { x: 0, y: 0 } } },
+             move: { direction: { x: 0, y: 0 }, velocity: { x: 0, y: 0 } },
+             dash: { charges: 1, recharge: 0 } },
 }
+// and next to "actors", for every actor: constants: { overspeedDecay: 0.5 }
 ```
 
 Notes: `attack` and `defense` are loose numbers because they are not defined yet; there are no skills or buffs because they do not exist yet. `baseSpeed` is the top speed in pixels per frame, and the top speed used in a frame comes from `finalSpeed(actor)`. `acceleration` and `deceleration` are provisional (see "Movement and input"). `radius` exists because every actor is a circle. `cell` is recalculated every frame (see "Collision grid"). The initial `health.current` repeats `maxHealth` on purpose: the initial state is written out in full.
@@ -205,13 +210,13 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 
 - `index.html`, `style.css`: the screens.
 - `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen.
-- `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `approach`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `finalDashSpeed`, `updateDash`, `approach`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
-- `src/input.js`: reads keyboard and gamepad, and returns `{ move }` for the frame.
+- `src/input.js`: reads keyboard and gamepad, and returns `{ move, dash }` for the frame.
 - `src/render.js`: draws the state (the reference grid and the player). It never changes it.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
-- `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` has 25 tests of the rules, and `README.md` explains each one in plain words. Any other kind of test the user writes later should go in its own folder.
+- `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` has 33 tests of the rules, and `README.md` explains each one in plain words. Any other kind of test the user writes later should go in its own folder.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
 
 ## Ideas (agent proposals, not decided)
@@ -231,7 +236,7 @@ They only become decisions when the user approves.
 - Where the dynamic speed comes from (the base value and the buffs). Material from the user's old project: each mecha part has `Specs` as `[path, value]` pairs that add up (for example `Armor.Max`), `Mods` that look like multipliers, and `Weight`, which **affects the final speed**. Decided by the user: the effect must be **direct and easy to perceive**. In the old project the weight was simply subtracted from the speed. Here, a part with `-0.1` speed takes away `0.1` pixels per frame, and each term of the final speed should be shown as such in the audit. A unit label such as kg or lb is only flavor for the player. Not decided: what happens when the sum goes to zero or below (a minimum speed?). The old numbers (total weight 2.3, legs `Speed: 8`) were forces in a physics engine, so they do not convert directly and will be rescaled to pixels per frame. Not recorded in detail until the user confirms the list of parts and the formula.
 - Decisions about parts and speed (the user's, **not implemented**; the code keeps `baseSpeed: 3` until parts exist in the library). Any part may have a `Speed` spec; at first the legs give most of it and the core (the user's word; it is the torso, confirmed) a small part. The generator handles the shield. The final speed becomes a sum: the `Speed` specs of the parts, minus the weight effect (weight in kg, times a fixed constant in px/frame per kg). The first motor carries at most 6 t, as a hard limit on the build (not a speed penalty), and the "knight" build starts with about 5 t equipped. The capacity belongs to the **torso** (the user's decision): it is a real limit of the part, since it is not technologically able to carry more (wiring, structure), and it is a hard limit so weight cannot be stacked without limit. Static builds (standing still on auto attack) are **welcome**, not something to prevent: the user finds them fun and still challenging to make work. The limit only bounds how much gear a build can carry. Open: whether other parts, such as the generator, add to the capacity (the user said the generator "can give a bit"), and the numbers (weights per part, the constant, the speed specs). The agent's example numbers were illustrations only and are not recorded.
 - Tune `acceleration` and `deceleration` by feel (the user will describe what he sees in Chamber 1).
-- The Booster (a dash with charges and recharge, from the old project) needs a new input (a button) and state (charges). Not started.
+- The dash exists (see "Movement and input") with provisional values on the player. Still to do: take the dash strength, charges and recharge from the Booster part (and from any other part that adds to the strength); tune the values by feel; the Chamber 2 scripted run has no dash yet, so a dash is only tested in Node (adding one changes the final position, to be re-confirmed in the user's Chrome).
 - Move `src/data.js` to the library structure (shelves, books, addresses, version per shelf). See "The library".
 - Collision itself (not implemented yet): who tests against whom (does enemy vs enemy exist?), whether it pushes actors apart or only detects contact, and a Chamber 2 to test it.
 - Testing: decided. Automated tests run in Node with `node --test` (no npm dependencies, the user questioned npm's security) and live in `tests/agent/` (see "How to run"). What only a real browser can show goes to Chamber 2. Not covered yet: the Chamber 2 scripted run never releases the keys, so the deceleration branch is only tested in Node (the agent proposed adding idle frames to the script; the final position will change when that is done).
@@ -244,7 +249,7 @@ Open `index.html` in the browser. For now the scripts are plain (no modules), so
 
 ### Tests
 
-From the root of the repository: `node --test` (no path; Node finds the `*.test.js` files). A good run ends with `# fail 0`. The user can paste the whole output to the agent. The tests load `src/data.js`, `src/sim.js` and `src/history.js` into a `vm` context, so the browser scripts do not need to become modules. Whenever the rules change on purpose (for example the acceleration), update the numbers in the tests and in `tests/agent/README.md`.
+From the root of the repository: `node --test` (no path; Node finds the `*.test.js` files). A good run ends with `# fail 0`. The user can paste the whole output to the agent. The tests load `src/data.js`, `src/sim.js` and `src/history.js` into a `vm` context, so the browser scripts do not need to become modules. Whenever the rules change on purpose (for example the acceleration or the dash values), update the numbers in the tests and in `tests/agent/README.md`.
 
 ## How to work on this project
 

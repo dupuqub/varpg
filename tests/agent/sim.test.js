@@ -520,3 +520,135 @@ test("25 discardAfter: going back and playing again drops what came after, and t
   assert.strictEqual(result.historyIsCopy, true);
   assert.strictEqual(result.check, null);
 });
+
+// ---- Dash ----
+
+test("26 a dash makes the velocity the dash speed in the direction held (always at full strength) and spends the charge", () => {
+  const result = run(`
+    const full = createChamber1State();
+    step(full, { move: { x: 1, y: 0 }, dash: true });
+    const half = createChamber1State(); // a half-tilted analog stick
+    step(half, { move: { x: 0.5, y: 0 }, dash: true });
+    return {
+      fullVelocity: full.actors[0].move.velocity.x,
+      fullPosition: full.actors[0].position.x,
+      fullCharges: full.actors[0].dash.charges,
+      halfVelocity: half.actors[0].move.velocity.x,
+    };
+  `);
+  assert.strictEqual(result.fullVelocity, 12);
+  assert.strictEqual(result.fullPosition, 12); // the frame of the dash already moves at full dash speed
+  assert.strictEqual(result.fullCharges, 0);
+  assert.strictEqual(result.halfVelocity, 12);
+});
+
+test("27 a dash without a direction does nothing, and the charge is kept", () => {
+  const result = run(`
+    const s = createChamber1State();
+    step(s, { move: { x: 0, y: 0 }, dash: true });
+    return { velocity: s.actors[0].move.velocity.x, charges: s.actors[0].dash.charges };
+  `);
+  assert.strictEqual(result.velocity, 0);
+  assert.strictEqual(result.charges, 1);
+});
+
+test("28 after a dash, holding the direction: the speed falls 0.5 per frame down to the top speed (18 frames)", () => {
+  const log = run(`
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    const log = [];
+    step(s, { move: { x: 1, y: 0 }, dash: true });
+    log.push(v.x);
+    for (let i = 0; i < 25; i++) { step(s, { move: { x: 1, y: 0 } }); log.push(v.x); }
+    return log;
+  `);
+  assert.strictEqual(log[0], 12);
+  assert.strictEqual(log[1], 11.5);
+  assert.strictEqual(log[17], 3.5);
+  assert.strictEqual(log[18], 3); // reached the top speed 18 frames after the dash
+  assert.ok(log.slice(18).every((value) => value === 3)); // and stays there
+});
+
+test("29 after a dash, releasing the keys: it still falls 0.5 per frame down to the top speed, then brakes normally (0.125)", () => {
+  const log = run(`
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    const log = [];
+    step(s, { move: { x: 1, y: 0 }, dash: true });
+    log.push(v.x);
+    for (let i = 0; i < 60; i++) { step(s, { move: { x: 0, y: 0 } }); log.push(v.x); }
+    return log;
+  `);
+  assert.strictEqual(log[18], 3); // 0.5 per frame down to the top speed
+  assert.strictEqual(log[19], 2.875); // then the normal deceleration (0.125)
+  assert.strictEqual(log.indexOf(0), 18 + 24); // 24 more frames to stop
+});
+
+test("30 a charge comes back 240 frames after it was spent, and a dash before that does nothing", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const player = s.actors[0];
+    const hold = { move: { x: 1, y: 0 } };
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // spends the only charge
+    for (let i = 0; i < 238; i++) step(s, hold);
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // 239 frames later: no charge yet
+    const early = { charges: player.dash.charges, velocity: player.move.velocity.x };
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // 240 frames later: the charge is back, and it is used
+    const late = { charges: player.dash.charges, velocity: player.move.velocity.x };
+    return { early, late };
+  `);
+  assert.strictEqual(result.early.charges, 0);
+  assert.strictEqual(result.early.velocity, 3); // nothing happened
+  assert.strictEqual(result.late.charges, 0); // it came back and was spent in the same frame
+  assert.strictEqual(result.late.velocity, 12);
+});
+
+test("31 a stronger dash is a longer dash: the decay is a constant, parts cannot change it", () => {
+  const log = run(`
+    const original = finalDashSpeed;
+    finalDashSpeed = () => 20; // as if parts added to the dash strength
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    const log = [];
+    step(s, { move: { x: 1, y: 0 }, dash: true });
+    log.push(v.x);
+    for (let i = 0; i < 40; i++) { step(s, { move: { x: 1, y: 0 } }); log.push(v.x); }
+    finalDashSpeed = original;
+    return log;
+  `);
+  assert.strictEqual(log[0], 20);
+  assert.strictEqual(log[1], 19.5); // the same 0.5 per frame
+  assert.strictEqual(log[33], 3.5);
+  assert.strictEqual(log[34], 3); // (20 - 3) / 0.5 = 34 frames, against 18 for the dash of 12
+});
+
+test("32 running diagonally at the top speed and then releasing brakes at 0.125 (rounding is not overspeed)", () => {
+  const { before, after } = run(`
+    const s = createChamber1State();
+    const v = s.actors[0].move.velocity;
+    const c = Math.SQRT1_2;
+    for (let i = 0; i < 60; i++) step(s, { move: { x: c, y: c } });
+    const before = Math.sqrt(v.x * v.x + v.y * v.y);
+    step(s, { move: { x: 0, y: 0 } });
+    const after = Math.sqrt(v.x * v.x + v.y * v.y);
+    return { before, after };
+  `);
+  assert.ok(Math.abs(before - 3) < 1e-9);
+  assert.ok(Math.abs(before - after - 0.125) < 1e-9); // not 0.5
+});
+
+test("33 the cross-check stays clean in a run with dashes", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const h = createHistory(s);
+    for (let i = 0; i < 400; i++) {
+      const angle = i * 0.21;
+      const input = { move: { x: Math.cos(angle), y: Math.sin(angle) }, dash: i % 70 === 5 };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    return { check: crossCheck(h), dashes: h.inputs.filter((input) => input && input.dash).length };
+  `);
+  assert.strictEqual(result.check, null);
+  assert.ok(result.dashes >= 1); // the run really had dashes
+});
