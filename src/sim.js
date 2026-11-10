@@ -648,7 +648,7 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
 // The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
 // the Dummies after it in the list (so each pair is looked at once, in the same order as testing every pair).
 // The Dummies are found by the collision grid: each one is put in its cell (relative to the avatar, like
-// actor.cell), and a Dummy is only tested against the Dummies of its own cell and of the eight around it. That is
+// actor.cell), and a Dummy is only tested against the avatar and the Dummies of its own cell and of the eight around it. That is
 // enough when two Dummies that touch are always in the same or in neighboring cells, which is what the rule of the
 // cellSize says (see state.grid in createChamber1State). The cells are the ones at the start of this step, so a
 // Dummy pushed by an earlier pair is still looked up where it was.
@@ -673,7 +673,10 @@ function collideDummies(state, lastContacts, blueprint) {
     for (const object of objectsNear(state, dummy)) {
       touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
     }
-    touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+    // The avatar is in the center cell (the cells are relative to it), so it only touches the Dummies of the nine cells around it.
+    if (Math.abs(cellOf[i].x) <= 1 && Math.abs(cellOf[i].y) <= 1) {
+      touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+    }
 
     const later = [];
     for (let dy = -1; dy <= 1; dy++) {
@@ -730,9 +733,13 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 
     // Collision grid. These are dev settings. They live in the state so a run
     // can be reproduced exactly, and so they can be changed in one place.
-    // - cellSize: side of a cell, in pixels. It must be at least
-    //   2 x (largest radius + largest speed). Then two actors that can touch
-    //   in one frame are always in the same cell or in adjacent cells.
+    // - cellSize: side of a cell, in pixels. Two actors that touch must always be in the same cell or in adjacent
+    //   cells. That asks for a cell of at least:
+    //   - the sum of the two largest radii, if the cells are computed AFTER the movement of the frame (what
+    //     collideDummies does): the speed does not matter;
+    //   - 2 x (largest radius + largest speed), if the cells stored at the end of the last frame (actor.cell) are used,
+    //     because both actors moved since. Measured with `node tests/agent/benchmark-grid.js pair`.
+    //   Stored cells also break at the seam: an actor that wraps jumps across the window, and its stored cell is wrong.
     // - windowWidth, windowHeight: cells across and down in the window around
     //   the player. Each is odd, 3 or more. The player is in the center cell.
     //   Collision is only tested inside this window, so it must cover all the
@@ -743,9 +750,10 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     //   How far outside the screen actors can be is not decided yet (it depends
     //   on where they spawn). A bigger window costs almost nothing: what costs
     //   is the number of actors tested, not the area.
-    // cellSize 64: the old rule, 2 x (largest radius 20 + largest speed 12), was exactly at the limit. It is NOT met any
-    // more: rocks and Shrooms go up to a radius of 32, so the rule asks for 2 x (32 + 12) = 88. Nothing reads the cells
-    // for collision yet, so nothing breaks, but the value must change before something does (the user decides).
+    // cellSize 64: guess, "an imaginary number that looks reasonable" (the user's words); the benchmark found it holds
+    //   for the Dummies (the largest two radii add up to exactly 64) with cells computed after the movement. It does
+    //   NOT hold with stored cells, nor will it for things that move faster than 2 px/frame (a dash) between two
+    //   large radii: that case needs 88. The objects and the avatar do not use the grid yet (the user decides when).
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 

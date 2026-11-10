@@ -190,8 +190,15 @@ Tests 80 to 95 (most run in a game without objects, so only the collisions the t
 
 ### Benchmark of the grid (not a test)
 
-`node tests/agent/benchmark-grid.js [frames]` plays the same run (the real number of Dummies, the avatar still) with several cell sizes and prints, for each, the ms per step, the pairs tested per step, and the first frame that differs from testing every pair. The window keeps the same size in pixels, so only the cells change. The numbers depend on the machine. A cell below twice the largest radius of a Dummy loses collisions (it shows as "differs at frame 1"); from there up to about 100 px the result is identical and the cost is about the same; at 300 px it is close to testing every pair.
+`node tests/agent/benchmark-grid.js still|dash [frames]` and `node tests/agent/benchmark-grid.js pair`. In all of them the run played with the grid is compared, frame by frame and as the whole state, with the same run played by testing every pair of Dummies. The times depend on the machine.
 
+- **still:** the real number of Dummies, the avatar still, several cell sizes in a window of the same size in pixels. Prints ms per step, pairs tested per step and whether the result is identical. A cell below the sum of the two largest radii loses collisions; from there up to about twice that the result is identical and the cost about the same; a much larger cell is close to testing every pair.
+- **dash:** Dummies with radii up to the objects' maximum, and an avatar that dashes all the time. Compares a cell of 64 and of 88, each with cells computed after the movement ("fresh", what the game does) and with the cells stored at the end of the last frame ("stale"), without and with the wrap of the window. Result on the run played: fresh is identical in both sizes; stale is identical without wrap in both sizes, but differs at the first Dummy that wraps (the stored cell is from the other side of the window).
+- **pair:** the worst case built on purpose: two Dummies of the largest radius that do not touch before the step and touch after it, placed so that the stored cells are two apart. With the cell of 64, stored cells **miss** the collision both at the Dummies' speed and at the speed of a dash; fresh cells find it. With the cell of 88 both ways find it.
+
+What it shows: the random run never hit the worst alignment, only the built case proves the limit. The rule of 2 x (radius + speed) is exact for stored cells and larger than needed for fresh ones.
+
+## Proof that the tests can fail
 
 While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. With the impact threshold removed, 47, 49, 50 and 66 fail; with the rock never hurt, 48, 52, 61, 62 and 65 fail. For the kit, ignoring the weight in `finalSpeed` made 17 tests fail (5 to 8, 16, 28 to 32, 41, 43, 47, 53 to 55 and 60), and removing the guard for a dash strength of 0 made test 57 fail. Tests that never fail would be worthless.
 
