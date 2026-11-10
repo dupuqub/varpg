@@ -4,8 +4,6 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
-const WINDOW_LINE_COLOR = "rgba(201, 162, 74, 0.5)";
-const WINDOW_CENTER_COLOR = "rgba(201, 162, 74, 0.15)";
 
 function draw(context, state) {
   const { width, height } = context.canvas;
@@ -19,15 +17,12 @@ function draw(context, state) {
   // a reference for that. It has nothing to do with the collision grid.
   drawReferenceGrid(context, player.position.x, player.position.y);
 
-  drawCollisionWindow(context, state.grid);
-
   const radius = definitionOf(player).radius;
 
   context.fillStyle = PLAYER_COLOR;
   context.beginPath();
   context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
-
 }
 
 // Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.
@@ -54,40 +49,5 @@ function drawReferenceGrid(context, cameraX, cameraY) {
     context.lineTo(width, screenY);
   }
 
-  context.stroke();
-}
-
-// The collision window: the cells around the player where collision is tested.
-// The player is at the center of the center cell, so the window stays fixed on
-// screen while the world moves under it.
-function drawCollisionWindow(context, grid) {
-  const centerX = context.canvas.width / 2;
-  const centerY = context.canvas.height / 2;
-  const half = grid.cellSize / 2;
-  const reachX = (grid.windowWidth - 1) / 2;
-  const reachY = (grid.windowHeight - 1) / 2;
-
-  const left = Math.round(centerX - half - reachX * grid.cellSize);
-  const top = Math.round(centerY - half - reachY * grid.cellSize);
-  const width = grid.windowWidth * grid.cellSize;
-  const height = grid.windowHeight * grid.cellSize;
-
-  // Tint the center cell (the one the player is in).
-  context.fillStyle = WINDOW_CENTER_COLOR;
-  context.fillRect(centerX - half, centerY - half, grid.cellSize, grid.cellSize);
-
-  context.strokeStyle = WINDOW_LINE_COLOR;
-  context.lineWidth = 1;
-  context.beginPath();
-  for (let i = 0; i <= grid.windowWidth; i++) {
-    const offset = Math.round(i * grid.cellSize) + 0.5;
-    context.moveTo(left + offset, top);
-    context.lineTo(left + offset, top + height);
-  }
-  for (let i = 0; i <= grid.windowHeight; i++) {
-    const offset = Math.round(i * grid.cellSize) + 0.5;
-    context.moveTo(left, top + offset);
-    context.lineTo(left + width, top + offset);
-  }
   context.stroke();
 }

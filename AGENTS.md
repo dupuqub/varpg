@@ -153,7 +153,7 @@ The user approved this and noted that everything may change.
   3. Nobody crosses the seam: actors on opposite edges are not neighbors, so collision across the seam is ignored. It is invisible, because the seam is off screen (at least 992 px beyond the screen edge across, and 580 px up and down).
   4. The ground (the reference grid) is infinite. Only the population is bounded.
   5. To see the limits of the universe, a debug zoom-out is needed: at scale 0.5 the 1920 x 1080 canvas shows 3840 x 2160, almost the whole window. Drawing every cell of the window at scale 1 only produces visual noise.
-- Collision itself is not implemented yet. Chamber 1 draws the window as an amber overlay fixed on the player. The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated.
+- Collision itself is not implemented yet. The window is not drawn any more (the user no longer wants to see the collision boxes; the amber overlay was removed from `src/render.js`). The faint grid that scrolls with the world is only a reference for seeing movement, and is unrelated to the collision grid. If the window has to be seen again, a debug zoom-out is the better way (see the consequences above).
 
 ### Damage formula (initial version, no buffs)
 
@@ -208,7 +208,7 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 - `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `approach`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard and gamepad, and returns `{ move }` for the frame.
-- `src/render.js`: draws the state (reference grid, collision window overlay and the player). It never changes it.
+- `src/render.js`: draws the state (the reference grid and the player). It never changes it.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.
