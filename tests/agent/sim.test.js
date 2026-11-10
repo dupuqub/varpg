@@ -752,3 +752,120 @@ test("40 the state keeps only the seed, not the rocks, and every rock kind is va
     assert.ok(kind.fits, kind.kind + ": a radius above the margin could make rocks overlap");
   }
 });
+
+// ---- Collision with rocks ----
+// These tests use rocks of seed 1 (see test 39 for the list): a stone at 159,444
+// (radius 16, bounce 0), a boulder at 172,-435 (radius 20, bounce 0.5) and a rubber
+// rock at 711,-63 (radius 12, bounce 1). The avatar has radius 16.
+
+// Puts the avatar at (x, y) with the velocity (vx, vy), holds the direction, and runs one step.
+function hitOnce(x, y, vx, vy, direction, input = {}) {
+  return run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = ${x}; p.position.y = ${y};
+    p.move.velocity.x = ${vx}; p.move.velocity.y = ${vy};
+    step(s, { move: { x: ${direction.x}, y: ${direction.y} }, dash: ${input.dash === true} });
+    return { x: p.position.x, y: p.position.y, vx: p.move.velocity.x, vy: p.move.velocity.y };
+  `);
+}
+
+test("41 head-on at 3 px/frame: the stone stops you, the boulder sends you back at 1.5, the rubber rock at 3", () => {
+  const right = { x: 1, y: 0 };
+  const stone = hitOnce(127, 444, 3, 0, right); // would end at 130, 3 px inside the stone
+  const boulder = hitOnce(145, -435, 3, 0, right); // would end at 148, 12 px inside the boulder
+  const rubber = hitOnce(681, -63, 3, 0, right); // would end at 684, 1 px inside the rubber rock
+  assert.strictEqual(stone.vx, 0); // bounce 0: -0 x 3
+  assert.strictEqual(boulder.vx, -1.5); // bounce 0.5: -0.5 x 3
+  assert.strictEqual(rubber.vx, -3); // bounce 1: -1 x 3
+});
+
+test("42 the avatar is pushed out until it just touches the rock", () => {
+  const right = { x: 1, y: 0 };
+  assert.strictEqual(hitOnce(127, 444, 3, 0, right).x, 127); // 159 - (16 + 16)
+  assert.strictEqual(hitOnce(145, -435, 3, 0, right).x, 136); // 172 - (16 + 20)
+  assert.strictEqual(hitOnce(681, -63, 3, 0, right).x, 683); // 711 - (16 + 12)
+});
+
+test("43 the angle matters: only the part going into the rock is replaced, the part along it is kept", () => {
+  const right = { x: 1, y: 0 };
+  // A glancing blow on the stone (159,444). The avatar goes right and ends up above-left of it.
+  const hit = hitOnce(140, 420, 3, 0, right);
+  const result = run(`
+    const nx = ${hit.x} - 159;
+    const ny = ${hit.y} - 444;
+    const length = Math.sqrt(nx * nx + ny * ny);
+    const n = { x: nx / length, y: ny / length };
+    const before = { x: 3, y: 0 };
+    const tangent = { x: -n.y, y: n.x };
+    const along = (v) => v.x * tangent.x + v.y * tangent.y;
+    const into = (v) => v.x * n.x + v.y * n.y;
+    const after = { x: ${hit.vx}, y: ${hit.vy} };
+    return {
+      touching: length, // must be 32
+      intoAfter: into(after),
+      alongBefore: along(before),
+      alongAfter: along(after),
+      speedBefore: 3,
+      speedAfter: Math.sqrt(after.x * after.x + after.y * after.y),
+    };
+  `);
+  assert.ok(Math.abs(result.touching - 32) < 1e-9);
+  assert.ok(Math.abs(result.intoAfter) < 1e-9); // bounce 0: nothing goes into the rock any more
+  assert.ok(Math.abs(result.alongAfter - result.alongBefore) < 1e-9); // the sliding part is kept
+  assert.ok(result.speedAfter > 0.8 * result.speedBefore); // a glancing blow loses little (head-on loses everything)
+  assert.ok(result.speedAfter < result.speedBefore);
+});
+
+test("44 a dash into a stone stops, a dash into a rubber rock comes back at the full dash speed", () => {
+  const right = { x: 1, y: 0 };
+  const intoStone = hitOnce(125, 444, 0, 0, right, { dash: true }); // dash: 12 px, ends 10 px inside
+  const intoRubber = hitOnce(690, -63, 0, 0, right, { dash: true });
+  assert.strictEqual(intoStone.vx, 0);
+  assert.strictEqual(intoStone.x, 127);
+  assert.strictEqual(intoRubber.vx, -12);
+});
+
+test("45 over a long run with dashes the avatar is never inside a rock", () => {
+  const worst = run(`
+    let worst = Infinity; // the smallest (distance - touching distance) seen
+    for (const seed of [1, 2, 3]) {
+      const s = createChamber1State(1, seed);
+      const p = s.actors[0];
+      const directions = [[1, 0], [0.7071067811865476, 0.7071067811865476], [0, 1], [-0.7071067811865476, 0.7071067811865476], [-1, 0], [-0.7071067811865476, -0.7071067811865476], [0, -1], [0.7071067811865476, -0.7071067811865476]];
+      for (let i = 0; i < 6000; i++) {
+        const d = directions[Math.floor(i / 45) % 8];
+        step(s, { move: { x: d[0], y: d[1] }, dash: i % 100 === 50 });
+        for (const rock of rocksInArea(seed, p.position.x - 100, p.position.y - 100, p.position.x + 100, p.position.y + 100)) {
+          const dx = p.position.x - rock.position.x;
+          const dy = p.position.y - rock.position.y;
+          const gap = Math.sqrt(dx * dx + dy * dy) - (16 + DEFINITIONS.actors[rock.type].radius);
+          if (gap < worst) worst = gap;
+        }
+      }
+    }
+    return worst;
+  `);
+  assert.ok(worst > -1e-9, "the avatar went inside a rock by " + -worst + " px");
+});
+
+test("46 the cross-check stays clean in a run that hits rocks", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = 100; p.position.y = 444; // next to the stone at 159,444
+    const h = createHistory(s);
+    let touchingFrames = 0;
+    for (let i = 0; i < 300; i++) {
+      const input = { move: { x: i % 60 < 40 ? 1 : -0.5, y: i % 90 < 30 ? 0.3 : -0.2 }, dash: i % 80 === 10 };
+      step(s, input);
+      recordFrame(h, s, input);
+      const dx = p.position.x - 159;
+      const dy = p.position.y - 444;
+      if (Math.abs(Math.sqrt(dx * dx + dy * dy) - 32) < 1e-9) touchingFrames++;
+    }
+    return { check: crossCheck(h), touchingFrames };
+  `);
+  assert.ok(result.touchingFrames > 0); // the run really hit the stone
+  assert.strictEqual(result.check, null);
+});

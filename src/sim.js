@@ -142,6 +142,56 @@ function rocksInArea(seed, left, top, right, bottom) {
   return rocks;
 }
 
+// ---- Collision with rocks ----
+
+// Pushes an actor out of the rocks it overlaps, and changes its velocity.
+// For each rock that overlaps (circle against circle):
+// 1. The "normal" is the direction from the rock to the actor (a unit vector).
+// 2. The actor is moved along the normal until it just touches the rock.
+// 3. The velocity is split in two: the part that goes INTO the rock (along the
+//    normal) and the part that goes ALONG it. The part going in is replaced by
+//    the bounce of the rock: -bounce x (what was going in). The part along the
+//    rock is not changed, so with bounce 0 the actor slides (it is not friction).
+//    How hard the actor hits depends on the angle: a glancing blow loses little.
+// The rocks come from the formula (rocksInArea), in a fixed order. Only rocks
+// close enough to touch are looked at: the largest rock radius is the margin.
+function collideWithRocks(state, actor) {
+  const radius = definitionOf(actor).radius;
+  const reach = radius + DEFINITIONS.terrain.rocks.margin;
+  const rocks = rocksInArea(
+    state.seed,
+    actor.position.x - reach,
+    actor.position.y - reach,
+    actor.position.x + reach,
+    actor.position.y + reach
+  );
+
+  for (const rock of rocks) {
+    const rockDefinition = DEFINITIONS.actors[rock.type];
+    const touching = radius + rockDefinition.radius;
+    const dx = actor.position.x - rock.position.x;
+    const dy = actor.position.y - rock.position.y;
+    if (dx * dx + dy * dy >= touching * touching) continue;
+
+    // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const normalX = distance === 0 ? 1 : dx / distance;
+    const normalY = distance === 0 ? 0 : dy / distance;
+
+    const overlap = touching - distance;
+    actor.position.x += normalX * overlap;
+    actor.position.y += normalY * overlap;
+
+    // Negative when the actor is going toward the rock.
+    const velocity = actor.move.velocity;
+    const goingIn = velocity.x * normalX + velocity.y * normalY;
+    if (goingIn < 0) {
+      velocity.x -= (1 + rockDefinition.bounce) * goingIn * normalX;
+      velocity.y -= (1 + rockDefinition.bounce) * goingIn * normalY;
+    }
+  }
+}
+
 // What a run has besides its state: an id, and the build (what the player
 // chose before the run). The build is an input of the run, not a state, so it
 // is not inside the snaps. It is empty on purpose: nothing reads it yet.
@@ -259,6 +309,8 @@ function step(state, input) {
 
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
+
+    collideWithRocks(state, actor);
   }
 
   // 3. Cells: where every actor is, relative to the player.

@@ -100,9 +100,22 @@ node --test
 | 39 | **Known answer:** seed 1 gives 12 rocks on the first screen, the first a boulder at 172,-435 and the last a boulder at 854,418. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the ROCKS lines of DATA in Chamber 2). |
 | 40 | The state keeps only the seed (not the rocks), and every rock kind is a valid static actor with a bounce from 0 to 1 and a radius that fits the margin. | The state stays small, and the library data cannot break the formula by accident. |
 
+### Collision with rocks
+
+These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 0), a boulder at 172,-435 (bounce 0.5) and a rubber rock at 711,-63 (bounce 1). The avatar has radius 16.
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 41 | Head-on at 3 px/frame: the stone stops you (0), the boulder sends you back at 1.5, the rubber rock at 3. | The bounce rule, in numbers you can check by hand: `-bounce x speed`. |
+| 42 | After the hit the avatar is exactly touching the rock (for example 127 = 159 - (16 + 16)). | The push-out puts it just outside, not inside and not far away. |
+| 43 | Glancing blow on the stone: the part of the velocity going into the rock is 0, the part along the rock is unchanged, and the speed kept is more than 80%. | The angle matters and bounce 0 slides, it is not friction (the user's definition). |
+| 44 | A dash into the stone stops (0). A dash into the rubber rock comes back at -12, the full dash speed. | The dash and the collision work together. |
+| 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
+| 46 | The cross-check stays clean in a run that really hits the stone. | The collision must replay identically (determinism). |
+
 ## Proof that the tests can fail
 
-While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. Tests that never fail would be worthless.
+While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. Tests that never fail would be worthless.
 
 ## Adding a test
 
