@@ -23,6 +23,23 @@ function draw(context, state) {
   context.beginPath();
   context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
+
+  drawDashStatus(context, player);
+}
+
+// The numbers of the dash, as plain text in the bottom-left corner:
+// "DASH 1/1  READY", or "DASH 0/1  57/240" while a charge is coming back
+// (frames since it started, out of the frames it needs).
+function drawDashStatus(context, player) {
+  const rules = definitionOf(player).dash;
+  const { charges, recharge } = player.dash;
+  const status = charges < rules.maxCharges ? `${recharge}/${rules.rechargeFrames}` : "";
+  const ready = charges > 0 ? "READY" : "";
+
+  context.font = "24px monospace";
+  context.textBaseline = "bottom";
+  context.fillStyle = charges > 0 ? PLAYER_COLOR : "#888888";
+  context.fillText(`DASH ${charges}/${rules.maxCharges}  ${ready}${status}`, 24, context.canvas.height - 24);
 }
 
 // Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.

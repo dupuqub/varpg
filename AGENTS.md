@@ -213,7 +213,7 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 - `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `finalDashSpeed`, `updateDash`, `approach`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard and gamepad, and returns `{ move, dash }` for the frame.
-- `src/render.js`: draws the state (the reference grid and the player). It never changes it.
+- `src/render.js`: draws the state (the reference grid, the player and, in the bottom-left corner, the dash numbers as plain text: charges and the recharge count in frames, with READY when a charge is available). It never changes it. The user asked for the numbers only, no visual work for now.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
 - `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` has 33 tests of the rules, and `README.md` explains each one in plain words. Any other kind of test the user writes later should go in its own folder.
