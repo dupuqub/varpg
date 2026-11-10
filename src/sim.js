@@ -40,6 +40,33 @@ function finalDashSpeed(actor) {
   return definitionOf(actor).dash.speed;
 }
 
+// The attack of a hit. "hit" says what happened: for a collision it is
+// { impact }, the part of the velocity that went into the other thing. Like
+// finalSpeed, it is a function so parts and buffs can be added to it later (the
+// terms of the damage trace). Pure: it depends only on its arguments and the definitions.
+// For now only the impact counts, so "attacker" is not read yet (weapons will read it).
+function finalAttack(attacker, hit) {
+  return hit.impact * DEFINITIONS.constants.impactAttack;
+}
+
+// The defense of an actor. Later it will be the sum of the Defense specs of its
+// parts; until the parts exist it is the defense of the definition.
+// Pure: it depends only on the actor and the definitions.
+function finalDefense(actor) {
+  return definitionOf(actor).defense;
+}
+
+// The damage of a hit on a target: finalAttack - finalDefense, never below 0
+// (defending never heals). The shield is not here yet.
+function damageOf(attacker, hit, target) {
+  return Math.max(0, finalAttack(attacker, hit) - finalDefense(target));
+}
+
+// Takes damage off the health. Health stops at 0 (there is no death yet).
+function applyDamage(actor, damage) {
+  actor.health.current = Math.max(0, actor.health.current - damage);
+}
+
 // An actor counts as faster than its top speed only above this margin, so the
 // tiny rounding error of a diagonal (for example 3.0000000000000004) does not.
 const OVERSPEED_TOLERANCE = 1e-9;
@@ -153,6 +180,8 @@ function rocksInArea(seed, left, top, right, bottom) {
 //    the bounce of the rock: -bounce x (what was going in). The part along the
 //    rock is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
+// 4. The part going in is also the impact of the hit: the actor takes the damage
+//    of damageOf (before its velocity is changed).
 // The rocks come from the formula (rocksInArea), in a fixed order. Only rocks
 // close enough to touch are looked at: the largest rock radius is the margin.
 function collideWithRocks(state, actor) {
@@ -186,6 +215,8 @@ function collideWithRocks(state, actor) {
     const velocity = actor.move.velocity;
     const goingIn = velocity.x * normalX + velocity.y * normalY;
     if (goingIn < 0) {
+      // The hit hurts the actor (if it has health), by how hard it went into the rock.
+      if (actor.health) applyDamage(actor, damageOf(rock, { impact: -goingIn }, actor));
       velocity.x -= (1 + rockDefinition.bounce) * goingIn * normalX;
       velocity.y -= (1 + rockDefinition.bounce) * goingIn * normalY;
     }

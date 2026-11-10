@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Nothing here tests collision or combat, because they are not implemented yet.
+- Combat is only the collision with rocks so far (tests 47 to 52). There are no enemies, weapons or shield yet.
 
 ## The tests, one by one
 
@@ -113,9 +113,22 @@ These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 
 | 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
 | 46 | The cross-check stays clean in a run that really hits the stone. | The collision must replay identically (determinism). |
 
+### Damage from rocks
+
+Rule: `damage = max(0, finalAttack - finalDefense)`. The attack of a collision is `impact x 2` (`impactAttack`, a guess), the impact being the part of the velocity going into the rock. The defense of the avatar is 3 for now. Health starts at 100.
+
+| # | What it checks | Why it matters |
+|---|---|---|
+| 47 | Walking head-on into a rock at 3 px/frame costs 3 health (3 x 2 - 3), on the stone, the boulder and the rubber rock alike. | The basic damage in numbers you can check by hand. The bounce changes where you go, not how much it hurts. |
+| 48 | A dash head-on costs 21 health (12 x 2 - 3). | The dash hurts much more than walking. This is the cost of hitting a rock at full speed. |
+| 49 | Pressing against a still rock for 120 frames costs nothing (impact 0.25, attack 0.5, below the defense 3). A glancing blow costs less than 1. | Standing against a rock and sliding along it must not drain health. |
+| 50 | `finalDefense` is 3, `finalAttack` of impact 5 is 10, the damage is 7, and a hit weaker than the defense is 0. | The damage function itself, and that defending never heals. |
+| 51 | Health stops at 0. | There is no death yet; health must never go below zero. |
+| 52 | The cross-check stays clean in a run where the avatar is hurt, and the health is a finite number. | Damage must replay identically (determinism). |
+
 ## Proof that the tests can fail
 
-While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. Tests that never fail would be worthless.
+While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. Tests that never fail would be worthless.
 
 ## Adding a test
 

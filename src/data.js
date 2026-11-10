@@ -14,7 +14,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 5;
+const DEFINITIONS_VERSION = 6;
 
 const DEFINITIONS = {
   actors: {
@@ -81,6 +81,12 @@ const DEFINITIONS = {
     // not decay slower, so a stronger dash is also a longer dash.
     // target: a dash of 12 lasts 0.3 s: (12 - 3) / 0.5 = 18 frames. A power of two, so the speed lands exactly on the top speed.
     overspeedDecay: 0.5,
+
+    // The attack of a collision = impact (px/frame going into the rock) x this number.
+    // guess: with 2 and a defense of 3, walking head-on (3) hurts 6 - 3 = 3, a dash
+    // head-on (12) hurts 24 - 3 = 21 (a fifth of the health), and a graze or pressing
+    // against a rock (impact below 1.5) hurts 0.
+    impactAttack: 2,
   },
 
   // How the ground is filled (provisional values, to be tuned).

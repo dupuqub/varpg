@@ -28,6 +28,17 @@ function draw(context, state) {
   context.fill();
 
   drawDashStatus(context, player);
+  drawHealth(context, player);
+}
+
+// The health as plain text in the bottom-left corner, above the dash: "HEALTH 97/100".
+// One decimal, because a hit can be a fraction.
+function drawHealth(context, player) {
+  const maxHealth = definitionOf(player).maxHealth;
+  context.font = "24px monospace";
+  context.textBaseline = "bottom";
+  context.fillStyle = PLAYER_COLOR;
+  context.fillText(`HEALTH ${player.health.current.toFixed(1)}/${maxHealth}`, 24, context.canvas.height - 56);
 }
 
 // The rocks that fall on the screen, as gray circles.

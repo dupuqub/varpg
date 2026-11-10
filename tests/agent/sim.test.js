@@ -869,3 +869,87 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
   assert.ok(result.touchingFrames > 0); // the run really hit the stone
   assert.strictEqual(result.check, null);
 });
+
+// ---- Damage from rocks ----
+// The rule (src/sim.js): damage = max(0, finalAttack - finalDefense), where the attack of a
+// collision is impact x impactAttack (2) and the defense of the avatar is 3.
+// Health of the avatar at the start: 100.
+
+function healthAfterHit(x, y, vx, vy, direction, input = {}) {
+  return run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = ${x}; p.position.y = ${y};
+    p.move.velocity.x = ${vx}; p.move.velocity.y = ${vy};
+    step(s, { move: { x: ${direction.x}, y: ${direction.y} }, dash: ${input.dash === true} });
+    return p.health.current;
+  `);
+}
+
+test("47 walking head-on into a rock at 3 px/frame costs 3 health: 3 x 2 - 3 = 3 (the bounce does not change the damage)", () => {
+  const right = { x: 1, y: 0 };
+  assert.strictEqual(healthAfterHit(127, 444, 3, 0, right), 97); // stone
+  assert.strictEqual(healthAfterHit(145, -435, 3, 0, right), 97); // boulder
+  assert.strictEqual(healthAfterHit(681, -63, 3, 0, right), 97); // rubber rock
+});
+
+test("48 a dash head-on into a rock costs 21 health: 12 x 2 - 3 = 21", () => {
+  const right = { x: 1, y: 0 };
+  assert.strictEqual(healthAfterHit(125, 444, 0, 0, right, { dash: true }), 79); // stone
+  assert.strictEqual(healthAfterHit(690, -63, 0, 0, right, { dash: true }), 79); // rubber rock
+});
+
+test("49 pressing against a still rock does no damage, and a graze does almost none", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = 127; p.position.y = 444; // touching the stone at 159,444
+    for (let i = 0; i < 120; i++) step(s, { move: { x: 1, y: 0 } });
+    return p.health.current;
+  `);
+  assert.strictEqual(result, 100); // impact 0.25 x 2 = 0.5, below the defense 3
+  const graze = healthAfterHit(140, 420, 3, 0, { x: 1, y: 0 }); // the glancing blow of test 43
+  assert.ok(graze > 99 && graze < 100, "graze: " + graze); // impact about 1.66: 3.33 - 3 = 0.33
+});
+
+test("50 the damage function: attack minus defense, never below 0 (it never heals)", () => {
+  const result = run(`
+    const p = createActor("p", "player");
+    const rock = { type: "stone", position: { x: 0, y: 0 } };
+    return {
+      defense: finalDefense(p),
+      attack: finalAttack(rock, { impact: 5 }),
+      damage: damageOf(rock, { impact: 5 }, p),
+      weak: damageOf(rock, { impact: 1 }, p),
+    };
+  `);
+  assert.deepStrictEqual(plain(result), { defense: 3, attack: 10, damage: 7, weak: 0 });
+});
+
+test("51 health stops at 0 (there is no death yet)", () => {
+  const health = run(`
+    const p = createActor("p", "player");
+    applyDamage(p, 60);
+    applyDamage(p, 60);
+    return p.health.current;
+  `);
+  assert.strictEqual(health, 0);
+});
+
+test("52 the cross-check stays clean in a run where the avatar is hurt, and the health is plain numbers", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const p = s.actors[0];
+    p.position.x = 100; p.position.y = 444; // next to the stone at 159,444
+    const h = createHistory(s);
+    for (let i = 0; i < 300; i++) {
+      const input = { move: { x: i % 60 < 40 ? 1 : -0.5, y: i % 90 < 30 ? 0.3 : -0.2 }, dash: i % 80 === 10 };
+      step(s, input);
+      recordFrame(h, s, input);
+    }
+    return { check: crossCheck(h), health: p.health.current };
+  `);
+  assert.ok(result.health < 100, "the run never hurt the avatar");
+  assert.ok(Number.isFinite(result.health));
+  assert.strictEqual(result.check, null);
+});
