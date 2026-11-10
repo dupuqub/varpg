@@ -18,7 +18,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 12;
+const DEFINITIONS_VERSION = 13;
 
 const DEFINITIONS = {
   actors: {
@@ -108,6 +108,19 @@ const DEFINITIONS = {
         position: { x: 0, y: 0 },
         cell: { x: 0, y: 0 },
       },
+    },
+  },
+
+  // The list of still objects (the user's idea): rocks, and later boxes, logs, houses... Each entry holds the
+  // creation parameters of that object, which the seed will roll for each one that is placed.
+  // Only the rock exists so far, and nothing uses it yet: stone, boulder and rubber above still have their own radius.
+  // size (the user's values): minRadius 16 and maxRadius 32 (the avatar's radius up to twice it), and weightPerRadius 100:
+  //   weight = weightPerRadius x radius, the radius and not the area, all whole numbers, so nothing is rounded.
+  //   The weight of a rock therefore goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg (computed, never stored).
+  objects: {
+    rock: {
+      name: "Rock",
+      size: { minRadius: 16, maxRadius: 32, weightPerRadius: 100 },
     },
   },
 

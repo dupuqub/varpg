@@ -88,6 +88,15 @@ function assertValidDefinitions() {
     }
   }
   for (const [id, part] of Object.entries(DEFINITIONS.parts)) check("the part " + id, part.weight);
+
+  // The list of still objects: whole sizes, a positive minimum radius, and a minimum not above the maximum.
+  for (const [id, object] of Object.entries(DEFINITIONS.objects)) {
+    const { minRadius, maxRadius, weightPerRadius } = object.size;
+    check("the object " + id + " (weightPerRadius)", weightPerRadius);
+    if (!Number.isInteger(minRadius) || !Number.isInteger(maxRadius) || minRadius < 1 || minRadius > maxRadius) {
+      throw new Error("The size of the object " + id + " needs whole radii, 1 or more, with minRadius not above maxRadius: " + minRadius + " to " + maxRadius);
+    }
+  }
 }
 
 // The top speed of an actor in the current frame, in pixels per frame.

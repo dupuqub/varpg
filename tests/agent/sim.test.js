@@ -1329,3 +1329,19 @@ test("73 a still actor with weight 0 and health 1 is harmless and breaks at the 
   assert.strictEqual(result.box, 0); // the avatar hit it for 10 (minimum damage 1 would be enough)
   assert.strictEqual(result.vx, 12); // broken: no stop, no bounce
 });
+
+test("74 the list of still objects has the rock: radius from 16 to 32, weight modifier 100, so 1600 to 3200 kg", () => {
+  const rock = plain(run("return DEFINITIONS.objects.rock;"));
+  assert.deepStrictEqual(rock.size, { minRadius: 16, maxRadius: 32, weightPerRadius: 100 });
+  assert.strictEqual(rock.size.weightPerRadius * rock.size.minRadius, 1600);
+  assert.strictEqual(rock.size.weightPerRadius * rock.size.maxRadius, 3200);
+});
+
+test("75 a size that is not whole, or has a minimum above the maximum, stops the game when it loads", () => {
+  const patch = (from, to) => (text) => text.replace(from, to);
+  const size = "size: { minRadius: 16, maxRadius: 32, weightPerRadius: 100 }";
+  assert.throws(() => loadGame(patch(size, "size: { minRadius: 16.5, maxRadius: 32, weightPerRadius: 100 }")), /object rock/);
+  assert.throws(() => loadGame(patch(size, "size: { minRadius: 40, maxRadius: 32, weightPerRadius: 100 }")), /object rock/);
+  assert.throws(() => loadGame(patch(size, "size: { minRadius: 16, maxRadius: 32, weightPerRadius: 99.5 }")), /object rock/);
+  loadGame(patch(size, "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 }")); // a fixed size and weight 0 are allowed
+});

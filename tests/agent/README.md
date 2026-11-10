@@ -143,6 +143,8 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 71 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius` and radius of the still actors. | The rule holds for the real data. |
 | 72 | A `weightPerRadius` of 300.5, a radius of 16.5 or a part weight of -1 makes the game fail when it loads; a `weightPerRadius` of 0 loads and gives weight 0. | The check is real, and weight 0 is allowed. |
 | 73 | A still actor with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
+| 74 | The list of still objects has the rock: radius from 16 to 32, weight modifier 100 (so 1600 to 3200 kg). | The user's first object, as he gave it. Nothing in the game uses it yet. |
+| 75 | A size with a radius that is not whole, a minimum above the maximum, or a weight modifier that is not whole stops the game when it loads; a fixed size and a modifier of 0 are allowed. | The check is real. |
 
 ### The kit of parts
 
