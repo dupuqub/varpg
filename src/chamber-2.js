@@ -30,10 +30,10 @@ function scriptedInputs(count) {
 // Plays the inputs from a new Chamber 1 state and records the history.
 function playScripted(inputs) {
   const run = createRun(1);
-  const state = createChamber1State(run.id, 1, run.build);
-  const history = createHistory(state, run.build);
+  const state = createChamber1State(run.id, 1, run.blueprint);
+  const history = createHistory(state, run.blueprint);
   for (const input of inputs) {
-    step(state, input, run.build);
+    step(state, input, run.blueprint);
     recordFrame(history, state, input);
   }
   return { state, history };
@@ -63,7 +63,7 @@ function simulationCheckText() {
 
   // A cross-check that cannot fail proves nothing, so also change one snap on
   // purpose and see whether the cross-check notices.
-  const tampered = { snaps: history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))), inputs: history.inputs, build: history.build };
+  const tampered = { snaps: history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))), inputs: history.inputs, blueprint: history.blueprint };
   tampered.snaps[50].actors[0].position.x += 0.1;
 
   const player = first.state.actors[0];
@@ -91,20 +91,20 @@ function objectsText(seed) {
   ].join("\n");
 }
 
-// The build of a run and the arithmetic of each final value of the avatar, as plain sums.
-function buildText(build) {
+// The blueprint of a run and the arithmetic of each final value of the avatar, as plain sums.
+function blueprintText(blueprint) {
   const avatar = createActor(AVATAR_ID, "avatar");
-  const weight = totalWeight(build);
+  const weight = totalWeight(blueprint);
   const penalty = DEFINITIONS.constants.weightSpeedPenalty;
   return [
-    "build (the parts of the avatar):",
-    ...partsOf(build).map((part, index) => `  ${build.parts[index]}: ${part.weight} kg, specs ${JSON.stringify(part.specs)}`),
-    `total weight: ${weight} kg, capacity: ${sumSpec(build, "capacity")} kg`,
-    `top speed: ${sumSpec(build, "speed")} - ${weight} x ${penalty} = ${finalSpeed(avatar, build)}`,
-    `maximum health: ${sumSpec(build, "health")} = ${finalMaxHealth(avatar, build)}`,
-    `defense: ${sumSpec(build, "defense")} = ${finalDefense(avatar, build)}`,
-    `dash speed: ${sumSpec(build, "dashSpeed")} = ${finalDashSpeed(avatar, build)}`,
-    `dash charges (maximum): ${sumSpec(build, "dashCharges")} = ${finalDashMaxCharges(avatar, build)}`,
+    "blueprint (the parts of the avatar):",
+    ...partsOf(blueprint).map((part, index) => `  ${blueprint.parts[index]}: ${part.weight} kg, specs ${JSON.stringify(part.specs)}`),
+    `total weight: ${weight} kg, capacity: ${sumSpec(blueprint, "capacity")} kg`,
+    `top speed: ${sumSpec(blueprint, "speed")} - ${weight} x ${penalty} = ${finalSpeed(avatar, blueprint)}`,
+    `maximum health: ${sumSpec(blueprint, "health")} = ${finalMaxHealth(avatar, blueprint)}`,
+    `defense: ${sumSpec(blueprint, "defense")} = ${finalDefense(avatar, blueprint)}`,
+    `dash speed: ${sumSpec(blueprint, "dashSpeed")} = ${finalDashSpeed(avatar, blueprint)}`,
+    `dash charges (maximum): ${sumSpec(blueprint, "dashCharges")} = ${finalDashMaxCharges(avatar, blueprint)}`,
   ].join("\n");
 }
 
@@ -114,9 +114,9 @@ function dataText() {
     `definitions version: ${DEFINITIONS_VERSION}`,
     "definitions:",
     JSON.stringify(DEFINITIONS, null, 2),
-    buildText(createRun(1).build),
+    blueprintText(createRun(1).blueprint),
     "initial state of Chamber 1:",
-    JSON.stringify(createChamber1State(1, 1, createRun(1).build), null, 2),
+    JSON.stringify(createChamber1State(1, 1, createRun(1).blueprint), null, 2),
     objectsText(createChamber1State().seed),
   ].join("\n");
 }

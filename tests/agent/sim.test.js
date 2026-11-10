@@ -25,9 +25,9 @@ function loadGame(patchData = (text) => text) {
     const text = name === "data.js" ? patchData(readSource(name)) : readSource(name);
     vm.runInContext(text, context);
   }
-  // The rules need the build of the run as the third argument of step. Most tests do not care
-  // which one, so here step plays with the starter build unless a test passes another.
-  vm.runInContext("const realStep = step; step = (state, input, build = createRun(1).build) => realStep(state, input, build);", context);
+  // The rules need the blueprint of the run as the third argument of step. Most tests do not care
+  // which one, so here step plays with the starter blueprint unless a test passes another.
+  vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint) => realStep(state, input, blueprint);", context);
   return context;
 }
 
@@ -290,7 +290,7 @@ test("16 the definitions are frozen, the state only points to them, and it carri
       hasBaseSpeed: "baseSpeed" in player,
       health: player.health,
       radius: definitionOf(player).radius,
-      speed: finalSpeed(player, createRun(1).build),
+      speed: finalSpeed(player, createRun(1).blueprint),
     };
   `);
   assert.strictEqual(result.version, result.expectedVersion);
@@ -365,16 +365,16 @@ test("18 a new actor is a copy of the initial state in the definitions, and owns
   assert.strictEqual(result.idFirst, "id,type");
 });
 
-test("19 the run and the state: the state carries the run id, and the build is the starter build and outside the state", () => {
+test("19 the run and the state: the state carries the run id, and the blueprint is the starter blueprint and outside the state", () => {
   const result = run(`
     const r = createRun(7);
     const s = createChamber1State(r.id);
-    return { run: r, stateRun: s.run, defaultRun: createChamber1State().run, hasBuild: "build" in s, starterParts: DEFINITIONS.starterBuild.parts };
+    return { run: r, stateRun: s.run, defaultRun: createChamber1State().run, hasBlueprint: "blueprint" in s, starterParts: DEFINITIONS.starterBlueprint.parts };
   `);
-  assert.deepStrictEqual(plain(result.run), { id: 7, build: { parts: plain(result.starterParts) } });
+  assert.deepStrictEqual(plain(result.run), { id: 7, blueprint: { parts: plain(result.starterParts) } });
   assert.strictEqual(result.stateRun, 7);
   assert.strictEqual(result.defaultRun, 1);
-  assert.strictEqual(result.hasBuild, false);
+  assert.strictEqual(result.hasBlueprint, false);
 });
 
 // ---- Run history ----
@@ -382,7 +382,7 @@ test("19 the run and the state: the state carries the run id, and the build is t
 test("20 history: two aligned lists, index 0 is the oldest, and the snaps are copies", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     const first = { snaps: h.snaps.length, inputs: h.inputs.length, firstInput: h.inputs[0] };
     for (let i = 0; i < 5; i++) {
       const input = { move: { x: 1, y: 0 } };
@@ -411,7 +411,7 @@ test("20 history: two aligned lists, index 0 is the oldest, and the snaps are co
 test("21 history keeps only the last 100, and the oldest (index 0) leaves first", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     for (let i = 0; i < 250; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -437,7 +437,7 @@ test("21 history keeps only the last 100, and the oldest (index 0) leaves first"
 test("22 cross-check: a normal run matches, even after the window has slid", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     for (let i = 0; i < 300; i++) {
       const angle = i * 0.37;
       const input = { move: { x: Math.cos(angle), y: Math.sin(angle) } };
@@ -452,7 +452,7 @@ test("22 cross-check: a normal run matches, even after the window has slid", () 
 test("23 cross-check: a changed snap is found, with the exact frame and field", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     for (let i = 0; i < 120; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -471,10 +471,10 @@ test("24 cross-check also catches a rule that is not repeatable (hidden state ou
   // Here finalSpeed secretly counts its calls. The recording and the replay see different counters.
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     let counter = 0;
     const original = finalSpeed;
-    finalSpeed = (actor, build) => (counter++ >= 60 ? 0.1 : original(actor, build));
+    finalSpeed = (actor, blueprint) => (counter++ >= 60 ? 0.1 : original(actor, blueprint));
     for (let i = 0; i < 90; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -493,7 +493,7 @@ test("24 cross-check also catches a rule that is not repeatable (hidden state ou
 test("25 discardAfter: going back and playing again drops what came after, and the lists stay aligned", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     for (let i = 0; i < 30; i++) {
       const input = { move: { x: 1, y: 0 } };
       step(s, input);
@@ -644,7 +644,7 @@ test("32 running diagonally at the top speed and then releasing brakes at 0.125 
 test("33 the cross-check stays clean in a run with dashes", () => {
   const result = run(`
     const s = createChamber1State();
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     for (let i = 0; i < 400; i++) {
       const angle = i * 0.21;
       const input = { move: { x: Math.cos(angle), y: Math.sin(angle) }, dash: i % 70 === 5 };
@@ -925,7 +925,7 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
     const s = createChamber1State();
     const p = s.actors[0];
     p.position.x = 20; p.position.y = ${ROCK.y}; // next to the rock at ${ROCK.x},${ROCK.y}
-    const h = createHistory(s, createRun(1).build);
+    const h = createHistory(s, createRun(1).blueprint);
     let touchingFrames = 0;
     for (let i = 0; i < 300; i++) {
       const input = { move: { x: i % 60 < 40 ? 1 : -0.5, y: i % 90 < 30 ? 0.3 : -0.2 }, dash: i % 80 === 10 };
@@ -999,7 +999,7 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
 });
 
 test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage never goes below 0", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     const rock = { type: "rock", radius: 28, position: { x: 0, y: 0 } };
     const small = { type: "shroom", radius: 16 }; // 1600 kg
     const large = { type: "shroom", radius: 32 }; // 3200 kg
@@ -1040,7 +1040,7 @@ test("51 health stops at 0 (there is no death yet)", () => {
 });
 
 test("52 the cross-check stays clean in a run where both sides are hurt, and the state is plain numbers", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     const s = createChamber1State();
     const p = s.actors[0];
     p.position.x = 20; p.position.y = ${ROCK.y}; // next to the rock at ${ROCK.x},${ROCK.y}
@@ -1060,22 +1060,22 @@ test("52 the cross-check stays clean in a run where both sides are hurt, and the
 });
 
 // ---- The kit of parts ----
-// The final values of the avatar are the SUM of the specs of the parts in its build.
-// Starter build: 9 parts, 5000 kg. Top speed 3.5 + 0.5 - 5000 x 0.0002 = 3; health 15 + 55 + 30 = 100;
+// The final values of the avatar are the SUM of the specs of the parts in its blueprint.
+// Starter blueprint: 9 parts, 5000 kg. Top speed 3.5 + 0.5 - 5000 x 0.0002 = 3; health 15 + 55 + 30 = 100;
 // defense 2 + 1 = 3; dash 12; capacity 6000.
 
-// Runs code with "avatar", "full" (the starter build) and "without(id)" (the starter build minus one part).
-function withBuilds(code) {
+// Runs code with "avatar", "full" (the starter blueprint) and "without(id)" (the starter blueprint minus one part).
+function withBlueprints(code) {
   return run(`
     const avatar = createActor(AVATAR_ID, "avatar");
-    const full = createRun(1).build;
+    const full = createRun(1).blueprint;
     const without = (id) => ({ parts: full.parts.filter((part) => part !== id) });
     ${code}
   `);
 }
 
-test("53 the starter build adds up to the values the avatar had before parts: speed 3, health 100, defense 3, dash 12, 5000 kg", () => {
-  const result = withBuilds(`
+test("53 the starter blueprint adds up to the values the avatar had before parts: speed 3, health 100, defense 3, dash 12, 5000 kg", () => {
+  const result = withBlueprints(`
     return {
       weight: totalWeight(full), capacity: sumSpec(full, "capacity"),
       speed: finalSpeed(avatar, full), health: finalMaxHealth(avatar, full),
@@ -1088,7 +1088,7 @@ test("53 the starter build adds up to the values the avatar had before parts: sp
 });
 
 test("54 weight takes speed away directly: taking off a 650 kg arm gives back 650 x 0.0002 = 0.13 px/frame", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     return {
       withoutArm: finalSpeed(avatar, without("arm-r")),
       withoutHead: finalSpeed(avatar, without("head")), // 200 kg: 0.04
@@ -1099,12 +1099,12 @@ test("54 weight takes speed away directly: taking off a 650 kg arm gives back 65
 });
 
 test("55 without the legs the speed is the Torso's 0.5 minus the weight, and it never goes below 0", () => {
-  const speed = withBuilds("return finalSpeed(avatar, without('legs'));"); // 0.5 - 3700 x 0.0002 = -0.24
+  const speed = withBlueprints("return finalSpeed(avatar, without('legs'));"); // 0.5 - 3700 x 0.0002 = -0.24
   assert.strictEqual(speed, 0);
 });
 
 test("56 taking a part off changes health and defense by exactly what it gave", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     return {
       noTorso: { health: finalMaxHealth(avatar, without("torso")), defense: finalDefense(avatar, without("torso")) },
       noHead: { health: finalMaxHealth(avatar, without("head")), defense: finalDefense(avatar, without("head")) },
@@ -1114,7 +1114,7 @@ test("56 taking a part off changes health and defense by exactly what it gave", 
 });
 
 test("57 without the Booster there is no dash charge and no dash: the maximum comes from the parts (finalDashMaxCharges)", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     const noBooster = without("booster");
     const s = createChamber1State(1, 1, noBooster);
     const p = s.actors[0];
@@ -1136,9 +1136,9 @@ test("57 without the Booster there is no dash charge and no dash: the maximum co
   assert.deepStrictEqual(plain(result.startsWith), { now: 1, max: 1 }); // a new avatar starts full
 });
 
-test("58 a build over the capacity of the Torso is refused, and so is an unknown part", () => {
-  const result = withBuilds(`
-    const attempt = (build) => { try { assertValidBuild(build); return "accepted"; } catch (error) { return error.message; } };
+test("58 a blueprint over the capacity of the Torso is refused, and so is an unknown part", () => {
+  const result = withBlueprints(`
+    const attempt = (blueprint) => { try { assertValidBlueprint(blueprint); return "accepted"; } catch (error) { return error.message; } };
     return {
       starter: attempt(full), // 5000 kg of 6000
       tooHeavy: attempt({ parts: [...full.parts, "legs", "legs"] }), // 7600 kg
@@ -1146,20 +1146,20 @@ test("58 a build over the capacity of the Torso is refused, and so is an unknown
     };
   `);
   assert.strictEqual(result.starter, "accepted");
-  assert.strictEqual(result.tooHeavy, "The build weighs 7600 kg and can carry only 6000 kg");
+  assert.strictEqual(result.tooHeavy, "The blueprint weighs 7600 kg and can carry only 6000 kg");
   assert.strictEqual(result.unknown, "Unknown part: wings");
 });
 
-test("59 only the avatar has a build: another actor of the same type gets nothing from the parts", () => {
-  const result = withBuilds(`
+test("59 only the avatar has a blueprint: another actor of the same type gets nothing from the parts", () => {
+  const result = withBlueprints(`
     const other = createActor("other_1", "avatar");
     return { speed: finalSpeed(other, full), health: finalMaxHealth(other, full), defense: finalDefense(other, full) };
   `);
   assert.deepStrictEqual(plain(result), { speed: 0, health: 0, defense: 0 });
 });
 
-test("60 the build is an input of the replay: the cross-check is clean with the right build and finds a difference with another", () => {
-  const result = withBuilds(`
+test("60 the blueprint is an input of the replay: the cross-check is clean with the right blueprint and finds a difference with another", () => {
+  const result = withBlueprints(`
     const s = createChamber1State();
     const noArm = without("arm-r");
     const h = createHistory(s, noArm);
@@ -1169,13 +1169,13 @@ test("60 the build is an input of the replay: the cross-check is clean with the 
       recordFrame(h, s, input);
     }
     const right = crossCheck(h);
-    h.build = full; // replay with a build that is not the one the run was played with
+    h.blueprint = full; // replay with a blueprint that is not the one the run was played with
     const wrong = crossCheck(h);
     return { right, wrong, top: s.actors[0].move.velocity.x };
   `);
   assert.strictEqual(result.right, null);
-  assert.ok(result.wrong !== null, "a different build must change the replay");
-  assert.ok(Math.abs(result.top - 3.13) < 1e-9); // the run really used the lighter build
+  assert.ok(result.wrong !== null, "a different blueprint must change the replay");
+  assert.ok(Math.abs(result.top - 3.13) < 1e-9); // the run really used the lighter blueprint
 });
 
 // ---- Rocks with health, and the weight of a still object ----
@@ -1235,12 +1235,12 @@ test("63 every rock rolls its own health from the seed: whole numbers from 10 to
 
 test("64 the weight of an object is weightPerRadius x radius, a whole number: twice the radius, twice the weight", () => {
   const result = run(`
-    const build = createRun(1).build;
+    const blueprint = createRun(1).blueprint;
     return {
-      rock: weightOf({ type: "rock", radius: 28 }, build),
-      small: weightOf({ type: "shroom", radius: 16 }, build),
-      middle: weightOf({ type: "shroom", radius: 24 }, build),
-      large: weightOf({ type: "shroom", radius: 32 }, build),
+      rock: weightOf({ type: "rock", radius: 28 }, blueprint),
+      small: weightOf({ type: "shroom", radius: 16 }, blueprint),
+      middle: weightOf({ type: "shroom", radius: 24 }, blueprint),
+      large: weightOf({ type: "shroom", radius: 32 }, blueprint),
     };
   `);
   assert.deepStrictEqual(plain(result), { rock: 2800, small: 1600, middle: 2400, large: 3200 });
@@ -1288,7 +1288,7 @@ test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 
   const probe = `
     const rock = { type: "rock", radius: 28, position: { x: 0, y: 0 } };
     const avatar = createActor(AVATAR_ID, "avatar");
-    const full = createRun(1).build;
+    const full = createRun(1).blueprint;
     return { attack: finalAttack(rock, { impact: 12 }, full), damage: damageOf(rock, { impact: 12 }, avatar, full) };
   `;
   assert.deepStrictEqual(plain(run(probe, weightless)), { attack: 0, damage: 0 }); // no minimum damage either: there is no attack
@@ -1298,7 +1298,7 @@ test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 
 });
 
 test("68 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
-  const result = withBuilds(`
+  const result = withBlueprints(`
     const small = { type: "shroom", radius: 16 }; // 1600 kg
     const large = { type: "shroom", radius: 32 }; // 3200 kg
     return {
@@ -1337,7 +1337,7 @@ test("71 a weight that is not a whole number (or is negative) stops the game whe
   assert.throws(() => loadGame(patch("{ min: 16.5, max: 32 }", 100)), /object rock/);
   assert.throws(() => loadGame((text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,')), /part head.*-1/);
   const box = loadGame(patch("{ min: 16, max: 32 }", 0));
-  assert.strictEqual(run("return weightOf({ type: 'rock', radius: 28 }, createRun(1).build);", box), 0);
+  assert.strictEqual(run("return weightOf({ type: 'rock', radius: 28 }, createRun(1).blueprint);", box), 0);
 });
 
 test("72 a rock with weight 0 and health 1 is harmless and breaks at the first hit, and the avatar goes through it", () => {

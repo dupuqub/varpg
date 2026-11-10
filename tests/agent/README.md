@@ -62,7 +62,7 @@ node --test
 | 16 | The definitions are frozen (changes are ignored), the state keeps only `type` (no radius or base speed), and it carries the version of the definitions. | The state is only what changes. Fixed values live in the definitions, and nothing may alter them during a run. |
 | 17 | Unknown actor types raise an error. A type without `move` (a trap) does not move. | A typo in a type must not create a ghost actor. Static actors are simply actors without `move`. |
 | 18 | A new actor (the avatar) is a copy of the initial state of its type, and changing it never changes the definitions or another actor. | If actors shared numbers with the definitions, one change would leak into all. |
-| 19 | The run id is in the state, and the build is empty and outside the state. | The build is an input of the run, not a state (a project decision). |
+| 19 | The run id is in the state, and the blueprint is empty and outside the state. | The blueprint is an input of the run, not a state (a project decision). |
 
 ### Run history
 
@@ -151,18 +151,18 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 
 ### The kit of parts
 
-The avatar's final values are the sum of the specs of the parts in its build (starter build: nine parts, 5000 kg). Most of the other tests play with the starter build: the test file passes it to `step` by default.
+The avatar's final values are the sum of the specs of the parts in its blueprint (starter blueprint: nine parts, 5000 kg). Most of the other tests play with the starter blueprint: the test file passes it to `step` by default.
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 53 | The starter build adds up to weight 5000, capacity 6000, speed 3, health 100, defense 3, dash 12, and the avatar starts with full health. | The kit keeps the values the avatar had before parts, so nothing felt changes. |
+| 53 | The starter blueprint adds up to weight 5000, capacity 6000, speed 3, health 100, defense 3, dash 12, and the avatar starts with full health. | The kit keeps the values the avatar had before parts, so nothing felt changes. |
 | 54 | Taking off a 650 kg arm gives back 0.13 px/frame of speed (650 x 0.0002), a 200 kg head 0.04. | The weight effect is direct and easy to see: kg times a constant. |
 | 55 | Without the Legs the speed would be negative (0.5 - 3700 x 0.0002), and it is 0. | The controls never reverse. |
 | 56 | Without the Torso health is 45 and defense 1; without the Head health is 85 and defense 3. | Each part adds exactly what it gives. |
 | 57 | Without the Booster there is no dash charge (`finalDashMaxCharges` is 0, and a new avatar starts with `{ now: 0, max: 0 }`) and a dash does nothing; with it the maximum is 1 and a new avatar starts full. | A dash, and its charges, come from a part, not from nowhere. |
-| 58 | A build of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
-| 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a build. |
-| 60 | The cross-check is clean with the build the run was played with, and finds a difference with another. | The build is an input of the replay, as the seed and the inputs are. |
+| 58 | A blueprint of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
+| 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a blueprint. |
+| 60 | The cross-check is clean with the blueprint the run was played with, and finds a difference with another. | The blueprint is an input of the replay, as the seed and the inputs are. |
 
 ## Proof that the tests can fail
 

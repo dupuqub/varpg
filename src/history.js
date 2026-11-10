@@ -14,10 +14,10 @@ function copyOf(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// Starts a history with the initial state, before any step. It also keeps the build
+// Starts a history with the initial state, before any step. It also keeps the blueprint
 // of the run (it does not change during a run), because replaying needs it.
-function createHistory(state, build) {
-  return { snaps: [copyOf(state)], inputs: [null], build: copyOf(build) };
+function createHistory(state, blueprint) {
+  return { snaps: [copyOf(state)], inputs: [null], blueprint: copyOf(blueprint) };
 }
 
 // Call right after step(): saves the new state and the input that produced it.
@@ -52,7 +52,7 @@ function discardAfter(history, index) {
 function crossCheck(history) {
   const state = copyOf(history.snaps[0]);
   for (let i = 1; i < history.snaps.length; i++) {
-    step(state, copyOf(history.inputs[i]), history.build);
+    step(state, copyOf(history.inputs[i]), history.blueprint);
     const difference = findDifference(history.snaps[i], state, "");
     if (difference !== null) {
       return { frame: history.snaps[i].frame, ...difference };

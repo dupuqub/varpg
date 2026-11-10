@@ -20,7 +20,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 19;
+const DEFINITIONS_VERSION = 20;
 
 const DEFINITIONS = {
   actors: {
@@ -38,7 +38,7 @@ const DEFINITIONS = {
       },
 
       // The health and the dash charges are not here: a new avatar gets the maximum health and the maximum charges
-      // of its build (createChamber1State).
+      // of its blueprint (createChamber1State).
       initial: {
         position: { x: 0, y: 0 },
         cell: { x: 0, y: 0 }, // grid cell relative to the avatar, set every frame
@@ -120,11 +120,11 @@ const DEFINITIONS = {
   },
 
   // The mecha parts. A part has a weight (kg) and specs, and the avatar's final values are the SUM
-  // of the specs of the parts in its build (src/sim.js: sumSpec). Specs used so far:
+  // of the specs of the parts in its blueprint (src/sim.js: sumSpec). Specs used so far:
   //   speed     px/frame added to the top speed        health    added to the maximum health
   //   defense   taken off every hit                    dashSpeed px/frame of the dash (the Booster)
-  //   dashCharges how many charges of dash the build has at most (the Booster)
-  //   capacity  kg the build can carry (the Torso)
+  //   dashCharges how many charges of dash the blueprint has at most (the Booster)
+  //   capacity  kg the blueprint can carry (the Torso)
   // Radar, Magnet, the shield (Generator) and the weapons are not here: nothing uses them yet.
   // weight: anchor, the proportions of the user's old project (0.2 / 0.3 / 0.1 / 0.4 / 0.6 / 0.1 / 0.1,
   //   total 2.3) scaled to a total of 5000 kg (two large cars), rounded to tens.
@@ -138,7 +138,7 @@ const DEFINITIONS = {
   //   of an object), or it could cross an object in one frame.
   // dashCharges: anchor, the user's old project (1 charge). The user's decision: the charges come from the parts that
   //   have them, primarily the Booster. Without one there is no charge, so no dash.
-  // capacity: anchor and rule, the user's 6 t, the 5 t of the starter build plus 20%.
+  // capacity: anchor and rule, the user's 6 t, the 5 t of the starter blueprint plus 20%.
   parts: {
     "shoulder-r": { name: "Shoulder R", weight: 450, specs: {} },
     "shoulder-l": { name: "Shoulder L", weight: 450, specs: {} },
@@ -151,8 +151,8 @@ const DEFINITIONS = {
     booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1 } },
   },
 
-  // The build a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
-  starterBuild: {
+  // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
+  starterBlueprint: {
     parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
   },
 

@@ -28,47 +28,47 @@ function createActor(id, type) {
   return { id, type, ...JSON.parse(JSON.stringify(definition.initial)) };
 }
 
-// ---- Parts and the build ----
-// The build is what the player chose before the run: for now, the ids of the parts
-// the avatar wears (build.parts). It is an input of the run, not part of the state,
+// ---- Parts and the blueprint ----
+// The blueprint is what the player chose before the run: for now, the ids of the parts
+// the avatar wears (blueprint.parts). It is an input of the run, not part of the state,
 // so every function that needs it takes it as an argument.
-// Only the avatar has a build: an object only has its definition and what the seed rolled for it.
+// Only the avatar has a blueprint: an object only has its definition and what the seed rolled for it.
 
 function isAvatar(actor) {
   return actor.id === AVATAR_ID;
 }
 
-// The definitions of the parts of a build. An unknown id fails loudly.
-function partsOf(build) {
-  return build.parts.map((id) => {
+// The definitions of the parts of a blueprint. An unknown id fails loudly.
+function partsOf(blueprint) {
+  return blueprint.parts.map((id) => {
     const part = DEFINITIONS.parts[id];
     if (!part) throw new Error("Unknown part: " + id);
     return part;
   });
 }
 
-// Total weight of the build, in kg.
-function totalWeight(build) {
-  return partsOf(build).reduce((sum, part) => sum + part.weight, 0);
+// Total weight of the blueprint, in kg.
+function totalWeight(blueprint) {
+  return partsOf(blueprint).reduce((sum, part) => sum + part.weight, 0);
 }
 
 // The sum of one spec over all the parts (a part without it adds 0).
-function sumSpec(build, name) {
-  return partsOf(build).reduce((sum, part) => sum + (part.specs[name] || 0), 0);
+function sumSpec(blueprint, name) {
+  return partsOf(blueprint).reduce((sum, part) => sum + (part.specs[name] || 0), 0);
 }
 
-// What the parts add to a value, for the avatar. Objects get nothing from the build.
-function fromParts(actor, build, name) {
-  return isAvatar(actor) ? sumSpec(build, name) : 0;
+// What the parts add to a value, for the avatar. Objects get nothing from the blueprint.
+function fromParts(actor, blueprint, name) {
+  return isAvatar(actor) ? sumSpec(blueprint, name) : 0;
 }
 
-// Fails loudly if the build is not allowed: an unknown part, or more weight than the
-// build can carry (the capacity of the Torso). A hard limit, not a speed penalty.
-function assertValidBuild(build) {
-  const weight = totalWeight(build);
-  const capacity = sumSpec(build, "capacity");
+// Fails loudly if the blueprint is not allowed: an unknown part, or more weight than the
+// blueprint can carry (the capacity of the Torso). A hard limit, not a speed penalty.
+function assertValidBlueprint(blueprint) {
+  const weight = totalWeight(blueprint);
+  const capacity = sumSpec(blueprint, "capacity");
   if (weight > capacity) {
-    throw new Error("The build weighs " + weight + " kg and can carry only " + capacity + " kg");
+    throw new Error("The blueprint weighs " + weight + " kg and can carry only " + capacity + " kg");
   }
 }
 
@@ -120,28 +120,28 @@ function assertValidDefinitions() {
 // reverse the controls; whether there is a minimum speed is not decided).
 // It is a function, not a stored value, so buffs can be applied here, in order, later.
 // It must stay pure: the result depends only on the arguments and the definitions.
-function finalSpeed(actor, build) {
-  const weightPenalty = totalWeight(build) * DEFINITIONS.constants.weightSpeedPenalty;
-  return Math.max(0, fromParts(actor, build, "speed") - weightPenalty);
+function finalSpeed(actor, blueprint) {
+  const weightPenalty = totalWeight(blueprint) * DEFINITIONS.constants.weightSpeedPenalty;
+  return Math.max(0, fromParts(actor, blueprint, "speed") - weightPenalty);
 }
 
 // The speed an actor gets right after a dash, in pixels per frame: the sum of the
 // dashSpeed of the parts (the Booster is the primary source, any part may add to it).
 // Without any, there is no dash. Pure, like finalSpeed.
-function finalDashSpeed(actor, build) {
-  return fromParts(actor, build, "dashSpeed");
+function finalDashSpeed(actor, blueprint) {
+  return fromParts(actor, blueprint, "dashSpeed");
 }
 
 // The most charges of dash the avatar can have: the sum of the dashCharges of the parts (the Booster is the
 // primary source). Without any, there is no charge and no dash. Pure, like finalSpeed.
-function finalDashMaxCharges(actor, build) {
-  return fromParts(actor, build, "dashCharges");
+function finalDashMaxCharges(actor, blueprint) {
+  return fromParts(actor, blueprint, "dashCharges");
 }
 
 // The maximum health of the avatar: the sum of the health of its parts (nothing else gives it health).
 // (The player shows it as "armor", but the code calls it health.)
-function finalMaxHealth(actor, build) {
-  return fromParts(actor, build, "health");
+function finalMaxHealth(actor, blueprint) {
+  return fromParts(actor, blueprint, "health");
 }
 
 // The radius of something, in pixels: its own "radius" (an object from the seed, which rolled it), or the
@@ -150,11 +150,11 @@ function radiusOf(thing) {
   return thing.radius ?? definitionOf(thing).radius;
 }
 
-// The weight of a thing, in kg: for the avatar the total weight of its build, for an object
+// The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object
 // weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
 // (assertValidDefinitions), so the weight is whole and nothing is rounded.
-function weightOf(thing, build) {
-  return isAvatar(thing) ? totalWeight(build) : definitionOf(thing).weightPerRadius * radiusOf(thing);
+function weightOf(thing, blueprint) {
+  return isAvatar(thing) ? totalWeight(blueprint) : definitionOf(thing).weightPerRadius * radiusOf(thing);
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
@@ -178,25 +178,25 @@ function bounceOf(thing) {
 // Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
 // can be added later, as terms of the damage trace. Pure: it depends only on its
 // arguments and the definitions. The attacker can be the avatar or an object.
-function finalAttack(attacker, hit, build) {
+function finalAttack(attacker, hit, blueprint) {
   const rules = DEFINITIONS.constants.bodySlam;
   if (hit.impact <= 0) return 0;
-  return (weightOf(attacker, build) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
+  return (weightOf(attacker, blueprint) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
 }
 
 // The defense of the avatar: the sum of the defense of its parts. An object has no defense (none was defined).
 // Pure, like finalSpeed.
-function finalDefense(actor, build) {
-  return fromParts(actor, build, "defense");
+function finalDefense(actor, blueprint) {
+  return fromParts(actor, blueprint, "defense");
 }
 
 // The damage of a hit on a target: finalAttack - finalDefense, but never below minDamage
 // (a hit always costs something). No attack (a weight of 0) means no damage at all.
 // The shield is not here yet.
-function damageOf(attacker, hit, target, build) {
-  const attack = finalAttack(attacker, hit, build);
+function damageOf(attacker, hit, target, blueprint) {
+  const attack = finalAttack(attacker, hit, blueprint);
   if (attack <= 0) return 0;
-  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, build));
+  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, blueprint));
 }
 
 // Takes damage off the health. Health stops at 0 (there is no death yet).
@@ -214,7 +214,7 @@ const OVERSPEED_TOLERANCE = 1e-9;
 //    becomes the direction (always at full length) times the dash speed, and a charge is spent.
 //    Without a direction (or without a dash strength) nothing happens and the charge is kept.
 // Returns true if the actor dashed in this frame.
-function updateDash(actor, wantsDash, build) {
+function updateDash(actor, wantsDash, blueprint) {
   const rules = definitionOf(actor).dash;
   const dash = actor.dash;
 
@@ -232,7 +232,7 @@ function updateDash(actor, wantsDash, build) {
   const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
   if (length === 0) return false;
 
-  const strength = finalDashSpeed(actor, build);
+  const strength = finalDashSpeed(actor, blueprint);
   if (strength <= 0) return false; // no part gives a dash
   velocity.x = (direction.x / length) * strength;
   velocity.y = (direction.y / length) * strength;
@@ -380,7 +380,7 @@ function objectsNear(state, actor) {
 //    bounce, the part going in is just removed. The part along the
 //    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
-function collideWithObjects(state, actor, build, lastContacts) {
+function collideWithObjects(state, actor, blueprint, lastContacts) {
   const radius = radiusOf(actor);
 
   for (const object of objectsNear(state, actor)) {
@@ -409,8 +409,8 @@ function collideWithObjects(state, actor, build, lastContacts) {
 
     if (collides && isNewContact) {
       const hit = { impact: -goingIn };
-      applyDamage(actor, damageOf(object, hit, actor, build));
-      if (damageObject(state, object, damageOf(actor, hit, object, build))) continue; // the object broke: no collision
+      applyDamage(actor, damageOf(object, hit, actor, blueprint));
+      if (damageObject(state, object, damageOf(actor, hit, object, blueprint))) continue; // the object broke: no collision
     }
 
     const overlap = touching - distance;
@@ -426,26 +426,26 @@ function collideWithObjects(state, actor, build, lastContacts) {
   }
 }
 
-// What a run has besides its state: an id, and the build (what the player
-// chose before the run). The build is an input of the run, not a state, so it
-// is not inside the snaps. It starts as the starter build (DEFINITIONS.starterBuild),
+// What a run has besides its state: an id, and the blueprint (what the player
+// chose before the run). The blueprint is an input of the run, not a state, so it
+// is not inside the snaps. It starts as the starter blueprint (DEFINITIONS.starterBlueprint),
 // copied, and it must be a valid one.
 function createRun(id) {
-  const build = { parts: [...DEFINITIONS.starterBuild.parts] };
-  assertValidBuild(build);
-  return { id, build };
+  const blueprint = { parts: [...DEFINITIONS.starterBlueprint.parts] };
+  assertValidBlueprint(blueprint);
+  return { id, blueprint };
 }
 
 // Initial state of Chamber 1: the avatar at the center of the world, with the full health of
-// its build. Everything else is an object, and objects come from the seed, not from the state.
+// its blueprint. Everything else is an object, and objects come from the seed, not from the state.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
-// build: the build of the run, used only to give the avatar its starting health and dash charges.
-function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBuild) {
+// blueprint: the blueprint of the run, used only to give the avatar its starting health and dash charges.
+function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
   const avatar = createActor(AVATAR_ID, "avatar");
-  avatar.health = { current: finalMaxHealth(avatar, build) };
-  const maxCharges = finalDashMaxCharges(avatar, build);
+  avatar.health = { current: finalMaxHealth(avatar, blueprint) };
+  const maxCharges = finalDashMaxCharges(avatar, blueprint);
   avatar.dash.charges = { now: maxCharges, max: maxCharges };
 
   const state = {
@@ -525,8 +525,8 @@ function isInWindow(grid, cell) {
 
 // Advances the state by one frame. Changes the state in place.
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
-// build = the build of the run (see createRun). It is not in the state, so it is an argument.
-function step(state, input, build) {
+// blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
+function step(state, input, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   // 1. Player input (values are copied, so the state never points into the input).
@@ -545,14 +545,14 @@ function step(state, input, build) {
     if (!actor.move) continue;
     const { direction, velocity } = actor.move;
     const definition = definitionOf(actor);
-    const speed = finalSpeed(actor, build);
+    const speed = finalSpeed(actor, blueprint);
 
     // In the frame of a dash the actor moves at the full dash speed, and the
     // slowing down starts in the next frame.
     let dashed = false;
     if (actor.dash) {
       const wantsDash = actor.id === AVATAR_ID && input.dash === true;
-      dashed = updateDash(actor, wantsDash, build);
+      dashed = updateDash(actor, wantsDash, blueprint);
     }
 
     const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
@@ -570,7 +570,7 @@ function step(state, input, build) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithObjects(state, actor, build, lastContacts);
+    collideWithObjects(state, actor, blueprint, lastContacts);
   }
 
   // 3. Cells: where every actor is, relative to the player.
