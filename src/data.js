@@ -18,13 +18,12 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 15;
+const DEFINITIONS_VERSION = 16;
 
 const DEFINITIONS = {
   actors: {
     player: {
       name: "Player",
-      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       // The maximum health, the defense, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
       radius: 16, // guess: the avatar is 32 px wide, 1/60 of the screen width. Every rock radius is measured against it.
@@ -68,7 +67,6 @@ const DEFINITIONS = {
     //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0.
     stone: {
       name: "Stone",
-      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       size: { min: 16, max: 16 },
       weightPerRadius: 300,
       healthRange: { min: 10, max: 20 },
@@ -83,7 +81,6 @@ const DEFINITIONS = {
     // defense 0: nothing is taken off the hits. No bounce: only the Shroom has one for now.
     dummy: {
       name: "Training dummy",
-      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       maxHealth: 30,
       size: { min: 16, max: 16 },
       weightPerRadius: 300,
@@ -109,7 +106,6 @@ const DEFINITIONS = {
     // healthRange: the stone's, "between 10 and 20" (the user's first numbers). The seed will roll each rock's health.
     rock: {
       name: "Rock",
-      doesDamage: true, // rule: touching it hurts (the body slam)
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
       healthRange: { min: 10, max: 20 },
@@ -125,7 +121,6 @@ const DEFINITIONS = {
     // maxHealth: guess, 20, the top of the rock's range (10 to 20), since the seed does not roll it for the Shroom yet.
     shroom: {
       name: "Shroom",
-      doesDamage: true, // rule: touching it hurts (the body slam)
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
       bounce: { min: 0.2, max: 1 },
@@ -152,13 +147,13 @@ const DEFINITIONS = {
     // in a row: pressing (acceleration 0.25 per frame) never reaches it, so it cannot hit again and again.
     collision: { minImpact: 1 },
 
-    // The body slam: what a collision does. Every contact with something that doesDamage is a hit; the attack is
+    // The body slam: what a collision does. Every collision is a hit; the attack is
     // the weight of whoever hits (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the
     // speed going into the other thing, in px/frame. Provisional formula (agent's proposal, to be discussed):
     //   attackPerKg 0.001: the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
     //     Walking (3) hits for half of it, a dash (12) for double.
-    //   minDamage 1: the user's decision, a hit by something that doesDamage always costs at least 1,
+    //   minDamage 1: the user's decision, a hit by something with an attack (a weight above 0) always costs at least 1,
     //     so a defense never makes the target immune.
     bodySlam: { attackPerKg: 0.001, referenceImpact: 6, minDamage: 1 },
 

@@ -199,8 +199,8 @@ function bounceOf(thing) {
 
 // The attack of a hit (the body slam). "hit" says what happened: for a collision it is
 // { impact }, the part of the velocity that went into the other thing, in px/frame.
-// Only something whose definition says doesDamage hits at all. The attack grows with the
-// weight of the attacker and with the impact: weight x attackPerKg x impact / referenceImpact.
+// There is no flag for who hits: the attack grows with the weight of the attacker (a weight of 0 gives an
+// attack of 0, so nothing happens) and with the impact: weight x attackPerKg x impact / referenceImpact.
 // There is no minimum impact and nothing about the dash here: any contact hits, by any
 // speed source. (The formula is a provisional proposal, to be discussed with the user.)
 // Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
@@ -208,7 +208,7 @@ function bounceOf(thing) {
 // arguments and the definitions. The attacker can be an actor or a rock ({ type }).
 function finalAttack(attacker, hit, build) {
   const rules = DEFINITIONS.constants.bodySlam;
-  if (!definitionOf(attacker).doesDamage || hit.impact <= 0) return 0;
+  if (hit.impact <= 0) return 0;
   return (weightOf(attacker, build) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
 }
 

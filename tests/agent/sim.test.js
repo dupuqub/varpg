@@ -903,7 +903,7 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
 });
 
 // ---- Body slam: damage from collisions ----
-// The rule (src/sim.js): every contact with something that has doesDamage is a hit. The attack is
+// The rule (src/sim.js): every collision is a hit. The attack is
 // weight x 0.001 x impact / 6 (impact = the speed going into the other thing; provisional formula).
 // damage = max(0, attack - defense). Avatar: 5000 kg, defense 3, health 100.
 // Rocks of seed 1 (see test 39): the stone at 159,444 (5000 kg, health 10, square 0,1), the boulder at
@@ -1265,19 +1265,18 @@ test("67 touching again after separating is a new collision and hurts again; the
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });
 
-test("68 only something with doesDamage hits: a type without it never hurts what touches it", () => {
-  const patched = loadGame((text) => text.replace(
-    "const DEFINITIONS = {\n  actors: {",
-    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", size: { min: 16, max: 16 }, weightPerRadius: 300, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
-  ));
-  const result = run(`
-    const soft = { type: "soft", radius: 16, position: { x: 0, y: 0 } };
+test("68 the attack comes from the weight alone: a thing with weightPerRadius 0 has attack 0 and damage 0 at any impact, the same thing with weight does hit", () => {
+  const weightless = loadGame((text) => text.replace("size: { min: 16, max: 16 },\n      weightPerRadius: 300,\n      healthRange", "size: { min: 16, max: 16 },\n      weightPerRadius: 0,\n      healthRange"));
+  const probe = `
     const stone = { type: "stone", radius: 16, position: { x: 0, y: 0 } };
+    const avatar = createActor(PLAYER_ID, "player");
     const full = createRun(1).build;
-    return { soft: finalAttack(soft, { impact: 12 }, full), stone: finalAttack(stone, { impact: 12 }, full) };
-  `, patched);
-  assert.strictEqual(result.soft, 0); // same weight as the stone, but no doesDamage
-  assert.ok(Math.abs(result.stone - 9.6) < 1e-9);
+    return { attack: finalAttack(stone, { impact: 12 }, full), damage: damageOf(stone, { impact: 12 }, avatar, full) };
+  `;
+  assert.deepStrictEqual(plain(run(probe, weightless)), { attack: 0, damage: 0 }); // no minimum damage either: there is no attack
+  const normal = run(probe);
+  assert.ok(Math.abs(normal.attack - 9.6) < 1e-9); // 4800 x 0.001 x 12 / 6
+  assert.ok(Math.abs(normal.damage - 6.6) < 1e-9); // 9.6 - 3
 });
 
 test("69 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
@@ -1349,7 +1348,6 @@ test("74 the list of still objects has the rock and the Shroom, each complete an
     const object = objects[id];
     assert.deepStrictEqual(object.size, { min: 16, max: 32 }, id);
     assert.strictEqual(object.weightPerRadius, 100, id);
-    assert.strictEqual(object.doesDamage, true, id);
     assert.ok(object.initial && object.name, id + " is a complete entry");
     assert.strictEqual(object.weightPerRadius * object.size.min, 1600, id);
     assert.strictEqual(object.weightPerRadius * object.size.max, 3200, id);
@@ -1360,9 +1358,9 @@ test("74 the list of still objects has the rock and the Shroom, each complete an
 });
 
 test("75 a size that is not whole, or has a min above the max, stops the game when it loads (for the rock and for the Shroom, each on its own)", () => {
-  const rockSize = 'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
-  const shroomSize = 'name: "Shroom",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
-  const patch = (original, name, size, weight) => (text) => text.replace(original, 'name: "' + name + '",\n      doesDamage: true,\n      size: ' + size + ',\n      weightPerRadius: ' + weight + ',');
+  const rockSize = 'name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
+  const shroomSize = 'name: "Shroom",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
+  const patch = (original, name, size, weight) => (text) => text.replace(original, 'name: "' + name + '",\n      size: ' + size + ',\n      weightPerRadius: ' + weight + ',');
   for (const [original, name, id] of [[rockSize, "Rock", /object rock/], [shroomSize, "Shroom", /object shroom/]]) {
     assert.throws(() => loadGame(patch(original, name, "{ min: 16.5, max: 32 }", 100)), id);
     assert.throws(() => loadGame(patch(original, name, "{ min: 40, max: 32 }", 100)), id);
@@ -1448,8 +1446,8 @@ test("79 Chamber 1 has a Shroom of radius 24 at 130 px to the left; the first da
 
 test("80 the rock and the Shroom share nothing: changing the size of one in the data leaves the other as it was", () => {
   const rockOnly = loadGame((text) => text.replace(
-    'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },',
-    'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 20, max: 40 },'));
+    'name: "Rock",\n      size: { min: 16, max: 32 },',
+    'name: "Rock",\n      size: { min: 20, max: 40 },'));
   const sizes = plain(run("return { rock: DEFINITIONS.objects.rock.size, shroom: DEFINITIONS.objects.shroom.size };", rockOnly));
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
