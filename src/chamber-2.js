@@ -18,15 +18,11 @@ const TEST_DIRECTIONS = [
   { x: TEST_DIAGONAL, y: -TEST_DIAGONAL },
 ];
 
-// Walks in one direction for 30 frames, then the next, and so on. The aim
-// changes every 45 frames, so move and aim are not in step with each other.
+// Walks in one direction for 30 frames, then the next, and so on.
 function scriptedInputs(count) {
   const inputs = [];
   for (let i = 0; i < count; i++) {
-    inputs.push({
-      move: TEST_DIRECTIONS[Math.floor(i / 30) % 8],
-      aim: TEST_DIRECTIONS[(Math.floor(i / 45) + 3) % 8],
-    });
+    inputs.push({ move: TEST_DIRECTIONS[Math.floor(i / 30) % 8] });
   }
   return inputs;
 }

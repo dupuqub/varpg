@@ -6,7 +6,7 @@ Guide for any agent continuing this project. Everything needed to continue shoul
 
 A 2D top-down action RPG in the vein of Diablo and Path of Exile, running in the browser. The theme is **mechas** (see Decisions).
 
-Repository state: screen navigation (main menu, test chambers list, Chamber 1) and the first movement test in Chamber 1: a player that is always at the center of the screen, moves and aims. The collision grid (cells and window) exists, but collision itself and combat are not implemented yet. See "Code layout".
+Repository state: screen navigation (main menu, test chambers list, Chamber 1) and the first movement test in Chamber 1: a player that is always at the center of the screen and moves. The collision grid (cells and window) exists, but collision itself and combat are not implemented yet. See "Code layout".
 
 ## Concept
 
@@ -45,7 +45,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 Keep everything simple. Screens are HTML and CSS, and only one is shown at a time.
 
 - **Entry screen** with 3 buttons: NEW GAME, CONTINUE and TEST CHAMBERS. NEW GAME and CONTINUE do nothing yet (they are disabled).
-- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come. **Chamber 1: Movement** is only for testing movement. Nothing else goes in it. The user checked it in the browser (Chromium on Linux, 60 Hz and 100 Hz monitors) and everything looks and behaves as described: circle, aim arrow, ground grid, collision window overlay and movement.
+- **TEST CHAMBERS** is another screen, where the user picks which test map to run. More tests will come. **Chamber 1: Movement** is only for testing movement. Nothing else goes in it. The user checked it in the browser (Chromium on Linux, 60 Hz and 100 Hz monitors) and everything looked and behaved as described (circle, ground grid, collision window overlay and movement). That check was made before the manual aim was removed, which also removed the aim arrow.
 - Every chamber has a name after its number, shown on the list and as its title: **Chamber 1: Movement**, **Chamber 2: Diagnostics** (the user's rule; give a name to each new chamber).
 - Chambers are not necessarily places in the game. **Chamber 2: Diagnostics** is a test bench: buttons that run something in the real browser and print plain text into a box, with a COPY button, so the user can paste the output to the agent. Current buttons: ENVIRONMENT (browser, screen, gamepads, how many frame callbacks per second the browser gives), SIMULATION CHECK (a 600-frame scripted run played twice, the history and the cross-check, including a snap changed on purpose to see that the check notices it, and the final state) and DATA (the definitions and the initial state). The scripted run uses no trigonometry, so every browser must print the same final position; compare outputs between machines or against a Node run.
 
@@ -115,16 +115,16 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 The user approved this and noted that everything may change.
 
-- The canvas is **1920 x 1080** (the user's requirement), and world units are canvas pixels. When the browser window is smaller, CSS shows the canvas smaller, keeping its shape (it never grows taller than the window), and the mouse position is scaled back to canvas pixels. At 1:1 it needs a full 1080-pixel-tall window.
+- The canvas is **1920 x 1080** (the user's requirement), and world units are canvas pixels. When the browser window is smaller, CSS shows the canvas smaller, keeping its shape (it never grows taller than the window). At 1:1 it needs a full 1080-pixel-tall window.
 - The player is always at the center of the screen (the camera follows the player).
-- Move with WASD or the left analog stick. Aim with the mouse or the right analog stick.
-- The player is drawn as a white circle plus a minimal arrow showing where it looks.
+- Move with WASD or the left analog stick. **There is no manual aim** (the user's decision, no mouse and no right stick): the weapons aim by themselves. The user described four automatic weapons, on the shoulders and on the arms, with ammunition, damage types and so on (the details do not matter yet). So the avatar has no `aim` field. A weapon's target will be data of the weapon, later.
+- The player is drawn as a white circle. The arrow that showed where it looked was removed with the manual aim. If the avatar should show a facing direction (for example its movement direction), the user has not asked for it.
 - `move.direction` is a vector with length 0 to 1. On the keyboard, diagonals are normalized so they are not faster.
-- `aim` is a unit vector, not an angle, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
+- Vectors (for example `move.direction`) are used instead of angles, so the simulation needs no trigonometry (which can differ between browsers and hurt determinism).
 - Movement stops instantly when input stops (no inertia for now).
 - **Speed is dynamic** (the user's requirement): it is read again every frame. The actor has `baseSpeed` (in the definitions) and a `finalSpeed(actor)` function gives the value used each frame (see "State, definitions and rules"). Where the value comes from (for example the mecha legs) is not defined yet.
 - Agent's addition: a faint grid on the ground. With the camera locked on the player, an empty background would make movement invisible.
-- Gamepad: the browser only exposes it after a button is pressed. Sticks have a radial dead zone of 0.15.
+- Gamepad: the browser only exposes it after a button is pressed. The left stick has a radial dead zone of 0.15.
 - The loop in `src/main.js` runs at most one step per browser callback. On monitors above 60 Hz the extra callbacks are ignored (no step, no drawing), so the game does not speed up. On slow machines it runs in slow motion.
 
 ### Spawn
@@ -178,7 +178,6 @@ Format of an actor **in the state** (provisional, it will change, for example on
   "type": "player",
   "health": { "current": 100 },
   "position": { "x": 0, "y": 0 },
-  "aim": { "x": 1, "y": 0 },
   "cell": { "x": 0, "y": 0 },
   "move": { "direction": { "x": 0, "y": 0 } }
 }
@@ -189,7 +188,7 @@ Its definition, in `src/data.js` (the fixed values, and the initial state that `
 ```js
 player: {
   name: "Player", maxHealth: 100, attack: 10, defense: 3, radius: 16, baseSpeed: 3,
-  initial: { health: { current: 100 }, position: { x: 0, y: 0 }, aim: { x: 1, y: 0 },
+  initial: { health: { current: 100 }, position: { x: 0, y: 0 },
              cell: { x: 0, y: 0 }, move: { direction: { x: 0, y: 0 } } },
 }
 ```
@@ -202,8 +201,8 @@ Notes: `attack` and `defense` are loose numbers because they are not defined yet
 - `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen.
 - `src/sim.js`: the rules. No DOM access. `createRun`, `createChamber1State(runId)`, `createActor`, `definitionOf`, `finalSpeed`, `step(state, input)` and the grid helpers `cellIndex`, `isInWindow` and `assertValidGrid`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
-- `src/input.js`: reads keyboard, mouse and gamepad, and returns `{ move, aim }` for the frame.
-- `src/render.js`: draws the state (reference grid, collision window overlay, player and aim arrow). It never changes it.
+- `src/input.js`: reads keyboard and gamepad, and returns `{ move }` for the frame.
+- `src/render.js`: draws the state (reference grid, collision window overlay and the player). It never changes it.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders (`environmentText`, `simulationCheckText`, `dataText`) do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node.

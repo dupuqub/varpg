@@ -1,32 +1,15 @@
-// Input: reads keyboard, mouse and gamepad and returns the numbers for the current frame.
+// Input: reads keyboard and gamepad and returns the numbers for the current frame.
 // It knows nothing about the simulation.
+// There is no mouse and no right stick: the weapons aim by themselves, so the
+// player only moves.
 
 const STICK_DEADZONE = 0.15;
 
 const pressedKeys = new Set();
-let mouseOffset = null; // mouse position relative to the center of the canvas
-let mouseMoved = false;
-let currentAim = { x: 1, y: 0 };
 
 window.addEventListener("keydown", (event) => pressedKeys.add(event.code));
 window.addEventListener("keyup", (event) => pressedKeys.delete(event.code));
 window.addEventListener("blur", () => pressedKeys.clear());
-
-// The player is always at the center of the canvas, so the aim direction
-// is the direction of the mouse relative to the center.
-function trackMouse(canvas) {
-  canvas.addEventListener("mousemove", (event) => {
-    const box = canvas.getBoundingClientRect();
-    // The canvas can be shown smaller on screen than its real size.
-    const scaleX = canvas.width / box.width;
-    const scaleY = canvas.height / box.height;
-    mouseOffset = {
-      x: (event.clientX - box.left) * scaleX - canvas.width / 2,
-      y: (event.clientY - box.top) * scaleY - canvas.height / 2,
-    };
-    mouseMoved = true;
-  });
-}
 
 // Returns the vector with length 1, or null if the vector is zero.
 function normalized(vector) {
@@ -61,7 +44,7 @@ function readStick(pad, xAxis, yAxis) {
   return vector;
 }
 
-// Input for this frame: { move: { x, y }, aim: { x, y } }
+// Input for this frame: { move: { x, y } }
 function readInput() {
   const pad = firstGamepad();
 
@@ -69,18 +52,5 @@ function readInput() {
   const leftStick = pad ? readStick(pad, 0, 1) : null;
   const move = leftStick || keyboardMove();
 
-  // Aim: the right stick wins if it is outside the dead zone; otherwise the mouse,
-  // if it moved this frame; otherwise the previous aim stays.
-  const rightStick = pad ? readStick(pad, 2, 3) : null;
-  if (rightStick) {
-    currentAim = normalized(rightStick);
-  } else if (mouseMoved && mouseOffset) {
-    currentAim = normalized(mouseOffset) || currentAim;
-  }
-  mouseMoved = false;
-
-  return {
-    move: { x: move.x, y: move.y },
-    aim: { x: currentAim.x, y: currentAim.y },
-  };
+  return { move: { x: move.x, y: move.y } };
 }

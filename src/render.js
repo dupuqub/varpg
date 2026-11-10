@@ -28,7 +28,6 @@ function draw(context, state) {
   context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
 
-  drawAimArrow(context, radius, player.aim);
 }
 
 // Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.
@@ -91,32 +90,4 @@ function drawCollisionWindow(context, grid) {
     context.lineTo(left + width, top + offset);
   }
   context.stroke();
-}
-
-// Small triangle outside the circle, pointing where the player is looking.
-function drawAimArrow(context, radius, aim) {
-  const centerX = context.canvas.width / 2;
-  const centerY = context.canvas.height / 2;
-
-  const baseDistance = radius + 4;
-  const tipDistance = radius + 16;
-  const halfWidth = 6;
-
-  // Vector perpendicular to the aim, to open the base of the triangle.
-  const sideX = -aim.y;
-  const sideY = aim.x;
-
-  context.fillStyle = PLAYER_COLOR;
-  context.beginPath();
-  context.moveTo(centerX + aim.x * tipDistance, centerY + aim.y * tipDistance);
-  context.lineTo(
-    centerX + aim.x * baseDistance + sideX * halfWidth,
-    centerY + aim.y * baseDistance + sideY * halfWidth
-  );
-  context.lineTo(
-    centerX + aim.x * baseDistance - sideX * halfWidth,
-    centerY + aim.y * baseDistance - sideY * halfWidth
-  );
-  context.closePath();
-  context.fill();
 }

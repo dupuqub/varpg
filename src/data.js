@@ -22,7 +22,6 @@ const DEFINITIONS = {
       initial: {
         health: { current: 100 },
         position: { x: 0, y: 0 },
-        aim: { x: 1, y: 0 }, // vector with length 1
         cell: { x: 0, y: 0 }, // grid cell relative to the player, set every frame
         move: { direction: { x: 0, y: 0 } }, // vector with length 0 to 1
         // A type without "move" here is static, like a trap.

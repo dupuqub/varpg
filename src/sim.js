@@ -104,15 +104,13 @@ function isInWindow(grid, cell) {
 }
 
 // Advances the state by one frame. Changes the state in place.
-// input = { move: { x, y }, aim: { x, y } }
+// input = { move: { x, y } }
 function step(state, input) {
   const player = state.actors.find((actor) => actor.id === PLAYER_ID);
 
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
   player.move.direction.y = input.move.y;
-  player.aim.x = input.aim.x;
-  player.aim.y = input.aim.y;
 
   // 2. Movement: every actor that has "move" walks, in list order.
   // The speed is asked every frame, because it can change from one frame to the next.

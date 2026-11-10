@@ -26,7 +26,6 @@ const STEP_TOLERANCE_MS = 0.5; // slack for the jitter of a 60 Hz monitor
 
 const canvas = document.getElementById("canvas");
 const context = canvas.getContext("2d");
-trackMouse(canvas);
 
 let run = null;
 let state = null;
