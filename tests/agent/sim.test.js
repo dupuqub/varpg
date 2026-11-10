@@ -2047,3 +2047,46 @@ test("100 the cells stored in the actors are right at the start and after every 
   assert.strictEqual(result.later, 0);
   assert.ok(result.turns > 20 && result.spread > 5, "too little happened to prove it: " + result.turns + " turns, " + result.spread + " Dummies over a border");
 });
+
+// ---- The largest actor ----
+// The user's rule: an actor wraps when its center leaves the window of the grid, and that jump must never be seen. So
+// no recipe may allow an actor with a radius above the smallest space between the screen and the edge of the window.
+
+// The size of the screen is the size of the canvas, written in index.html.
+function screenSize() {
+  const html = fs.readFileSync(path.join(SRC, "..", "index.html"), "utf8");
+  const canvas = html.match(/<canvas id="canvas" width="(\d+)" height="(\d+)"/);
+  assert.ok(canvas, "the canvas and its size were not found in index.html");
+  return { width: Number(canvas[1]), height: Number(canvas[2]) };
+}
+
+// The actor recipes of a game that allow a radius above the margin, as text ("dummy: 600 > 580"). Empty if none.
+function actorsTooLarge(game) {
+  const screen = screenSize();
+  return run(`
+    const grid = createChamber1State().grid;
+    const margin = Math.min((grid.windowWidth * grid.cellSize - ${screen.width}) / 2, (grid.windowHeight * grid.cellSize - ${screen.height}) / 2);
+    const tooLarge = [];
+    for (const [id, recipe] of Object.entries(DEFINITIONS.actors)) {
+      const largest = recipe.size ? recipe.size.max : recipe.radius;
+      if (!(largest <= margin)) tooLarge.push(id + ": " + largest + " > " + margin);
+    }
+    return { margin, tooLarge, actors: Object.keys(DEFINITIONS.actors).length };
+  `, game);
+}
+
+test("101 no recipe in the definitions allows an actor larger than the space between the screen and the edge of the window (580), so a wrap is never seen", () => {
+  const real = actorsTooLarge(context);
+  assert.strictEqual(real.margin, 580); // (35 x 64 - 1080) / 2 up and down; across it is (61 x 64 - 1920) / 2 = 992
+  assert.ok(real.actors >= 2, "the avatar and the Dummy must both be looked at");
+  assert.deepStrictEqual(plain(real.tooLarge), []);
+
+  // The check can fail: a Dummy recipe that goes up to 581 is caught, and one that goes up to exactly 580 is not.
+  const withSize = (max) => loadGame((text) => {
+    const patched = text.replace(/dummies: \{ count: \d+,/, "dummies: { count: 0,").replace("size: { min: 8, max: 16 },", "size: { min: 8, max: " + max + " },");
+    assert.ok(patched.includes("max: " + max + " }"), "the patch of the Dummy size should apply");
+    return patched;
+  });
+  assert.deepStrictEqual(plain(actorsTooLarge(withSize(581)).tooLarge), ["dummy: 581 > 580"]);
+  assert.deepStrictEqual(plain(actorsTooLarge(withSize(580)).tooLarge), []);
+});

@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 100) walk, turn and hurt what they touch, with the same body slam.
+- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 101) walk, turn and hurt what they touch, with the same body slam.
 
 ## The tests, one by one
 
@@ -167,7 +167,7 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 
 ### The Dummies
 
-Tests 80 to 100 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
+Tests 80 to 101 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
 
 | # | What it checks | Why it matters |
 |---|---|---|
@@ -192,6 +192,7 @@ Tests 80 to 100 (most run in a game without objects, so only the collisions the 
 | 98 | With Dummies of radius 256 and 128 among the others, the state after 200 frames is the same as testing every pair; the radius of 256 covers 8 or 9 cells each way, and the huge Dummy collided. | Huge actors need nothing special (the user's decision: several cells for any actor). |
 | 99 | Three Dummies in a row: the first overlaps the second, which is pushed over the border of a cell into the third, with which it shared no cell before. Both collisions happen in the same step. | The cells are written again at once when a Dummy is pushed. (Without that, this test and 100 fail; it was tried.) |
 | 100 | At the start and after each of 300 steps, the cells stored in every actor are the ones computed from its position and radius, with Dummies over borders, pushed and wrapped. | The stored cells are the truth the collision reads (the user's rule: read from the object). |
+| 101 | No actor recipe in the definitions (the avatar's `radius`, the Dummy's `size.max`) allows a radius above the smallest space between the screen (the canvas in `index.html`, 1920 x 1080) and the edge of the window of the grid: 580 px up and down (992 across). A Dummy recipe that goes up to 581 is caught; up to exactly 580 is not. | The user's rule: an actor wraps when its center leaves the window, and that jump must never be seen, so an actor that large cannot be made in the first place. |
 
 ### Benchmark of the grid (not a test)
 
