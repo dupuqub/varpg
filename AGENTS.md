@@ -264,7 +264,7 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
   3. Nobody crosses the seam: actors on opposite edges are not neighbors. It is invisible, because the seam is off screen.
   4. The ground is infinite. Only the population is bounded.
   5. To see the limits of the universe, a debug zoom-out is the way; drawing every cell only produces noise. (The user no longer wants to see the collision boxes, and the overlay was removed.)
-- No collision uses the grid yet: the collision with objects finds them by the formula, and the Dummies test every pair by brute force (`collideDummies`), written so the grid can replace it.
+- No collision uses the grid yet: the collision with objects finds them by the formula. The collision between Dummies **does use the grid** (`collideDummies`): each Dummy is put in its cell, and is only tested against the Dummies of its own cell and of the eight around it. That is enough only if two Dummies that touch are always in the same or in neighboring cells, which is the rule of the cell size (see "Relations"); with smaller cells collisions are lost (measured by `tests/agent/benchmark-grid.js`).
 - The wrap exists for the Dummies only (`wrapIntoWindow`): the window is the real area of the game, and a Dummy that leaves it on one side comes back on the opposite side. The invariant for every actor is still not checked.
 
 ### The Dummy
@@ -278,7 +278,7 @@ The user's idea (2026-11-10): a test actor that does not attack, made to see man
 - **Wrap:** a Dummy that leaves the window comes back on the opposite side (`wrapIntoWindow`), around the avatar wherever it is.
 - **Collisions hurt both sides (the user's decision, 2026-11-10) with the same body slam as the avatar's** (`damageOf`, see "Damage"): at a new contact whose impact reaches the minimum, the Dummy and the other thing (an object, the avatar or another Dummy) each hurt the other with their own weight. The impact is the speed at which the two close in on each other (the difference of their velocities along the line between the centers); an object does not move. The Dummy weighs by the same rule as the objects (weight per radius times radius), from its own recipe. Health stops at 0: there is no death yet, so a Dummy at 0 goes on walking. An object that breaks in the hit has no collision: the Dummy is not pushed and does not turn. A contact below the minimum impact turns the Dummy but hurts no one. The avatar is not pushed by a Dummy (not decided).
 - **Drawn** as blue circles by `drawDummies` in `src/render.js`. The window is twice the screen, so about a quarter of the Dummies are on screen at a time.
-- Tests: 80 to 94 in `tests/agent/README.md`. Most tests play in a game with no Dummies (`count` 0 in a patched copy of the data), because a wandering Dummy also hurts rocks; the Dummy tests use the real data.
+- Tests: 80 to 95 in `tests/agent/README.md`. Most tests play in a game with no Dummies (`count` 0 in a patched copy of the data), because a wandering Dummy also hurts rocks; the Dummy tests use the real data (with 100 Dummies, to stay fast).
 
 ### Actor
 

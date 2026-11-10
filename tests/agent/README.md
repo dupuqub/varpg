@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 94) walk, turn and hurt what they touch, with the same body slam.
+- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 95) walk, turn and hurt what they touch, with the same body slam.
 
 ## The tests, one by one
 
@@ -167,7 +167,7 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 
 ### The Dummies
 
-Tests 80 to 94 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
+Tests 80 to 95 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks; the Dummy tests use 100 Dummies, not the real count, to stay fast (a patch of the count that stops finding its text fails loudly).
 
 | # | What it checks | Why it matters |
 |---|---|---|
@@ -186,8 +186,12 @@ Tests 80 to 94 (most run in a game without objects, so only the collisions the t
 | 92 | The speed of a Dummy comes from its recipe through `finalSpeed` (a recipe of 3 gives Dummies of 3); a thing without a speed has 0; a Dummy speed of 0 or less stops the game when it loads. | Everything goes through the final functions, and the definitions are checked. |
 | 93 | Two Dummies side by side at the same velocity (they do not close in on each other) overlap: both turn once, and nobody is hurt. | Below the minimum impact there is no hit, but the contact still turns the Dummy. |
 | 94 | A Dummy that breaks a rock (1 health left) is still hurt by it (100 to 99), but is not pushed and does not turn, and goes through the broken rock. | The same rule as the avatar's: an object that breaks in the hit has no collision. |
+| 95 | The collision grid finds the same collisions as testing every pair of Dummies: the same state after 200 frames, for cell sizes of 60, 100 and 300 (with more than 20 turns, so the comparison proves something). | The grid is a faster way to the same result, not a different rule. |
 
-## Proof that the tests can fail
+### Benchmark of the grid (not a test)
+
+`node tests/agent/benchmark-grid.js [frames]` plays the same run (the real number of Dummies, the avatar still) with several cell sizes and prints, for each, the ms per step, the pairs tested per step, and the first frame that differs from testing every pair. The window keeps the same size in pixels, so only the cells change. The numbers depend on the machine. A cell below twice the largest radius of a Dummy loses collisions (it shows as "differs at frame 1"); from there up to about 100 px the result is identical and the cost is about the same; at 300 px it is close to testing every pair.
+
 
 While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 on purpose: 6 of them failed (05, 06, 07, 08, 20 and 24), and everything passed again after reverting it. The same was done for the collision: with the line that calls it switched off, tests 41 to 46 failed. For the damage, with the line that applies it switched off, tests 47, 48, 49 and 52 failed. With the impact threshold removed, 47, 49, 50 and 66 fail; with the rock never hurt, 48, 52, 61, 62 and 65 fail. For the kit, ignoring the weight in `finalSpeed` made 17 tests fail (5 to 8, 16, 28 to 32, 41, 43, 47, 53 to 55 and 60), and removing the guard for a dash strength of 0 made test 57 fail. Tests that never fail would be worthless.
 

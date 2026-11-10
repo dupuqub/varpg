@@ -646,11 +646,27 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
 }
 
 // The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
-// the Dummies after it in the list (so each pair is looked at once). It brute-forces the pairs (100 Dummies are
-// about five thousand pairs); the collision grid is meant to replace this.
+// the Dummies after it in the list (so each pair is looked at once, in the same order as testing every pair).
+// The Dummies are found by the collision grid: each one is put in its cell (relative to the avatar, like
+// actor.cell), and a Dummy is only tested against the Dummies of its own cell and of the eight around it. That is
+// enough when two Dummies that touch are always in the same or in neighboring cells, which is what the rule of the
+// cellSize says (see state.grid in createChamber1State). The cells are the ones at the start of this step, so a
+// Dummy pushed by an earlier pair is still looked up where it was.
 function collideDummies(state, lastContacts, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.wander);
+  const size = state.grid.cellSize;
+
+  const cellOf = dummies.map((dummy) => ({
+    x: cellIndex(dummy.position.x - player.position.x, size),
+    y: cellIndex(dummy.position.y - player.position.y, size),
+  }));
+  const inCell = new Map(); // "x,y" -> the numbers of the Dummies in that cell, in list order
+  cellOf.forEach((cell, number) => {
+    const key = cell.x + "," + cell.y;
+    if (!inCell.has(key)) inCell.set(key, []);
+    inCell.get(key).push(number);
+  });
 
   for (let i = 0; i < dummies.length; i++) {
     const dummy = dummies[i];
@@ -658,7 +674,16 @@ function collideDummies(state, lastContacts, blueprint) {
       touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
     }
     touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
-    for (let j = i + 1; j < dummies.length; j++) {
+
+    const later = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const neighbors = inCell.get(cellOf[i].x + dx + "," + (cellOf[i].y + dy));
+        if (neighbors) for (const j of neighbors) if (j > i) later.push(j);
+      }
+    }
+    later.sort((a, b) => a - b);
+    for (const j of later) {
       touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
     }
   }

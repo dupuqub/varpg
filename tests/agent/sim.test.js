@@ -1863,3 +1863,37 @@ test("94 a Dummy that breaks an object in the hit is still hurt by it, but is no
   assert.deepStrictEqual([result.later.turns], [0]); // it kept walking through the broken rock
   assert.ok(result.later.y > result.atBreak.y + 70, "the Dummy did not go through: " + result.atBreak.y + " -> " + result.later.y);
 });
+
+test("95 the collision grid finds the same collisions as testing every pair of Dummies: the same state after 200 frames, for the cell sizes that follow the rule", () => {
+  const result = run(`
+    const everyPair = (state, lastContacts, blueprint) => {
+      const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+      const dummies = state.actors.filter((actor) => actor.wander);
+      for (let i = 0; i < dummies.length; i++) {
+        const dummy = dummies[i];
+        for (const object of objectsNear(state, dummy)) {
+          touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
+        }
+        touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+        for (let j = i + 1; j < dummies.length; j++) touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
+      }
+    };
+    const play = (cellSize, useEveryPair) => {
+      const real = collideDummies;
+      if (useEveryPair) collideDummies = everyPair;
+      try {
+        const s = createChamber1State(1, 2);
+        s.grid = { cellSize, windowWidth: 3900 / cellSize, windowHeight: 2100 / cellSize };
+        for (let frame = 0; frame < 200; frame++) step(s, { move: { x: 0, y: 0 } });
+        return JSON.stringify(s);
+      } finally {
+        collideDummies = real;
+      }
+    };
+    const turns = (json) => JSON.parse(json).actors.reduce((sum, actor) => sum + (actor.wander ? actor.wander.turns : 0), 0);
+    const reference = play(60, true);
+    return { same: [60, 100, 300].map((size) => play(size, false) === play(size, true)), turns: turns(reference) };
+  `, WITH_DUMMIES);
+  assert.deepStrictEqual(plain(result.same), [true, true, true]);
+  assert.ok(result.turns > 20, "the Dummies hardly collided, so the comparison proves little: " + result.turns);
+});
