@@ -140,15 +140,16 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 68 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 9.6. | The rule is modular: the flag decides who hits. |
 | 69 | A hit always costs at least 1: attack 0.8 (Shroom of radius 16 at impact 3) against defense 3 costs 1; attack 6.4 (radius 32 at impact 12) costs 3.4; no impact costs 0. | The defense never makes the target immune. |
 | 70 | An impact below 1 (0.75, into a Shroom of radius 32, bounce 1) triggers nothing: no damage, no bounce, the avatar stops. | The collision threshold. |
-| 71 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius`, `minRadius` and `maxRadius` of every still actor and object. | The rule holds for the real data. |
+| 71 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius`, `size.min` and `size.max` of every still actor and object. | The rule holds for the real data. |
 | 72 | A `weightPerRadius` of 300.5, a radius of 16.5 or a part weight of -1 makes the game fail when it loads; a `weightPerRadius` of 0 loads and gives weight 0. | The check is real, and weight 0 is allowed. |
 | 73 | A still actor with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
-| 74 | The list of still objects has the rock: radius from 16 to 32, weight modifier 100 (so 1600 to 3200 kg). | The user's first object, as he gave it. Nothing in the game uses it yet. |
-| 75 | A size with a radius that is not whole, a minimum above the maximum, or a weight modifier that is not whole stops the game when it loads (checked through the Shroom, which shares `ROCK_SIZE`); weight 0 is allowed. | The check is real. |
+| 74 | The list of still objects has the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100, `doesDamage`, `initial` and name (1600 to 3200 kg). Only the Shroom has a bounce, `{ min: 0.2, max: 1 }`; the rock has the health range 10 to 20. | Each object is complete and unique. |
+| 75 | A size with a radius that is not whole, a min above the max, or a weight modifier that is not whole stops the game when it loads, for the rock and for the Shroom, each on its own; weight 0 is allowed. | The check is real, for every object. |
 | 76 | A still actor gets its own radius: a stone or dummy gets 16 by itself, a Shroom needs one from 16 to 32 (15, 33, 20.5 and none are refused), and the avatar has none (it keeps its definition's). | Every instance knows its size; the range is checked. |
 | 77 | The Shroom's bounce grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The stone and the dummy have none. | The bounce rule the user chose, in numbers. |
 | 78 | A bounce above 1, a minimum above the maximum, or a `{ min, max }` bounce without a size makes the game fail when it loads. | A bounce never ejects (the user's rule). |
 | 79 | Chamber 1 has a Shroom of radius 24 at 130 px to the left. The first dash left hits it, comes back at about 0.6 of the speed, and the state stays plain JSON. | The Shroom works in the real chamber. |
+| 80 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
 
 ### The kit of parts
 

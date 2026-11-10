@@ -744,8 +744,8 @@ test("40 the state keeps only the seed, not the rocks, and every rock kind is a 
         kind,
         exists: kind in DEFINITIONS.actors,
         isStatic: !("move" in DEFINITIONS.actors[kind].initial),
-        fits: DEFINITIONS.actors[kind].size.maxRadius <= rules.margin,
-        fixed: DEFINITIONS.actors[kind].size.minRadius === DEFINITIONS.actors[kind].size.maxRadius,
+        fits: DEFINITIONS.actors[kind].size.max <= rules.margin,
+        fixed: DEFINITIONS.actors[kind].size.min === DEFINITIONS.actors[kind].size.max,
       })),
     };
   `);
@@ -1193,7 +1193,7 @@ test("64 the weight of a still actor is weightPerRadius x radius, a whole number
       small: weightOf(make("shroom", 16), createRun(1).build),
       middle: weightOf(make("shroom", 24), createRun(1).build),
       large: weightOf(make("shroom", 32), createRun(1).build),
-      range: weightRangeOf(DEFINITIONS.actors.shroom),
+      range: weightRangeOf(DEFINITIONS.objects.shroom),
       rockRange: weightRangeOf(DEFINITIONS.objects.rock),
     };
   `);
@@ -1268,7 +1268,7 @@ test("67 touching again after separating is a new collision and hurts again; the
 test("68 only something with doesDamage hits: a type without it never hurts what touches it", () => {
   const patched = loadGame((text) => text.replace(
     "const DEFINITIONS = {\n  actors: {",
-    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 }, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", size: { min: 16, max: 16 }, weightPerRadius: 300, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
   ));
   const result = run(`
     const soft = { type: "soft", radius: 16, position: { x: 0, y: 0 } };
@@ -1302,34 +1302,34 @@ test("70 below the minimum impact (1) nothing triggers: no damage, no bounce; th
   assert.strictEqual(result.vy, 0); // stopped, not sent back
 });
 
-test("71 every weight in the definitions is a whole number: the parts, and the size of every still actor and object", () => {
+test("71 every weight in the definitions is a whole number: the parts, and the size and weightPerRadius of every still actor and object", () => {
   const weights = run(`
-    const sizes = [
-      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.size).map(([id, d]) => [id, d.size]),
-      ...Object.entries(DEFINITIONS.objects).map(([id, o]) => [id, o.size]),
+    const stills = [
+      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.size),
+      ...Object.entries(DEFINITIONS.objects),
     ];
     return [
-      ...sizes.flatMap(([id, size]) => [[id + " weightPerRadius", size.weightPerRadius], [id + " minRadius", size.minRadius], [id + " maxRadius", size.maxRadius]]),
+      ...stills.flatMap(([id, d]) => [[id + " weightPerRadius", d.weightPerRadius], [id + " size.min", d.size.min], [id + " size.max", d.size.max]]),
       ...Object.entries(DEFINITIONS.parts).map(([id, p]) => [id, p.weight]),
     ];
   `);
-  assert.ok(weights.length >= 20);
+  assert.ok(weights.length >= 21);
   for (const [id, weight] of weights) assert.ok(Number.isInteger(weight) && weight >= 0, id + ": " + weight);
 });
 
 test("72 a weight that is not a whole number (or is negative) stops the game when it loads; 0 is allowed", () => {
-  const stone = "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      healthRange";
-  const patch = (to) => (text) => text.replace(stone, to + ",\n      healthRange");
-  assert.throws(() => loadGame(patch("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300.5 }")), /actor type stone.*300.5/);
-  assert.throws(() => loadGame(patch("size: { minRadius: 16.5, maxRadius: 16.5, weightPerRadius: 300 }")), /actor type stone/);
+  const stone = "size: { min: 16, max: 16 },\n      weightPerRadius: 300,\n      healthRange";
+  const patch = (to) => (text) => text.replace(stone, to + "\n      healthRange");
+  assert.throws(() => loadGame(patch("size: { min: 16, max: 16 },\n      weightPerRadius: 300.5,")), /actor type stone.*300.5/);
+  assert.throws(() => loadGame(patch("size: { min: 16.5, max: 16.5 },\n      weightPerRadius: 300,")), /actor type stone/);
   assert.throws(() => loadGame((text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,')), /part head.*-1/);
-  const box = loadGame(patch("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 }"));
+  const box = loadGame(patch("size: { min: 16, max: 16 },\n      weightPerRadius: 0,"));
   assert.strictEqual(run("return weightOf({ type: 'stone', radius: 16 }, createRun(1).build);", box), 0);
 });
 
 test("73 a still actor with weight 0 and health 1 is harmless and breaks at the first hit, and the avatar goes through it", () => {
   const box = loadGame((text) => text
-    .replace("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      healthRange: { min: 10, max: 20 }", "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 },\n      healthRange: { min: 1, max: 1 }"));
+    .replace("size: { min: 16, max: 16 },\n      weightPerRadius: 300,\n      healthRange: { min: 10, max: 20 }", "size: { min: 16, max: 16 },\n      weightPerRadius: 0,\n      healthRange: { min: 1, max: 1 }"));
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -1342,20 +1342,33 @@ test("73 a still actor with weight 0 and health 1 is harmless and breaks at the 
   assert.strictEqual(result.vx, 12); // broken: no stop, no bounce
 });
 
-test("74 the list of still objects has the rock: radius from 16 to 32, weight modifier 100, so 1600 to 3200 kg", () => {
-  const rock = plain(run("return DEFINITIONS.objects.rock;"));
-  assert.deepStrictEqual(rock.size, { minRadius: 16, maxRadius: 32, weightPerRadius: 100 });
-  assert.strictEqual(rock.size.weightPerRadius * rock.size.minRadius, 1600);
-  assert.strictEqual(rock.size.weightPerRadius * rock.size.maxRadius, 3200);
+test("74 the list of still objects has the rock and the Shroom, each complete and with its own numbers: size min 16 and max 32, weight modifier 100", () => {
+  const objects = plain(run("return DEFINITIONS.objects;"));
+  assert.deepStrictEqual(Object.keys(objects), ["rock", "shroom"]);
+  for (const id of ["rock", "shroom"]) {
+    const object = objects[id];
+    assert.deepStrictEqual(object.size, { min: 16, max: 32 }, id);
+    assert.strictEqual(object.weightPerRadius, 100, id);
+    assert.strictEqual(object.doesDamage, true, id);
+    assert.ok(object.initial && object.name, id + " is a complete entry");
+    assert.strictEqual(object.weightPerRadius * object.size.min, 1600, id);
+    assert.strictEqual(object.weightPerRadius * object.size.max, 3200, id);
+  }
+  assert.deepStrictEqual(objects.rock.healthRange, { min: 10, max: 20 });
+  assert.deepStrictEqual(objects.shroom.bounce, { min: 0.2, max: 1 });
+  assert.strictEqual("bounce" in objects.rock, false); // only the Shroom bounces
 });
 
-test("75 a size that is not whole, or has a minimum above the maximum, stops the game when it loads", () => {
-  const size = "const ROCK_SIZE = { minRadius: 16, maxRadius: 32, weightPerRadius: 100 };";
-  const patch = (to) => (text) => text.replace(size, "const ROCK_SIZE = " + to + ";");
-  assert.throws(() => loadGame(patch("{ minRadius: 16.5, maxRadius: 32, weightPerRadius: 100 }")), /shroom/);
-  assert.throws(() => loadGame(patch("{ minRadius: 40, maxRadius: 32, weightPerRadius: 100 }")), /shroom/);
-  assert.throws(() => loadGame(patch("{ minRadius: 16, maxRadius: 32, weightPerRadius: 99.5 }")), /shroom/);
-  loadGame(patch("{ minRadius: 16, maxRadius: 32, weightPerRadius: 0 }")); // weight 0 is allowed
+test("75 a size that is not whole, or has a min above the max, stops the game when it loads (for the rock and for the Shroom, each on its own)", () => {
+  const rockSize = 'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
+  const shroomSize = 'name: "Shroom",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,';
+  const patch = (original, name, size, weight) => (text) => text.replace(original, 'name: "' + name + '",\n      doesDamage: true,\n      size: ' + size + ',\n      weightPerRadius: ' + weight + ',');
+  for (const [original, name, id] of [[rockSize, "Rock", /object rock/], [shroomSize, "Shroom", /object shroom/]]) {
+    assert.throws(() => loadGame(patch(original, name, "{ min: 16.5, max: 32 }", 100)), id);
+    assert.throws(() => loadGame(patch(original, name, "{ min: 40, max: 32 }", 100)), id);
+    assert.throws(() => loadGame(patch(original, name, "{ min: 16, max: 32 }", 99.5)), id);
+    loadGame(patch(original, name, "{ min: 16, max: 32 }", 0)); // weight 0 is allowed
+  }
 });
 
 test("76 a still actor gets its own radius: it must be given for a range, checked, and fixed sizes give it by themselves", () => {
@@ -1403,10 +1416,10 @@ test("77 the bounce of the Shroom grows in a straight line from 0.2 at radius 16
 
 test("78 a bounce above 1 (it would eject, like a spring), or a { min, max } without a size, stops the game when it loads", () => {
   const shroomBounce = "bounce: { min: 0.2, max: 1 }";
-  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.2, max: 1.5 }")), /bounce of the actor type shroom/);
-  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: 2")), /bounce of the actor type shroom/);
-  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.8, max: 0.5 }")), /bounce of the actor type shroom/);
-  assert.throws(() => loadGame((text) => text.replace("defense: 0,\n", "defense: 0,\n      bounce: { min: 0.2, max: 1 },\n").replace("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      defense", "defense")), /needs a size/);
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.2, max: 1.5 }")), /bounce of the object shroom/);
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: 2")), /bounce of the object shroom/);
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.8, max: 0.5 }")), /bounce of the object shroom/);
+  assert.throws(() => loadGame((text) => text.replace("size: { min: 16, max: 16 },\n      weightPerRadius: 300,\n      defense: 0,", "bounce: { min: 0.2, max: 1 },\n      defense: 0,")), /needs a size/);
 });
 
 test("79 Chamber 1 has a Shroom of radius 24 at 130 px to the left; the first dash left hits it and comes back at 0.6 of the speed", () => {
@@ -1431,4 +1444,12 @@ test("79 Chamber 1 has a Shroom of radius 24 at 130 px to the left; the first da
   assert.ok(result.shroom < 20);
   assert.strictEqual(result.moved, false);
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
+});
+
+test("80 the rock and the Shroom share nothing: changing the size of one in the data leaves the other as it was", () => {
+  const rockOnly = loadGame((text) => text.replace(
+    'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 16, max: 32 },',
+    'name: "Rock",\n      doesDamage: true, // rule: touching it hurts (the body slam)\n      size: { min: 20, max: 40 },'));
+  const sizes = plain(run("return { rock: DEFINITIONS.objects.rock.size, shroom: DEFINITIONS.objects.shroom.size };", rockOnly));
+  assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });

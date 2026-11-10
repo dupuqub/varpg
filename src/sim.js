@@ -7,9 +7,14 @@ const PLAYER_ID = "player_1";
 // The fixed values of an actor (radius, base speed, ...) live in DEFINITIONS
 // (src/data.js). The actor only keeps its type, and what changes.
 function definitionOf(actor) {
-  const definition = DEFINITIONS.actors[actor.type];
+  const definition = findDefinition(actor.type);
   if (!definition) throw new Error("Unknown actor type: " + actor.type);
   return definition;
+}
+
+// A type is an actor type (DEFINITIONS.actors) or a still object (DEFINITIONS.objects, like the Shroom).
+function findDefinition(type) {
+  return DEFINITIONS.actors[type] ?? DEFINITIONS.objects[type];
 }
 
 // A new actor: a copy of the "initial" state of its type (src/data.js).
@@ -18,7 +23,7 @@ function definitionOf(actor) {
 // A type with a "size" (a still actor) also gets its own "radius", a whole number inside the range of its size.
 // A type with a range of radius (min below max) needs the radius to be given; a fixed size gives it by itself.
 function createActor(id, type, radius) {
-  const definition = DEFINITIONS.actors[type];
+  const definition = findDefinition(type);
   if (!definition) throw new Error("Unknown actor type: " + type);
 
   // The copy through JSON makes every actor own its numbers, so changing one
@@ -27,13 +32,13 @@ function createActor(id, type, radius) {
   const actor = { id, type, ...initial };
 
   if (definition.size) {
-    const { minRadius, maxRadius } = definition.size;
-    const given = radius ?? (minRadius === maxRadius ? minRadius : undefined);
+    const { min, max } = definition.size;
+    const given = radius ?? (min === max ? min : undefined);
     if (given === undefined) {
-      throw new Error("The actor type " + type + " has a radius from " + minRadius + " to " + maxRadius + ": a radius must be given");
+      throw new Error("The actor type " + type + " has a radius from " + min + " to " + max + ": a radius must be given");
     }
-    if (!Number.isInteger(given) || given < minRadius || given > maxRadius) {
-      throw new Error("The radius of a " + type + " must be a whole number from " + minRadius + " to " + maxRadius + ", and it is " + given);
+    if (!Number.isInteger(given) || given < min || given > max) {
+      throw new Error("The radius of a " + type + " must be a whole number from " + min + " to " + max + ", and it is " + given);
     }
     actor.radius = given;
   } else if (radius !== undefined) {
@@ -89,50 +94,49 @@ function assertValidBuild(build) {
 // Fails loudly if a definition breaks a rule of the library. It runs once, when this file is loaded, so a
 // bad definition stops the game before the first frame.
 // - Every weight is a whole number of kg, zero or more (the user's rule): the weight of a part, and for a
-//   size the weightPerRadius and the radii (so weightPerRadius x radius is whole). Zero is allowed and has a
-//   meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
-// - A size has whole radii, 1 or more, with minRadius not above maxRadius.
+//   still thing the weightPerRadius and the radii of its size (so weightPerRadius x radius is whole). Zero is
+//   allowed and has a meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
+// - A size is { min, max }: whole radii, 1 or more, with min not above max.
 // - A bounce is never above 1 (the user's rule: more would eject whoever hits it, like a spring). A { min, max }
 //   needs a size, because it grows with the radius.
 // - Rocks (terrain.rocks.kinds) have a fixed size for now (the rolled radius is not implemented), and a radius
 //   that fits the margin, or rocks of neighbor squares could overlap.
 function assertValidDefinitions() {
-  const wholeWeight = (where, value) => {
-    if (!(Number.isInteger(value) && value >= 0)) {
-      throw new Error("The weight of " + where + " must be a whole number of kg, 0 or more, and it is " + value);
+  const validStill = (where, definition) => {
+    const { min, max } = definition.size;
+    if (!(Number.isInteger(definition.weightPerRadius) && definition.weightPerRadius >= 0)) {
+      throw new Error("The weight of " + where + " (weightPerRadius) must be a whole number of kg, 0 or more, and it is " + definition.weightPerRadius);
     }
-  };
-  const validSize = (where, size) => {
-    const { minRadius, maxRadius, weightPerRadius } = size;
-    wholeWeight(where + " (weightPerRadius)", weightPerRadius);
-    if (!Number.isInteger(minRadius) || !Number.isInteger(maxRadius) || minRadius < 1 || minRadius > maxRadius) {
-      throw new Error("The size of " + where + " needs whole radii, 1 or more, with minRadius not above maxRadius: " + minRadius + " to " + maxRadius);
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || min > max) {
+      throw new Error("The size of " + where + " needs whole radii, 1 or more, with min not above max: " + min + " to " + max);
     }
-  };
-  const validBounce = (where, bounce) => {
-    const values = typeof bounce === "number" ? [bounce] : [bounce.min, bounce.max];
-    if (!values.every((value) => value >= 0 && value <= 1) || (typeof bounce !== "number" && bounce.min > bounce.max)) {
-      throw new Error("The bounce of " + where + " must go from 0 to 1, with min not above max: " + JSON.stringify(bounce));
+    if (definition.bounce !== undefined) {
+      const bounce = definition.bounce;
+      const values = typeof bounce === "number" ? [bounce] : [bounce.min, bounce.max];
+      if (!values.every((value) => value >= 0 && value <= 1) || (typeof bounce !== "number" && bounce.min > bounce.max)) {
+        throw new Error("The bounce of " + where + " must go from 0 to 1, with min not above max: " + JSON.stringify(bounce));
+      }
     }
   };
 
   for (const [id, definition] of Object.entries(DEFINITIONS.actors)) {
-    if (definition.size) validSize("the actor type " + id, definition.size);
-    if (definition.bounce !== undefined) {
-      validBounce("the actor type " + id, definition.bounce);
-      if (typeof definition.bounce !== "number" && !definition.size) {
-        throw new Error("The bounce of the actor type " + id + " grows with the radius, so it needs a size");
-      }
+    if (definition.size) validStill("the actor type " + id, definition);
+    else if (definition.bounce !== undefined && typeof definition.bounce !== "number") {
+      throw new Error("The bounce of the actor type " + id + " grows with the radius, so it needs a size");
     }
   }
-  for (const [id, part] of Object.entries(DEFINITIONS.parts)) wholeWeight("the part " + id, part.weight);
-  for (const [id, object] of Object.entries(DEFINITIONS.objects)) validSize("the object " + id, object.size);
+  for (const [id, object] of Object.entries(DEFINITIONS.objects)) validStill("the object " + id, object);
+  for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
+    if (!(Number.isInteger(part.weight) && part.weight >= 0)) {
+      throw new Error("The weight of the part " + id + " must be a whole number of kg, 0 or more, and it is " + part.weight);
+    }
+  }
 
   const rules = DEFINITIONS.terrain.rocks;
   for (const kind of rules.kinds) {
-    const { minRadius, maxRadius } = DEFINITIONS.actors[kind].size;
-    if (minRadius !== maxRadius) throw new Error("The rock kind " + kind + " has a range of radius, and the seed does not roll it yet");
-    if (maxRadius > rules.margin) throw new Error("The radius of the rock kind " + kind + " is above terrain.rocks.margin, so rocks could overlap");
+    const { min, max } = findDefinition(kind).size;
+    if (min !== max) throw new Error("The rock kind " + kind + " has a range of radius, and the seed does not roll it yet");
+    if (max > rules.margin) throw new Error("The radius of the rock kind " + kind + " is above terrain.rocks.margin, so rocks could overlap");
   }
 }
 
@@ -172,25 +176,25 @@ function radiusOf(thing) {
 // weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
 // (assertValidDefinitions), so the weight is whole and nothing is rounded.
 function weightOf(actor, build) {
-  return isAvatar(actor) ? totalWeight(build) : definitionOf(actor).size.weightPerRadius * radiusOf(actor);
+  return isAvatar(actor) ? totalWeight(build) : definitionOf(actor).weightPerRadius * radiusOf(actor);
 }
 
 // The lowest and the highest weight a type can have, computed from its size (never stored).
 function weightRangeOf(definition) {
-  const { minRadius, maxRadius, weightPerRadius } = definition.size;
-  return { min: weightPerRadius * minRadius, max: weightPerRadius * maxRadius };
+  const { min, max } = definition.size;
+  return { min: definition.weightPerRadius * min, max: definition.weightPerRadius * max };
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
-// A number is used as it is. { min, max } grows in a straight line with the radius: min at minRadius,
-// max at maxRadius (the Shroom: 0.2 at 16 and 1 at 32).
+// A number is used as it is. { min, max } grows in a straight line with the radius: min at the smallest
+// radius of the size, max at the largest (the Shroom: 0.2 at 16 and 1 at 32).
 function bounceOf(thing) {
   const definition = definitionOf(thing);
   const bounce = definition.bounce;
   if (bounce === undefined) return 0;
   if (typeof bounce === "number") return bounce;
-  const { minRadius, maxRadius } = definition.size;
-  return bounce.min + ((bounce.max - bounce.min) * (radiusOf(thing) - minRadius)) / (maxRadius - minRadius);
+  const { min, max } = definition.size;
+  return bounce.min + ((bounce.max - bounce.min) * (radiusOf(thing) - min)) / (max - min);
 }
 
 // The attack of a hit (the body slam). "hit" says what happened: for a collision it is
@@ -314,10 +318,10 @@ function rockInSquare(seed, squareX, squareY) {
   if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
 
   const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
-  const { min, max } = DEFINITIONS.actors[type].healthRange;
+  const { min, max } = findDefinition(type).healthRange;
   const maxHealth = min + (hashInts(seed, squareX, squareY, 5) % (max - min + 1));
   // The radius is not rolled yet: the kinds have a fixed size (assertValidDefinitions), so it is that one.
-  const radius = DEFINITIONS.actors[type].size.minRadius;
+  const radius = findDefinition(type).size.min;
   return { type, position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth };
 }
 
