@@ -1,9 +1,10 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
 // There are three things in it: the avatar (the only actor), and two objects, the rock and the Shroom.
-// For each of them it has:
-// - the fixed values (radius, acceleration, ...);
-// - "initial": the state of a new actor of that type. createActor copies it.
-// The state only points here by id (actor.type), so it stays small.
+// The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
+// Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object
+// is a single fixed value, and nothing is placed by hand. A value that is not used by anything does not belong here:
+// it is deleted, and it comes back when something uses it.
+// The state only points here by id (type), so it stays small.
 // Read-only: it is frozen below, so nothing can change it by accident.
 
 // Why each number is what it is. Every value below says how it was chosen:
@@ -19,7 +20,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 17;
+const DEFINITIONS_VERSION = 18;
 
 const DEFINITIONS = {
   actors: {
@@ -36,8 +37,8 @@ const DEFINITIONS = {
         rechargeFrames: 240, // anchor: the user's old project (4 s) = 240 frames at 60 steps per second
       },
 
+      // The health is not here: a new avatar gets the maximum health of its build (createChamber1State).
       initial: {
-        health: { current: 0 }, // set to the maximum health of the build when the state is created (createChamber1State)
         position: { x: 0, y: 0 },
         cell: { x: 0, y: 0 }, // grid cell relative to the avatar, set every frame
         move: {
@@ -45,55 +46,45 @@ const DEFINITIONS = {
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
         },
         dash: { charges: 1, recharge: 0 }, // recharge = frames since the last charge started coming back
-        // A type without "move" here is static, like a trap.
       },
     },
   },
 
   // The objects (the user's idea): rocks, Shrooms, and later boxes, logs, houses... Each entry is a complete
-  // configuration of that object, with its own numbers (nothing is shared between entries), and holds the
-  // creation parameters that the seed rolls for each one that is placed. An object is a still actor, so it
-  // can be placed in the state like any actor type (see createActor in src/sim.js).
+  // configuration of that object, with its own numbers (nothing is shared between entries). An entry is a set of
+  // ranges: the seed rolls one value inside each range for every object it places (see objectInSquare in
+  // src/sim.js), so no object has a fixed number. An object is not stored in the state until it is hurt.
   // size ({ min, max }, the radius range in pixels) and weightPerRadius: weight = weightPerRadius x radius, the
   //   radius and not the area, all whole numbers, so nothing is rounded. The weight is computed from the radius
   //   (never stored). A heavier thing hits harder (body slam: attack = weight x 0.001 x impact / 6).
+  // healthRange ({ min, max }): the health, a whole number rolled from the seed. The object breaks at 0.
   // bounce (how much of the speed of whoever hits it comes back, 0 = none, 1 = all) exists only on the Shroom for
   //   now (the user's decision). It is never above 1, or the thing would eject whoever hits it, like a spring (the
-  //   user's rule). It is a number, or a { min, max } that grows linearly with the radius, from min at the smallest
-  //   radius to max at the largest (see bounceOf in src/sim.js).
+  //   user's rule). It is a { min, max } that grows linearly with the radius, from min at the smallest radius
+  //   to max at the largest (see bounceOf in src/sim.js).
   objects: {
-    // The rock. The seed and the formula in "terrain" below say where each one is (see rocksInArea), and roll its
-    // radius and its health; a rock is not stored in the state until it is hurt.
+    // The rock.
     // size (the user's values): min 16, max 32, the avatar's radius up to twice it. weightPerRadius 100 (the user's
     //   value): the weight goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg.
-    // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map. Each rock rolls its own
-    //   whole number inside the range from the seed (see rockInSquare), and it breaks at 0.
+    // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map.
     rock: {
       name: "Rock",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
       healthRange: { min: 10, max: 20 },
-      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
     },
 
     // The Shroom (the user's idea): a rock that bounces, and a bigger one bounces more.
     // size and weightPerRadius: the same numbers the user gave for the rock, written here on their own: min 16, max 32, 100 kg per pixel.
+    // healthRange: guess, the same numbers as the rock's, written here on their own. To be tuned by playing.
     // bounce (the user's values): 0.2 at the smallest radius and 1 at the largest, in a straight line:
     //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
-    // Each Shroom needs a radius (a whole number from 16 to 32). The seed does not create Shrooms yet, so for now
-    //   they are placed by hand in "chamber1" below, each with its radius.
-    // maxHealth: guess, 20, the top of the rock's range (10 to 20), since the seed does not roll it for the Shroom yet.
     shroom: {
       name: "Shroom",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
+      healthRange: { min: 10, max: 20 },
       bounce: { min: 0.2, max: 1 },
-      maxHealth: 20,
-      initial: {
-        health: { current: 20 },
-        position: { x: 0, y: 0 },
-        cell: { x: 0, y: 0 },
-      },
     },
   },
 
@@ -161,22 +152,13 @@ const DEFINITIONS = {
     parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
   },
 
-  // What Chamber 1 has besides the avatar and the rocks.
-  chamber1: {
-    // A Shroom to the left of the start, with a radius of 24 (the middle of 16 to 32, so a bounce of 0.6).
-    // position: rule, 130 px to the left. It is touched after 90 px of a dash (130 minus the two radii, 16 + 24),
-    //   so the first dash reaches it. It is inside the rocks' safe zone (200 px minus the largest rock radius 32
-    //   and its own radius 24 = 144), so no rock can overlap it.
-    actors: [{ id: "shroom_1", type: "shroom", position: { x: -130, y: 0 }, radius: 24 }],
-  },
-
-  // How the ground is filled (provisional values, to be tuned).
+  // How the ground is filled (provisional values, to be tuned). The seed places the objects, every one of them.
   terrain: {
-    rocks: {
-      cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one rock in each
-      chancePercent: 35, // target: about 11 rocks on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in). Seed 1 gives 10
-      safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest rock radius (32) = 190, so the very first dash cannot hit a rock. No rock closer than this to the start (0, 0)
-      kinds: ["rock"], // which objects the seed places (the formula picks one). Only the rock for now; the Shroom comes later
+    objects: {
+      cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one object in each
+      chancePercent: 35, // target: about 11 objects on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in)
+      safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
+      kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer)
     },
   },
 };

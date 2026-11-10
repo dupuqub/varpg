@@ -4,8 +4,7 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
-const ROCK_COLOR = "#5a5f66";
-const SHROOM_COLOR = "#a8445c";
+const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#a8445c" }; // by object type: a new object type needs its color here
 
 function draw(context, state, build) {
   const { width, height } = context.canvas;
@@ -19,8 +18,7 @@ function draw(context, state, build) {
   // a reference for that. It has nothing to do with the collision grid.
   drawReferenceGrid(context, player.position.x, player.position.y);
 
-  drawRocks(context, state, player);
-  drawStaticActors(context, state, player, build);
+  drawObjects(context, state, player);
 
   const radius = definitionOf(player).radius;
 
@@ -43,46 +41,29 @@ function drawHealth(context, player, build) {
   context.fillText(`HEALTH ${player.health.current.toFixed(1)}/${maxHealth}`, 24, context.canvas.height - 56);
 }
 
-// The rocks that fall on the screen, as gray circles.
-function drawRocks(context, state, player) {
+// The objects that fall on the screen (rocks, Shrooms), as circles of the color of their type.
+function drawObjects(context, state, player) {
   const { width, height } = context.canvas;
   const left = player.position.x - width / 2;
   const top = player.position.y - height / 2;
-  const padding = 64; // so a rock that is only partly on the screen is also drawn
-  const rocks = rocksInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding)
-    .filter((rock) => !isRockBroken(state, rock)); // a broken rock is gone
+  const padding = 64; // so an object that is only partly on the screen is also drawn
+  const objects = objectsInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding)
+    .filter((object) => !isObjectBroken(state, object)); // a broken object is gone
 
-  for (const rock of rocks) {
-    const screenX = rock.position.x - left;
-    const screenY = rock.position.y - top;
-    const radius = radiusOf(rock);
+  for (const object of objects) {
+    const screenX = object.position.x - left;
+    const screenY = object.position.y - top;
+    const radius = radiusOf(object);
 
-    context.fillStyle = ROCK_COLOR;
+    context.fillStyle = OBJECT_COLORS[object.type];
     context.beginPath();
     context.arc(screenX, screenY, radius, 0, Math.PI * 2);
     context.fill();
 
-    // Only a rock that was hurt shows its health (current/maximum).
-    if (state.damagedRocks[rockKey(rock)] !== undefined) {
-      drawHealthLabel(context, screenX, screenY - radius - 8, rockHealth(state, rock), rock.maxHealth);
+    // Only an object that was hurt shows its health (current/maximum).
+    if (state.damagedObjects[objectKey(object)] !== undefined) {
+      drawHealthLabel(context, screenX, screenY - radius - 8, objectHealth(state, object), object.maxHealth);
     }
-  }
-}
-
-// The still actors of the state (the Shroom): a circle and its health above it.
-function drawStaticActors(context, state, player, build) {
-  const { width, height } = context.canvas;
-  for (const actor of state.actors) {
-    if (actor === player || actor.move) continue;
-    const screenX = actor.position.x - player.position.x + width / 2;
-    const screenY = actor.position.y - player.position.y + height / 2;
-    const radius = radiusOf(actor);
-
-    context.fillStyle = SHROOM_COLOR;
-    context.beginPath();
-    context.arc(screenX, screenY, radius, 0, Math.PI * 2);
-    context.fill();
-    drawHealthLabel(context, screenX, screenY - radius - 8, actor.health.current, finalMaxHealth(actor, build));
   }
 }
 

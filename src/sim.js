@@ -4,54 +4,35 @@
 
 const AVATAR_ID = "avatar_1";
 
-// The fixed values of an actor (radius, base speed, ...) live in DEFINITIONS
-// (src/data.js). The actor only keeps its type, and what changes.
-function definitionOf(actor) {
-  const definition = findDefinition(actor.type);
-  if (!definition) throw new Error("Unknown actor type: " + actor.type);
+// The fixed values of a thing (an actor or an object) live in DEFINITIONS (src/data.js). The thing only
+// keeps its type, and what changes.
+function definitionOf(thing) {
+  const definition = findDefinition(thing.type);
+  if (!definition) throw new Error("Unknown type: " + thing.type);
   return definition;
 }
 
-// A type is an actor type (DEFINITIONS.actors) or a still object (DEFINITIONS.objects, like the Shroom).
+// A type is an actor (DEFINITIONS.actors: the avatar) or an object (DEFINITIONS.objects: the rock and the Shroom).
 function findDefinition(type) {
   return DEFINITIONS.actors[type] ?? DEFINITIONS.objects[type];
 }
 
-// A new actor: a copy of the "initial" state of its type (src/data.js).
-// It only holds what changes during a run. A type without "move" in its
-// initial state is static.
-// A type with a "size" (a still actor) also gets its own "radius", a whole number inside the range of its size.
-// A type with a range of radius (min below max) needs the radius to be given; a fixed size gives it by itself.
-function createActor(id, type, radius) {
-  const definition = findDefinition(type);
+// A new actor: a copy of the "initial" state of its type (src/data.js). It only holds what changes during a
+// run. Only actors are created this way; the objects come from the seed (see objectInSquare).
+function createActor(id, type) {
+  const definition = DEFINITIONS.actors[type];
   if (!definition) throw new Error("Unknown actor type: " + type);
 
   // The copy through JSON makes every actor own its numbers, so changing one
   // actor never changes the definitions (or another actor).
-  const initial = JSON.parse(JSON.stringify(definition.initial));
-  const actor = { id, type, ...initial };
-
-  if (definition.size) {
-    const { min, max } = definition.size;
-    const given = radius ?? (min === max ? min : undefined);
-    if (given === undefined) {
-      throw new Error("The actor type " + type + " has a radius from " + min + " to " + max + ": a radius must be given");
-    }
-    if (!Number.isInteger(given) || given < min || given > max) {
-      throw new Error("The radius of a " + type + " must be a whole number from " + min + " to " + max + ", and it is " + given);
-    }
-    actor.radius = given;
-  } else if (radius !== undefined) {
-    throw new Error("The actor type " + type + " has no size, so it cannot be given a radius");
-  }
-  return actor;
+  return { id, type, ...JSON.parse(JSON.stringify(definition.initial)) };
 }
 
 // ---- Parts and the build ----
 // The build is what the player chose before the run: for now, the ids of the parts
 // the avatar wears (build.parts). It is an input of the run, not part of the state,
 // so every function that needs it takes it as an argument.
-// Only the avatar has a build: any other actor only has its definition.
+// Only the avatar has a build: an object only has its definition and what the seed rolled for it.
 
 function isAvatar(actor) {
   return actor.id === AVATAR_ID;
@@ -76,7 +57,7 @@ function sumSpec(build, name) {
   return partsOf(build).reduce((sum, part) => sum + (part.specs[name] || 0), 0);
 }
 
-// What the parts add to a value, for the avatar. Other actors get nothing from the build.
+// What the parts add to a value, for the avatar. Objects get nothing from the build.
 function fromParts(actor, build, name) {
   return isAvatar(actor) ? sumSpec(build, name) : 0;
 }
@@ -97,9 +78,10 @@ function assertValidBuild(build) {
 //   object the weightPerRadius and the radii of its size (so weightPerRadius x radius is whole). Zero is
 //   allowed and has a meaning: the thing is harmless and breaks at the first hit (see AGENTS.md, "Weight 0").
 // - A size is { min, max }: whole radii, 1 or more, with min not above max.
-// - A bounce is never above 1 (the user's rule: more would eject whoever hits it, like a spring). A { min, max }
-//   bounce grows with the radius, so it works because every object has a size.
-// - The objects the seed places (terrain.rocks.kinds) must exist and have a healthRange.
+// - A healthRange is { min, max }: whole numbers, 1 or more, with min not above max.
+// - A bounce is { min, max }, never above 1 (the user's rule: more would eject whoever hits it, like a spring).
+//   It grows with the radius, so it works because every object has a size.
+// - The objects the seed places (terrain.objects.kinds) must exist.
 function assertValidDefinitions() {
   for (const [id, object] of Object.entries(DEFINITIONS.objects)) {
     const where = "the object " + id;
@@ -111,11 +93,14 @@ function assertValidDefinitions() {
     if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || min > max) {
       throw new Error("The size of " + where + " needs whole radii, 1 or more, with min not above max: " + min + " to " + max);
     }
+    const health = object.healthRange;
+    if (!health || !Number.isInteger(health.min) || !Number.isInteger(health.max) || health.min < 1 || health.min > health.max) {
+      throw new Error("The healthRange of " + where + " needs whole numbers, 1 or more, with min not above max: " + JSON.stringify(health));
+    }
     if (object.bounce !== undefined) {
       const bounce = object.bounce;
-      const values = typeof bounce === "number" ? [bounce] : [bounce.min, bounce.max];
-      if (!values.every((value) => value >= 0 && value <= 1) || (typeof bounce !== "number" && bounce.min > bounce.max)) {
-        throw new Error("The bounce of " + where + " must go from 0 to 1, with min not above max: " + JSON.stringify(bounce));
+      if (!(bounce.min >= 0 && bounce.max <= 1 && bounce.min <= bounce.max)) {
+        throw new Error("The bounce of " + where + " must be { min, max } going from 0 to 1, with min not above max: " + JSON.stringify(bounce));
       }
     }
   }
@@ -124,9 +109,8 @@ function assertValidDefinitions() {
       throw new Error("The weight of the part " + id + " must be a whole number of kg, 0 or more, and it is " + part.weight);
     }
   }
-  for (const kind of DEFINITIONS.terrain.rocks.kinds) {
-    const object = DEFINITIONS.objects[kind];
-    if (!object || !object.healthRange) throw new Error("terrain.rocks.kinds has " + kind + ", which is not an object with a healthRange");
+  for (const kind of DEFINITIONS.terrain.objects.kinds) {
+    if (!DEFINITIONS.objects[kind]) throw new Error("terrain.objects.kinds has " + kind + ", which is not an object");
   }
 }
 
@@ -137,10 +121,8 @@ function assertValidDefinitions() {
 // It is a function, not a stored value, so buffs can be applied here, in order, later.
 // It must stay pure: the result depends only on the arguments and the definitions.
 function finalSpeed(actor, build) {
-  const base = definitionOf(actor).baseSpeed ?? 0;
-  if (!isAvatar(actor)) return base;
   const weightPenalty = totalWeight(build) * DEFINITIONS.constants.weightSpeedPenalty;
-  return Math.max(0, base + sumSpec(build, "speed") - weightPenalty);
+  return Math.max(0, fromParts(actor, build, "speed") - weightPenalty);
 }
 
 // The speed an actor gets right after a dash, in pixels per frame: the sum of the
@@ -150,39 +132,32 @@ function finalDashSpeed(actor, build) {
   return fromParts(actor, build, "dashSpeed");
 }
 
-// The maximum health: what the definition says plus the sum of the health of the parts.
-// (The player shows it as "armor", but the code calls it health for every actor.)
+// The maximum health of the avatar: the sum of the health of its parts (nothing else gives it health).
+// (The player shows it as "armor", but the code calls it health.)
 function finalMaxHealth(actor, build) {
-  return (definitionOf(actor).maxHealth ?? 0) + fromParts(actor, build, "health");
+  return fromParts(actor, build, "health");
 }
 
-// The radius of something, in pixels: its own "radius" (a still actor in the state, or a rock from the
-// formula), or the radius of its definition (the avatar).
+// The radius of something, in pixels: its own "radius" (an object from the seed, which rolled it), or the
+// radius of its definition (the avatar).
 function radiusOf(thing) {
   return thing.radius ?? definitionOf(thing).radius;
 }
 
-// The weight of an actor, in kg: for the avatar the total weight of its build, for any other actor (or rock)
+// The weight of a thing, in kg: for the avatar the total weight of its build, for an object
 // weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
 // (assertValidDefinitions), so the weight is whole and nothing is rounded.
-function weightOf(actor, build) {
-  return isAvatar(actor) ? totalWeight(build) : definitionOf(actor).weightPerRadius * radiusOf(actor);
-}
-
-// The lowest and the highest weight a type can have, computed from its size (never stored).
-function weightRangeOf(definition) {
-  const { min, max } = definition.size;
-  return { min: definition.weightPerRadius * min, max: definition.weightPerRadius * max };
+function weightOf(thing, build) {
+  return isAvatar(thing) ? totalWeight(build) : definitionOf(thing).weightPerRadius * radiusOf(thing);
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
-// A number is used as it is. { min, max } grows in a straight line with the radius: min at the smallest
+// The bounce { min, max } grows in a straight line with the radius: min at the smallest
 // radius of the size, max at the largest (the Shroom: 0.2 at 16 and 1 at 32).
 function bounceOf(thing) {
   const definition = definitionOf(thing);
   const bounce = definition.bounce;
   if (bounce === undefined) return 0;
-  if (typeof bounce === "number") return bounce;
   const { min, max } = definition.size;
   return bounce.min + ((bounce.max - bounce.min) * (radiusOf(thing) - min)) / (max - min);
 }
@@ -191,25 +166,26 @@ function bounceOf(thing) {
 // { impact }, the part of the velocity that went into the other thing, in px/frame.
 // There is no flag for who hits: the attack grows with the weight of the attacker (a weight of 0 gives an
 // attack of 0, so nothing happens) and with the impact: weight x attackPerKg x impact / referenceImpact.
-// There is no minimum impact and nothing about the dash here: any contact hits, by any
-// speed source. (The formula is a provisional proposal, to be discussed with the user.)
+// Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all
+// (the minimum impact) is decided in collideWithObjects. (The formula is a provisional proposal, to be
+// discussed with the user.)
 // Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
 // can be added later, as terms of the damage trace. Pure: it depends only on its
-// arguments and the definitions. The attacker can be an actor or a rock ({ type }).
+// arguments and the definitions. The attacker can be the avatar or an object.
 function finalAttack(attacker, hit, build) {
   const rules = DEFINITIONS.constants.bodySlam;
   if (hit.impact <= 0) return 0;
   return (weightOf(attacker, build) * rules.attackPerKg * hit.impact) / rules.referenceImpact;
 }
 
-// The defense of an actor: the definition plus the sum of the defense of the parts.
+// The defense of the avatar: the sum of the defense of its parts. An object has no defense (none was defined).
 // Pure, like finalSpeed.
 function finalDefense(actor, build) {
-  return (definitionOf(actor).defense ?? 0) + fromParts(actor, build, "defense");
+  return fromParts(actor, build, "defense");
 }
 
 // The damage of a hit on a target: finalAttack - finalDefense, but never below minDamage
-// (a hit always costs something). No attack (the attacker does not doDamage) means no damage at all.
+// (a hit always costs something). No attack (a weight of 0) means no damage at all.
 // The shield is not here yet.
 function damageOf(attacker, hit, target, build) {
   const attack = finalAttack(attacker, hit, build);
@@ -276,9 +252,9 @@ function approach(velocity, target, rate) {
   velocity.y += (deltaY / distance) * rate;
 }
 
-// ---- Rocks ----
-// Rocks are not stored in the state. The seed (state.seed) and a formula say which
-// rock is where, so the same seed always gives the same rocks, in any browser.
+// ---- Objects (rocks, Shrooms) ----
+// Objects are not stored in the state. The seed (state.seed) and a formula say which
+// object is where, so the same seed always gives the same objects, in any browser.
 
 // A number from 0 to 4294967295 made from four integers. Only integer
 // arithmetic (Math.imul, xor, shifts), so it is exact in every browser. The
@@ -293,122 +269,123 @@ function hashInts(seed, x, y, salt) {
   return h >>> 0;
 }
 
-// How far from the center of its square a rock must stay, so rocks of neighbor squares never overlap: the
-// largest radius a rock can have. Computed from the objects the seed places, never stored.
-function rockMargin() {
-  return Math.max(...DEFINITIONS.terrain.rocks.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
+// How far from the center of its square an object must stay, so objects of neighbor squares never overlap: the
+// largest radius an object can have. Computed from the objects the seed places, never stored.
+function objectMargin() {
+  return Math.max(...DEFINITIONS.terrain.objects.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
 }
 
-// The rock in one square of the world, or null if that square has none.
-// A rock is { type, position: { x, y }, square: { x, y }, radius, maxHealth }. Its position and
-// maxHealth are whole numbers; the square says which rock it is (see damageRock), and
-// maxHealth is rolled from the seed inside the healthRange of its kind.
-function rockInSquare(seed, squareX, squareY) {
-  const rules = DEFINITIONS.terrain.rocks;
+// Rolls a whole number from min to max (both included) from the seed, for one square and one "salt".
+// Each thing rolled in a square has its own salt, so the rolls do not follow each other.
+function rollInRange(seed, squareX, squareY, salt, min, max) {
+  return min + (hashInts(seed, squareX, squareY, salt) % (max - min + 1));
+}
+
+// The object in one square of the world, or null if that square has none.
+// An object is { type, position: { x, y }, square: { x, y }, radius, maxHealth }. Everything in it is a whole
+// number rolled from the seed inside a range of its type (size, healthRange); the square says which object it is
+// (see damageObject). The salts: 1 chance, 2 and 3 position, 4 type, 5 health, 6 radius.
+function objectInSquare(seed, squareX, squareY) {
+  const rules = DEFINITIONS.terrain.objects;
 
   if (hashInts(seed, squareX, squareY, 1) % 100 >= rules.chancePercent) return null;
 
-  const margin = rockMargin();
+  const margin = objectMargin();
   const room = rules.cellSize - 2 * margin;
   const x = squareX * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 2) % room);
   const y = squareY * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 3) % room);
   if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
 
   const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
-  const object = DEFINITIONS.objects[type];
-  const { min, max } = object.healthRange;
-  const maxHealth = min + (hashInts(seed, squareX, squareY, 5) % (max - min + 1));
-  const radius = object.size.min + (hashInts(seed, squareX, squareY, 6) % (object.size.max - object.size.min + 1));
+  const definition = DEFINITIONS.objects[type];
+  const maxHealth = rollInRange(seed, squareX, squareY, 5, definition.healthRange.min, definition.healthRange.max);
+  const radius = rollInRange(seed, squareX, squareY, 6, definition.size.min, definition.size.max);
   return { type, position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth };
 }
 
-// Every rock whose center is inside the area (world coordinates), in a fixed
-// order (row by row). Looking at a bigger area never changes a rock, it only finds more.
-function rocksInArea(seed, left, top, right, bottom) {
-  const size = DEFINITIONS.terrain.rocks.cellSize;
-  const rocks = [];
+// Every object whose center is inside the area (world coordinates), in a fixed
+// order (row by row). Looking at a bigger area never changes an object, it only finds more.
+function objectsInArea(seed, left, top, right, bottom) {
+  const size = DEFINITIONS.terrain.objects.cellSize;
+  const objects = [];
   for (let squareY = Math.floor(top / size); squareY <= Math.floor(bottom / size); squareY++) {
     for (let squareX = Math.floor(left / size); squareX <= Math.floor(right / size); squareX++) {
-      const rock = rockInSquare(seed, squareX, squareY);
-      if (!rock) continue;
-      const { x, y } = rock.position;
-      if (x >= left && x <= right && y >= top && y <= bottom) rocks.push(rock);
+      const object = objectInSquare(seed, squareX, squareY);
+      if (!object) continue;
+      const { x, y } = object.position;
+      if (x >= left && x <= right && y >= top && y <= bottom) objects.push(object);
     }
   }
-  return rocks;
+  return objects;
 }
 
-// ---- Rocks that are hurt ----
-// A rock comes from the formula with its full health (rock.maxHealth). Only a rock that
-// was hurt is in the state: state.damagedRocks maps "squareX,squareY" to its current health.
-// A rock at 0 is broken: it is not drawn and nothing collides with it any more.
+// ---- Objects that are hurt ----
+// An object comes from the formula with its full health (object.maxHealth). Only an object that
+// was hurt is in the state: state.damagedObjects maps "squareX,squareY" to its current health.
+// An object at 0 is broken: it is not drawn and nothing collides with it any more.
 
-function rockKey(rock) {
-  return rock.square.x + "," + rock.square.y;
+function objectKey(object) {
+  return object.square.x + "," + object.square.y;
 }
 
-function rockHealth(state, rock) {
-  return state.damagedRocks[rockKey(rock)] ?? rock.maxHealth;
+function objectHealth(state, object) {
+  return state.damagedObjects[objectKey(object)] ?? object.maxHealth;
 }
 
-function isRockBroken(state, rock) {
-  return rockHealth(state, rock) <= 0;
+function isObjectBroken(state, object) {
+  return objectHealth(state, object) <= 0;
 }
 
-// Takes damage off a rock. Returns true if the rock broke in this hit.
-function damageRock(state, rock, damage) {
+// Takes damage off an object. Returns true if the object broke in this hit.
+function damageObject(state, object, damage) {
   if (damage <= 0) return false;
-  const current = Math.max(0, rockHealth(state, rock) - damage);
-  state.damagedRocks[rockKey(rock)] = current;
+  const current = Math.max(0, objectHealth(state, object) - damage);
+  state.damagedObjects[objectKey(object)] = current;
   return current === 0;
 }
 
-// ---- Collision with still things (rocks and static actors) ----
+// ---- Collision with objects ----
 
-// Everything still that the actor may touch: the rocks near it (found by the formula,
-// not the broken ones) in the fixed order of rocksInArea, then the static actors of the state.
-// Only rocks close enough to touch are looked at: the largest rock radius is the margin.
-function staticsNear(state, actor) {
-  const reach = radiusOf(actor) + rockMargin();
-  const rocks = rocksInArea(
+// The objects near the actor that it may touch (the broken ones are gone), in the fixed order of
+// objectsInArea. Only objects close enough to touch are looked at: the largest radius of an object is the margin.
+function objectsNear(state, actor) {
+  const reach = radiusOf(actor) + objectMargin();
+  return objectsInArea(
     state.seed,
     actor.position.x - reach,
     actor.position.y - reach,
     actor.position.x + reach,
     actor.position.y + reach
-  ).filter((rock) => !isRockBroken(state, rock));
-  const actors = state.actors.filter((other) => other !== actor && !other.move);
-  return [...rocks, ...actors];
+  ).filter((object) => !isObjectBroken(state, object));
 }
 
-// Pushes an actor out of the still things it overlaps, hurts both sides, and changes its velocity.
-// For each thing that overlaps (circle against circle):
-// 1. The "normal" is the direction from the thing to the actor (a unit vector).
-// 2. If the actor is going toward the thing fast enough (collision.minImpact) and was not already touching it in the last frame, that is a hit, and its impact is the speed
-//    going INTO the thing (along the normal). Each side hurts the other with its own
-//    weight (damageOf, the body slam): the actor takes the damage of the thing, and the
-//    thing takes the damage of the actor. A rock keeps its health in state.damagedRocks,
-//    any other actor in its own health. A rock that breaks has no collision: nothing is
-//    pushed, and the actor keeps its speed and goes on.
-// 3. The actor is moved along the normal until it just touches the thing.
-// 4. The velocity is split in two: the part that goes INTO the thing (along the
+// Pushes an actor out of the objects it overlaps, hurts both sides, and changes its velocity.
+// For each object that overlaps (circle against circle):
+// 1. The "normal" is the direction from the object to the actor (a unit vector).
+// 2. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the last frame, that is a hit, and its impact is the speed
+//    going INTO the object (along the normal). Each side hurts the other with its own
+//    weight (damageOf, the body slam): the actor takes the damage of the object, and the
+//    object takes the damage of the actor. An object keeps its health in state.damagedObjects.
+//    An object that breaks has no collision: nothing is pushed, and the actor keeps its speed and goes on.
+// 3. The actor is moved along the normal until it just touches the object.
+// 4. The velocity is split in two: the part that goes INTO the object (along the
 //    normal) and the part that goes ALONG it. The part going in is replaced by
-//    the bounce of the thing: -bounce x (what was going in); below the minimum impact there is no
+//    the bounce of the object: -bounce x (what was going in); below the minimum impact there is no
 //    bounce, the part going in is just removed. The part along the
-//    thing is not changed, so with bounce 0 the actor slides (it is not friction).
+//    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
-function collideWithStatics(state, actor, build, lastContacts) {
+function collideWithObjects(state, actor, build, lastContacts) {
   const radius = radiusOf(actor);
 
-  for (const other of staticsNear(state, actor)) {
-    const touching = radius + radiusOf(other);
-    const dx = actor.position.x - other.position.x;
-    const dy = actor.position.y - other.position.y;
+  for (const object of objectsNear(state, actor)) {
+    const touching = radius + radiusOf(object);
+    const dx = actor.position.x - object.position.x;
+    const dy = actor.position.y - object.position.y;
     if (dx * dx + dy * dy >= touching * touching) continue;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
-    const contact = actor.id + "|" + (other.square !== undefined ? "rock " + rockKey(other) : other.id);
+    const contact = actor.id + "|" + object.type + " " + objectKey(object);
     const isNewContact = !lastContacts.includes(contact);
     state.contacts.push(contact);
 
@@ -417,7 +394,7 @@ function collideWithStatics(state, actor, build, lastContacts) {
     const normalX = distance === 0 ? 1 : dx / distance;
     const normalY = distance === 0 ? 0 : dy / distance;
 
-    // Negative when the actor is going toward the thing.
+    // Negative when the actor is going toward the object.
     const velocity = actor.move.velocity;
     const goingIn = velocity.x * normalX + velocity.y * normalY;
 
@@ -426,14 +403,8 @@ function collideWithStatics(state, actor, build, lastContacts) {
 
     if (collides && isNewContact) {
       const hit = { impact: -goingIn };
-      if (actor.health) applyDamage(actor, damageOf(other, hit, actor, build));
-      const damage = damageOf(actor, hit, other, build);
-      const isRock = other.square !== undefined;
-      if (isRock) {
-        if (damageRock(state, other, damage)) continue; // the rock broke: no collision
-      } else if (other.health) {
-        applyDamage(other, damage);
-      }
+      applyDamage(actor, damageOf(object, hit, actor, build));
+      if (damageObject(state, object, damageOf(actor, hit, object, build))) continue; // the object broke: no collision
     }
 
     const overlap = touching - distance;
@@ -442,7 +413,7 @@ function collideWithStatics(state, actor, build, lastContacts) {
 
     // The part going in is removed; a collision also adds the bounce, anything below the minimum does not.
     if (goingIn < 0) {
-      const factor = collides ? 1 + bounceOf(other) : 1;
+      const factor = collides ? 1 + bounceOf(object) : 1;
       velocity.x -= factor * goingIn * normalX;
       velocity.y -= factor * goingIn * normalY;
     }
@@ -460,34 +431,27 @@ function createRun(id) {
 }
 
 // Initial state of Chamber 1: the avatar at the center of the world, with the full health of
-// its build, and the other actors listed in DEFINITIONS.chamber1.
+// its build. Everything else is an object, and objects come from the seed, not from the state.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
 // build: the build of the run, used only to give the avatar its starting health.
 function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBuild) {
   const avatar = createActor(AVATAR_ID, "avatar");
-  avatar.health.current = finalMaxHealth(avatar, build);
-
-  const others = DEFINITIONS.chamber1.actors.map((entry) => {
-    const actor = createActor(entry.id, entry.type, entry.radius);
-    actor.position.x = entry.position.x;
-    actor.position.y = entry.position.y;
-    return actor;
-  });
+  avatar.health = { current: finalMaxHealth(avatar, build) };
 
   const state = {
     run: runId,
     frame: 0,
 
-    // The seed of the world (it decides where the rocks are). It is in the state
+    // The seed of the world (it decides every object: where it is, which type, its size and its health). It is in the state
     // so a snap alone is enough to replay: the rules read it from here.
     // It must be a whole number.
     seed,
 
-    // The rocks that were hurt: "squareX,squareY" -> current health (see "Rocks that are hurt").
-    // Empty at the start: every rock has its full health, which comes from the seed.
-    damagedRocks: {},
+    // The objects that were hurt: "squareX,squareY" -> current health (see "Objects that are hurt").
+    // Empty at the start: every object has its full health, which comes from the seed.
+    damagedObjects: {},
 
     // The pairs that were touching in the last frame ("actor id|thing"), to tell a new collision (a hit)
     // from friction (still touching, no new hit). Rebuilt every frame by step.
@@ -517,7 +481,7 @@ function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBui
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
-    actors: [avatar, ...others],
+    actors: [avatar],
   };
 
   assertValidGrid(state.grid);
@@ -566,7 +530,7 @@ function step(state, input, build) {
   // while the actor wants to move, and slows down toward zero when it does not.
   // Above the top speed (after a dash) it slows down by the fixed overspeedDecay instead.
   // The top speed is asked every frame, because it can change from one frame to the next.
-  // The contacts of the last frame are kept to tell a new collision from friction (see collideWithStatics).
+  // The contacts of the last frame are kept to tell a new collision from friction (see collideWithObjects).
   const lastContacts = state.contacts;
   state.contacts = [];
   for (const actor of state.actors) {
@@ -598,7 +562,7 @@ function step(state, input, build) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithStatics(state, actor, build, lastContacts);
+    collideWithObjects(state, actor, build, lastContacts);
   }
 
   // 3. Cells: where every actor is, relative to the player.

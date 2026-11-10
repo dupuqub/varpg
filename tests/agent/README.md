@@ -50,7 +50,7 @@ node --test
 |---|---|---|
 | 10 | The state carries the grid settings (64 / 61 / 35) and the player is always in cell (0, 0). | The grid settings live in the state so a run is reproducible. |
 | 11 | Cell boundaries: an offset of 31.9 is still in the center cell, 32 is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
-| 12 | When the player walks, a still actor changes cell. | Cells are relative to the player, not fixed to the world. |
+| 12 | When the player walks, another actor (a marker without a type, only a test fixture) changes cell. | Cells are relative to the player, not fixed to the world. |
 | 13 | `isInWindow` for a 3x3, an 11x11 and the 61 x 35 rectangle. | Checks the edges of the window, on each axis separately. |
 | 14 | The default window reaches at least 1920 px and 1080 px from the player. | The user's requirement: the window covers at least twice the screen. |
 | 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field) are refused with an error. | The settings must fail loudly, not run with nonsense. |
@@ -61,7 +61,7 @@ node --test
 |---|---|---|
 | 16 | The definitions are frozen (changes are ignored), the state keeps only `type` (no radius or base speed), and it carries the version of the definitions. | The state is only what changes. Fixed values live in the definitions, and nothing may alter them during a run. |
 | 17 | Unknown actor types raise an error. A type without `move` (a trap) does not move. | A typo in a type must not create a ghost actor. Static actors are simply actors without `move`. |
-| 18 | A new actor is a copy of the initial state of its type, and changing it never changes the definitions or another actor. | If actors shared numbers with the definitions, one actor's damage could change every actor of that type. |
+| 18 | A new actor (the avatar) is a copy of the initial state of its type, and changing it never changes the definitions or another actor. | If actors shared numbers with the definitions, one change would leak into all. |
 | 19 | The run id is in the state, and the build is empty and outside the state. | The build is an input of the run, not a state (a project decision). |
 
 ### Run history
@@ -97,17 +97,17 @@ node --test
 | 36 | Looking at a small area finds exactly the rocks that a big area has inside that same region. | A rock must not depend on where you look from, or rocks would pop in and out while walking. |
 | 37 | No rock is closer than 200 px to the starting point, for 40 different seeds (and rocks do start right after that). | The avatar must never begin inside a rock. |
 | 38 | No two rocks overlap, for 5 seeds. | The formula keeps each rock inside its own square, with a margin. |
-| 39 | **Known answer:** seed 1 gives 10 rocks on the first screen, the first a rock at 136,-375 (radius 16, health 17) and the last a rock at 99,456 (radius 28, health 10). | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the ROCKS lines of DATA in Chamber 2). |
-| 40 | The state keeps only the seed (not the rocks). Every rock rolls a whole radius inside the size of its object (over 5 seeds all of 16 to 32 show up), `rockMargin()` is the largest radius (32), and every rock kind is a valid still object. | The state stays small, the radius comes from the seed, and the library data cannot break the formula by accident. |
+| 39 | **Known answer:** seed 1 gives 10 objects on the first screen, the first a Shroom at 136,-375 (radius 16, health 17) and the last a rock at 99,456 (radius 28, health 10); the types in order are shroom, rock, rock, shroom, shroom, rock, shroom, shroom, rock, rock. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the OBJECTS lines of DATA in Chamber 2). |
+| 40 | The state keeps only the seed and the avatar (no objects). Over 5 seeds the seed rolls the type, the radius and the health of every object inside the ranges of its type, and every value of the ranges shows up (radius 16 to 32, health 10 to 20) for the rock and for the Shroom; `objectMargin()` is the largest radius. | The state stays small, and nothing about an object is a fixed value. |
 
 ### Collision with rocks
 
-These tests use the rock of seed 1 at 99,456 (radius 28, 2800 kg, health 10, no bounce, called ROCK in the test file) and a Shroom that each test places by hand, 100 px below the start. The avatar has radius 16. Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32.
+These tests use the rock of seed 1 at 99,456 (radius 28, 2800 kg, health 10, no bounce, called ROCK in the test file) and Shrooms that the seed made (`findShroom` in the test file takes, from seeds 1 to 300, the first Shroom of the radius asked that has nothing else within 300 px and a health of 11 or more). Nothing is placed by hand. The avatar has radius 16. Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32.
 
 | # | What it checks | Why it matters |
 |---|---|---|
 | 41 | Head-on at 3 px/frame: the rock stops you (0); a Shroom sends you back at 0.6 (radius 16), 1.8 (24) or 3 (32). | The bounce rule, in numbers you can check by hand: `-bounce x speed`, with the bounce growing with the radius. |
-| 42 | After the hit the avatar is exactly touching the thing (55 = 99 - (28 + 16) for the rock; 68 and 52 for a Shroom of radius 16 and 32). | The push-out puts it just outside, not inside and not far away. |
+| 42 | After the hit the avatar is exactly touching the thing (55 = 99 - (28 + 16) for the rock; 32 and 48 above the center of a Shroom of radius 16 and 32). | The push-out puts it just outside, not inside and not far away. |
 | 43 | Glancing blow on the rock: the part of the velocity going into the rock is 0, the part along the rock is unchanged, and the speed kept is more than 80%. | The angle matters and bounce 0 slides, it is not friction (the user's definition). |
 | 44 | A dash into the rock stops (0). A dash into a Shroom of radius 32 (bounce 1) comes back at -12, the full dash speed. (Every rock is given 50 health here, so the dash does not break it.) | The dash and the collision work together. |
 | 45 | In 18000 frames of walking in 8 directions with dashes (3 seeds), the avatar is never inside any rock. | The most important guarantee of collision, tested over a long run. |
@@ -133,7 +133,7 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 61 | A hurt rock is stored by its square (`"0,1": 7.5`), keeps its health between frames, and the state is still plain JSON. | Only hurt rocks are in the state; the rest come from the seed. |
 | 62 | A rock with 5 left breaks when a dash hits it (the avatar loses 2.6): no bounce and no push, the avatar goes through and takes no more damage. | A broken rock must really be gone. |
 | 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
-| 64 | The weight of a still object is `weightPerRadius` x radius, a whole number: rock of radius 28 is 2800, Shroom 1600 (radius 16), 2400 (24), 3200 (32). `weightRangeOf` gives 1600 to 3200 for the Shroom and for the rock. Twice the radius is twice the weight. | The weight follows the radius, not the area (the user's decision), and nothing is rounded. |
+| 64 | The weight of an object is `weightPerRadius` x radius, a whole number: rock of radius 28 is 2800, Shroom 1600 (radius 16), 2400 (24), 3200 (32). Twice the radius is twice the weight. | The weight follows the radius, not the area (the user's decision), and nothing is rounded. |
 | 65 | Pressing into the rock hurts it once, at the arrival (7.5 left, the avatar at 99, stopped at 55), and nothing more after 300 frames of pressing (no bounce, so no second collision). | Only real collisions hurt. |
 | 66 | After walking away (no contact) and coming back, the second collision hurts again; the contacts list is plain state (`["avatar_1|rock 0,1"]` while touching, empty when apart). | A new collision is a new hit. |
 | 67 | The attack comes from the weight alone: a rock with `weightPerRadius` 0 has attack 0 and damage 0 at any impact (not even the minimum damage); the same rock with its weight attacks 5.6 at impact 12 and costs the avatar 2.6. | There is no flag for who hits; weight 0 is harmless (the user removed `doesDamage`). |
@@ -142,13 +142,12 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 70 | Every weight in the definitions is a whole number, 0 or more: the parts, and the `weightPerRadius`, `size.min` and `size.max` of every object. | The rule holds for the real data. |
 | 71 | A `weightPerRadius` of 100.5, a radius of 16.5 or a part weight of -1 makes the game fail when it loads; a `weightPerRadius` of 0 loads and gives weight 0. | The check is real, and weight 0 is allowed. |
 | 72 | A rock with weight 0 and health 1 does no damage to the avatar (not even the minimum), breaks at the first hit, and the dash goes through it at full speed. | Weight 0 works as a breakable, harmless thing with no special case. |
-| 73 | The objects are the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100, `initial` and name (1600 to 3200 kg). Only the Shroom has a bounce, `{ min: 0.2, max: 1 }`; the rock has the health range 10 to 20. | Each object is complete and unique. |
+| 73 | The objects are the `rock` and the `shroom`, each a complete entry with its own `size: { min: 16, max: 32 }`, `weightPerRadius` 100 and `healthRange: { min: 10, max: 20 }`, and nothing else unused: the rock has exactly `name`, `size`, `weightPerRadius`, `healthRange`; the Shroom the same plus `bounce` `{ min: 0.2, max: 1 }`. | Each object is complete and unique, with no fixed health, no initial state and no placeholder. |
 | 74 | A size with a radius that is not whole, a min above the max, or a weight modifier that is not whole stops the game when it loads, for the rock and for the Shroom, each on its own; weight 0 is allowed. | The check is real, for every object. |
-| 75 | A still object gets its own radius: it must be given one from 16 to 32 (15, 33, 20.5 and none are refused), and the avatar has none (it keeps its definition's). | Every instance knows its size; the range is checked. |
+| 75 | The avatar is the only actor type: `createActor` refuses `rock` and `shroom`, because only the seed makes objects. The avatar keeps the radius of its definition. | Objects cannot be made by hand by accident. |
 | 76 | The Shroom's bounce grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The rock has none. | The bounce rule the user chose, in numbers. |
-| 77 | A bounce above 1, a minimum above the maximum, or an object without a size makes the game fail when it loads. | A bounce never ejects (the user's rule), and a missing size is a clear error. |
-| 78 | Chamber 1 has a Shroom of radius 24 at 130 px to the left. The first dash left hits it, comes back at about 0.6 of the speed, and the state stays plain JSON. | The Shroom works in the real chamber. |
-| 79 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
+| 77 | A bounce above 1 or not a `{ min, max }`, a bounce minimum above the maximum, a `healthRange` with a 0, a half number or a minimum above the maximum, or an object without a size makes the game fail when it loads. | A bounce never ejects (the user's rule), the ranges are real, and a missing size is a clear error. |
+| 78 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
 
 ### The kit of parts
 
