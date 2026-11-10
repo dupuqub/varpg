@@ -710,7 +710,7 @@ test("38 rocks never overlap each other", () => {
         for (let j = i + 1; j < rocks.length; j++) {
           const dx = rocks[i].position.x - rocks[j].position.x;
           const dy = rocks[i].position.y - rocks[j].position.y;
-          const reach = DEFINITIONS.actors[rocks[i].type].radius + DEFINITIONS.actors[rocks[j].type].radius;
+          const reach = rocks[i].radius + rocks[j].radius;
           if (dx * dx + dy * dy < reach * reach) overlaps++;
         }
       }
@@ -720,7 +720,7 @@ test("38 rocks never overlap each other", () => {
   assert.strictEqual(overlaps, 0);
 });
 
-test("39 known answer: seed 1 gives 12 rocks on the first screen, the first one a boulder at 172,-435 with 17 health", () => {
+test("39 known answer: seed 1 gives 12 rocks on the first screen, the first one a stone at 172,-435 with 17 health (every rock is a stone for now)", () => {
   // If this fails after a change to the formula or the hash, every map changed.
   // If it fails on another machine or browser, the hash is not exact there.
   const result = run(`
@@ -728,24 +728,24 @@ test("39 known answer: seed 1 gives 12 rocks on the first screen, the first one 
     return { count: rocks.length, first: rocks[0], last: rocks[rocks.length - 1] };
   `);
   assert.strictEqual(result.count, 12);
-  assert.deepStrictEqual(plain(result.first), { type: "boulder", position: { x: 172, y: -435 }, square: { x: 0, y: -2 }, maxHealth: 17 });
-  assert.deepStrictEqual(plain(result.last), { type: "boulder", position: { x: 854, y: 418 }, square: { x: 3, y: 1 }, maxHealth: 12 });
+  assert.deepStrictEqual(plain(result.first), { type: "stone", position: { x: 172, y: -435 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17 });
+  assert.deepStrictEqual(plain(result.last), { type: "stone", position: { x: 854, y: 418 }, square: { x: 3, y: 1 }, radius: 16, maxHealth: 12 });
 });
 
-test("40 the state keeps only the seed, not the rocks, and every rock kind is valid", () => {
+test("40 the state keeps only the seed, not the rocks, and every rock kind is a valid still actor", () => {
   const result = run(`
     const s = createChamber1State(1, 5);
     const rules = DEFINITIONS.terrain.rocks;
     return {
       seed: s.seed,
       defaultSeed: createChamber1State().seed,
-      hasRocks: JSON.stringify(s).includes("stone") || "rocks" in s,
+      hasRocks: JSON.stringify(s).includes('"stone"') || "rocks" in s,
       kinds: rules.kinds.map((kind) => ({
         kind,
         exists: kind in DEFINITIONS.actors,
         isStatic: !("move" in DEFINITIONS.actors[kind].initial),
-        fits: DEFINITIONS.actors[kind].radius <= rules.margin,
-        bounceOk: DEFINITIONS.actors[kind].bounce >= 0 && DEFINITIONS.actors[kind].bounce <= 1,
+        fits: DEFINITIONS.actors[kind].size.maxRadius <= rules.margin,
+        fixed: DEFINITIONS.actors[kind].size.minRadius === DEFINITIONS.actors[kind].size.maxRadius,
       })),
     };
   `);
@@ -753,15 +753,16 @@ test("40 the state keeps only the seed, not the rocks, and every rock kind is va
   assert.strictEqual(result.defaultSeed, 1);
   assert.strictEqual(result.hasRocks, false);
   for (const kind of result.kinds) {
-    assert.ok(kind.exists && kind.isStatic && kind.bounceOk, kind.kind);
+    assert.ok(kind.exists && kind.isStatic, kind.kind);
     assert.ok(kind.fits, kind.kind + ": a radius above the margin could make rocks overlap");
+    assert.ok(kind.fixed, kind.kind + ": the seed does not roll the radius yet");
   }
 });
 
 // ---- Collision with rocks ----
-// These tests use rocks of seed 1 (see test 39 for the list): a stone at 159,444
-// (radius 16, bounce 0), a boulder at 172,-435 (radius 20, bounce 0.5) and a rubber
-// rock at 711,-63 (radius 12, bounce 1). The avatar has radius 16.
+// These tests use the stone of seed 1 at 159,444 (radius 16, no bounce), and a Shroom that each test places
+// by hand (createActor("shroom_t", "shroom", radius)), 100 px below the start. The avatar has radius 16.
+// Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32 (0.2 + 0.8 x (radius - 16) / 16).
 
 // Puts the avatar at (x, y) with the velocity (vx, vy), holds the direction, and runs one step.
 function hitOnce(x, y, vx, vy, direction, input = {}) {
@@ -775,21 +776,38 @@ function hitOnce(x, y, vx, vy, direction, input = {}) {
   `);
 }
 
-test("41 head-on at 3 px/frame: the stone stops you, the boulder sends you back at 1.5, the rubber rock at 3", () => {
+// Puts a Shroom of the given radius at (0, 100) (Chamber 1's own Shroom is taken away), the avatar just above it
+// (a gap of 1 px) going down at "speed" (or from rest with a dash), and runs one step.
+function hitShroom(radius, { speed = 3, dash = false, gap = 1 } = {}) {
+  return run(`
+    const s = createChamber1State();
+    s.actors = s.actors.filter((actor) => actor.id !== "shroom_1");
+    const shroom = createActor("shroom_t", "shroom", ${radius});
+    shroom.position.x = 0; shroom.position.y = 100;
+    s.actors.push(shroom);
+    const p = s.actors[0];
+    p.position.x = 0; p.position.y = 100 - (16 + ${radius}) - ${gap};
+    p.move.velocity.y = ${dash ? 0 : speed};
+    step(s, { move: { x: 0, y: 1 }, dash: ${dash} });
+    return { y: p.position.y, vy: p.move.velocity.y, avatar: p.health.current, shroom: shroom.health.current, shroomY: shroom.position.y };
+  `);
+}
+
+test("41 head-on at 3 px/frame: the stone stops you, a Shroom sends you back at 0.6 (radius 16), 1.8 (24) or 3 (32)", () => {
   const right = { x: 1, y: 0 };
   const stone = hitOnce(127, 444, 3, 0, right); // would end at 130, 3 px inside the stone
-  const boulder = hitOnce(145, -435, 3, 0, right); // would end at 148, 12 px inside the boulder
-  const rubber = hitOnce(681, -63, 3, 0, right); // would end at 684, 1 px inside the rubber rock
-  assert.strictEqual(stone.vx, 0); // bounce 0: -0 x 3
-  assert.strictEqual(boulder.vx, -1.5); // bounce 0.5: -0.5 x 3
-  assert.strictEqual(rubber.vx, -3); // bounce 1: -1 x 3
+  assert.strictEqual(stone.vx, 0); // no bounce: -0 x 3
+  for (const [radius, back] of [[16, 0.6], [24, 1.8], [32, 3]]) {
+    const result = hitShroom(radius);
+    assert.ok(Math.abs(result.vy + back) < 1e-9, "radius " + radius + ": " + result.vy + ", expected " + -back); // bounce x 3, going up
+  }
 });
 
-test("42 the avatar is pushed out until it just touches the rock", () => {
+test("42 the avatar is pushed out until it just touches the thing", () => {
   const right = { x: 1, y: 0 };
   assert.strictEqual(hitOnce(127, 444, 3, 0, right).x, 127); // 159 - (16 + 16)
-  assert.strictEqual(hitOnce(145, -435, 3, 0, right).x, 136); // 172 - (16 + 20)
-  assert.strictEqual(hitOnce(681, -63, 3, 0, right).x, 683); // 711 - (16 + 12)
+  assert.strictEqual(hitShroom(16).y, 100 - 32); // 100 - (16 + 16)
+  assert.strictEqual(hitShroom(32).y, 100 - 48); // 100 - (16 + 32)
 });
 
 test("43 the angle matters: only the part going into the rock is replaced, the part along it is kept", () => {
@@ -822,22 +840,21 @@ test("43 the angle matters: only the part going into the rock is replaced, the p
   assert.ok(result.speedAfter < result.speedBefore);
 });
 
-test("44 a dash into a stone stops, a dash into a rubber rock comes back at the full dash speed", () => {
-  // A dash now hurts the rock by 10, which would break the stone (health 10) and cancel the bounce.
-  // So here every rock has 50 health: the test is about the bounce, not about breaking.
-  const tough = loadGame((text) => text.replace("healthRange: { min: 10, max: 20 }", "healthRange: { min: 50, max: 50 }").replaceAll("healthRange: { min: 10, max: 20 }", "healthRange: { min: 50, max: 50 }"));
-  const dashInto = (x, y) => run(`
+test("44 a dash into a stone stops, a dash into a Shroom of radius 32 (bounce 1) comes back at the full dash speed", () => {
+  // A dash hurts the thing by 10, which would break the stone (health 10) and cancel the bounce.
+  // So here every stone has 50 health: the test is about the bounce, not about breaking.
+  const tough = loadGame((text) => text.replace("healthRange: { min: 10, max: 20 }", "healthRange: { min: 50, max: 50 }"));
+  const intoStone = run(`
     const s = createChamber1State();
     const p = s.actors[0];
-    p.position.x = ${x}; p.position.y = ${y};
-    step(s, { move: { x: 1, y: 0 }, dash: true });
+    p.position.x = 125; p.position.y = 444;
+    step(s, { move: { x: 1, y: 0 }, dash: true }); // dash: 12 px, ends 10 px inside
     return { x: p.position.x, vx: p.move.velocity.x };
   `, tough);
-  const intoStone = dashInto(125, 444); // dash: 12 px, ends 10 px inside
-  const intoRubber = dashInto(690, -63);
   assert.strictEqual(intoStone.vx, 0);
   assert.strictEqual(intoStone.x, 127);
-  assert.strictEqual(intoRubber.vx, -12);
+  const intoShroom = hitShroom(32, { dash: true, gap: 2 });
+  assert.ok(Math.abs(intoShroom.vy + 12) < 1e-9, "the dash came back at " + intoShroom.vy);
 });
 
 test("45 over a long run with dashes the avatar is never inside a rock", () => {
@@ -854,7 +871,7 @@ test("45 over a long run with dashes the avatar is never inside a rock", () => {
           if (isRockBroken(s, rock)) continue; // a broken rock has no collision
           const dx = p.position.x - rock.position.x;
           const dy = p.position.y - rock.position.y;
-          const gap = Math.sqrt(dx * dx + dy * dy) - (16 + DEFINITIONS.actors[rock.type].radius);
+          const gap = Math.sqrt(dx * dx + dy * dy) - (16 + rock.radius);
           if (gap < worst) worst = gap;
         }
       }
@@ -917,16 +934,16 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the stone loses 2.5, t
   assert.strictEqual(result.vx, 0); // it still stopped (the bounce is a separate rule)
 });
 
-test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that minus the defense 3", () => {
+test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that minus the defense 3, and at least 1", () => {
   const stone = slamInto(125, 444, "0,1", 10); // 4800 kg: attack 9.6, so 9.6 - 3 = 6.6 to the avatar; the avatar (5000 kg) hits for 10
   assert.ok(Math.abs(stone.avatar - 93.4) < 1e-9, "stone: " + stone.avatar);
   assert.strictEqual(stone.rock, 0); // 10 - 10: it breaks
-  const boulder = slamInto(145, -435, "0,-2", 17); // 6000 kg: attack 12, so 12 - 3 = 9
-  assert.ok(Math.abs(boulder.avatar - 91) < 1e-9, "boulder: " + boulder.avatar);
-  assert.strictEqual(boulder.rock, 7); // 17 - 10
-  const rubber = slamInto(690, -63, "2,-1", 15); // 3600 kg: attack 7.2, so 7.2 - 3 = 4.2
-  assert.ok(Math.abs(rubber.avatar - 95.8) < 1e-9, "rubber: " + rubber.avatar);
-  assert.strictEqual(rubber.rock, 5); // 15 - 10
+  const small = hitShroom(16, { dash: true, gap: 2 }); // 1600 kg: attack 3.2, 3.2 - 3 = 0.2 is below 1, so 1
+  assert.ok(Math.abs(small.avatar - 99) < 1e-9, "small shroom: " + small.avatar);
+  assert.strictEqual(small.shroom, 10); // 20 - 10
+  const large = hitShroom(32, { dash: true, gap: 2 }); // 3200 kg: attack 6.4, so 6.4 - 3 = 3.4
+  assert.ok(Math.abs(large.avatar - 96.6) < 1e-9, "large shroom: " + large.avatar);
+  assert.strictEqual(large.shroom, 10); // 20 - 10
 });
 
 test("49 a graze is a weak hit: only the part of the speed going into the rock counts, so it hurts less than a head-on walk", () => {
@@ -945,21 +962,21 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
 
 test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage never goes below 0", () => {
   const result = withBuilds(`
-    const stone = { type: "stone", position: { x: 0, y: 0 } };
-    const boulder = { type: "boulder", position: { x: 0, y: 0 } };
-    const rubber = { type: "rubber", position: { x: 0, y: 0 } };
+    const stone = { type: "stone", radius: 16, position: { x: 0, y: 0 } };
+    const small = createActor("shroom_a", "shroom", 16); // 1600 kg
+    const large = createActor("shroom_b", "shroom", 32); // 3200 kg
     const lighter = without("arm-r"); // 4350 kg
     return {
       defense: finalDefense(avatar, full),
+      stoneWeight: weightOf(stone, full),
       stone: finalAttack(stone, { impact: 12 }, full),
       atReference: finalAttack(stone, { impact: 6 }, full),
       walking: finalAttack(stone, { impact: 3 }, full),
       noImpact: finalAttack(stone, { impact: 0 }, full),
       avatar: finalAttack(avatar, { impact: 12 }, full),
       lighterAvatar: finalAttack(avatar, { impact: 12 }, lighter),
-      boulderDamage: damageOf(boulder, { impact: 12 }, avatar, full),
-      rubberDamage: damageOf(rubber, { impact: 12 }, avatar, full),
-      stoneWeight: weightOf(stone, full),
+      smallDamage: damageOf(small, { impact: 12 }, avatar, full),
+      largeDamage: damageOf(large, { impact: 12 }, avatar, full),
     };
   `);
   assert.strictEqual(result.defense, 3);
@@ -970,8 +987,8 @@ test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage n
   assert.strictEqual(result.noImpact, 0);
   assert.strictEqual(result.avatar, 10); // the avatar hits with its own weight, 5000 kg
   assert.ok(Math.abs(result.lighterAvatar - 8.7) < 1e-9); // a lighter mecha hits softer: 4350 x 0.001 x 2
-  assert.ok(Math.abs(result.boulderDamage - 9) < 1e-9); // 12 - 3
-  assert.ok(Math.abs(result.rubberDamage - 4.2) < 1e-9); // 7.2 - 3
+  assert.strictEqual(result.smallDamage, 1); // attack 3.2 - 3 is below the minimum damage 1
+  assert.ok(Math.abs(result.largeDamage - 3.4) < 1e-9); // 6.4 - 3
 });
 
 test("51 health stops at 0 (there is no death yet)", () => {
@@ -1169,18 +1186,19 @@ test("63 every rock rolls its own health from the seed: whole numbers from 10 to
 
 test("64 the weight of a still actor is weightPerRadius x radius, a whole number: twice the radius, twice the weight", () => {
   const result = run(`
-    return ["stone", "boulder", "rubber", "dummy"].map((kind) => {
-      const definition = DEFINITIONS.actors[kind];
-      return { kind, radius: definition.radius, weightPerRadius: definition.weightPerRadius, weight: weightOfType(definition) };
-    });
+    const make = (type, radius) => createActor("x", type, radius);
+    return {
+      stone: weightOf(make("stone"), createRun(1).build),
+      dummy: weightOf(make("dummy"), createRun(1).build),
+      small: weightOf(make("shroom", 16), createRun(1).build),
+      middle: weightOf(make("shroom", 24), createRun(1).build),
+      large: weightOf(make("shroom", 32), createRun(1).build),
+      range: weightRangeOf(DEFINITIONS.actors.shroom),
+      rockRange: weightRangeOf(DEFINITIONS.objects.rock),
+    };
   `);
-  for (const actor of result) {
-    assert.strictEqual(actor.weight, actor.weightPerRadius * actor.radius, actor.kind);
-    assert.ok(Number.isInteger(actor.weight), actor.kind);
-  }
-  assert.deepStrictEqual(plain(result).map((actor) => actor.weight), [4800, 6000, 3600, 4800]);
-  const [stone, boulder] = result;
-  assert.strictEqual(boulder.weight / stone.weight, boulder.radius / stone.radius); // linear in the radius, not the area
+  assert.deepStrictEqual(plain(result), { stone: 4800, dummy: 4800, small: 1600, middle: 2400, large: 3200, range: { min: 1600, max: 3200 }, rockRange: { min: 1600, max: 3200 } });
+  assert.strictEqual(result.large / result.small, 2); // linear in the radius (twice as wide, twice as heavy), not the area
 });
 
 test("65 the training dummy: the first dash up hits it with an impact of 7, and it hits back with its own weight", () => {
@@ -1191,24 +1209,22 @@ test("65 the training dummy: the first dash up hits it with an impact of 7, and 
     const start = { x: dummy.position.x, y: dummy.position.y };
     step(s, { move: { x: 0, y: -1 }, dash: true });
     let hitFrame = null;
-    let velocityBefore = null;
     for (let i = 1; i < 30 && hitFrame === null; i++) {
-      velocityBefore = player.move.velocity.y;
       step(s, { move: { x: 0, y: -1 } });
       if (dummy.health.current < 30) hitFrame = i;
     }
-    return { start, hitFrame, velocityBefore, dummy: dummy.health.current, avatar: player.health.current,
+    return { start, hitFrame, dummy: dummy.health.current, avatar: player.health.current,
       velocityAfter: player.move.velocity.y, dummyMoved: dummy.position.x !== start.x || dummy.position.y !== start.y };
   `);
   assert.deepStrictEqual(plain(result.start), { x: 0, y: -130 });
   assert.ok(result.hitFrame !== null, "the first dash did not reach the dummy");
   assert.ok(Math.abs(result.dummy - (30 - 35 / 6)) < 1e-9); // 5000 x 0.001 x 7 / 6 = 5.83, defense 0
   assert.ok(Math.abs(result.avatar - 97.4) < 1e-9); // the dummy (4800 kg) hits back: 4800 x 0.001 x 7 / 6 = 5.6, minus 3 = 2.6
-  assert.ok(result.velocityAfter > 0, "bounce 0.5: the avatar comes back"); // moving up is negative y
+  assert.ok(Math.abs(result.velocityAfter) < 1e-9, "the dummy has no bounce: the avatar just stops"); // moving up is negative y
   assert.strictEqual(result.dummyMoved, false);
 });
 
-test("66 pressing into the dummy: it bounces back and hits again while the impact is at least 1 (3, then 1.5), then nothing more; at 0 it stays", () => {
+test("66 pressing into the dummy hurts it once, at the arrival (no bounce, so no second collision); at 0 it stays", () => {
   const result = run(`
     const s = createChamber1State();
     const player = s.actors[0];
@@ -1221,10 +1237,9 @@ test("66 pressing into the dummy: it bounces back and hits again while the impac
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: -1 } });
     return { settled, afterPressing, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
   `);
-  // First collision at impact 3: the dummy loses 5000 x 0.001 x 3 / 6 = 2.5. The bounce sends the avatar back at
-  // 1.5 (bounce 0.5); pressing again hits at impact 1.5: 1.25. The next return is below 1: nothing triggers.
-  // The avatar loses the minimum damage 1 each time (the attack is below its defense 3).
-  assert.deepStrictEqual(plain(result.settled), { dummy: 26.25, avatar: 98 });
+  // The collision at impact 3: the dummy loses 5000 x 0.001 x 3 / 6 = 2.5. The avatar loses the minimum damage 1
+  // (the dummy's attack, 4800 x 0.001 x 3 / 6 = 2.4, is below its defense 3). Without a bounce nothing else triggers.
+  assert.deepStrictEqual(plain(result.settled), { dummy: 27.5, avatar: 99 });
   assert.deepStrictEqual(plain(result.afterPressing), plain(result.settled)); // pressing for 3 s more changed nothing
   assert.strictEqual(result.dummyAtZero, 0);
   assert.strictEqual(result.stillThere, true);
@@ -1253,11 +1268,11 @@ test("67 touching again after separating is a new collision and hurts again; the
 test("68 only something with doesDamage hits: a type without it never hurts what touches it", () => {
   const patched = loadGame((text) => text.replace(
     "const DEFINITIONS = {\n  actors: {",
-    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", weightPerRadius: 300, radius: 16, bounce: 0, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+    'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 }, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
   ));
   const result = run(`
-    const soft = { type: "soft", position: { x: 0, y: 0 } };
-    const stone = { type: "stone", position: { x: 0, y: 0 } };
+    const soft = { type: "soft", radius: 16, position: { x: 0, y: 0 } };
+    const stone = { type: "stone", radius: 16, position: { x: 0, y: 0 } };
     const full = createRun(1).build;
     return { soft: finalAttack(soft, { impact: 12 }, full), stone: finalAttack(stone, { impact: 12 }, full) };
   `, patched);
@@ -1267,57 +1282,54 @@ test("68 only something with doesDamage hits: a type without it never hurts what
 
 test("69 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
   const result = withBuilds(`
-    const rubber = { type: "rubber", position: { x: 0, y: 0 } };
+    const small = createActor("shroom_a", "shroom", 16); // 1600 kg
+    const large = createActor("shroom_b", "shroom", 32); // 3200 kg
     return {
-      weak: damageOf(rubber, { impact: 3 }, avatar, full), // attack 1.8, defense 3
-      strong: damageOf(rubber, { impact: 12 }, avatar, full), // attack 7.2, defense 3
-      noImpact: damageOf(rubber, { impact: 0 }, avatar, full),
+      weak: damageOf(small, { impact: 3 }, avatar, full), // attack 0.8, defense 3
+      strong: damageOf(large, { impact: 12 }, avatar, full), // attack 6.4, defense 3
+      noImpact: damageOf(large, { impact: 0 }, avatar, full),
     };
   `);
   assert.strictEqual(result.weak, 1);
-  assert.ok(Math.abs(result.strong - 4.2) < 1e-9);
+  assert.ok(Math.abs(result.strong - 3.4) < 1e-9);
   assert.strictEqual(result.noImpact, 0);
 });
 
 test("70 below the minimum impact (1) nothing triggers: no damage, no bounce; the avatar just stops against the thing", () => {
-  const result = run(`
-    const s = createChamber1State();
-    const p = s.actors[0];
-    p.position.x = 145; p.position.y = -435; // inside the boulder at 172,-435 (bounce 0.5), pushed out by the collision
-    p.move.velocity.x = 0.5; // impact 0.5, below 1
-    step(s, { move: { x: 1, y: 0 } }); // accelerates to 0.75 into it
-    return { avatar: p.health.current, damagedRocks: s.damagedRocks, vx: p.move.velocity.x, contacts: s.contacts };
-  `);
+  const result = hitShroom(32, { speed: 0.5, gap: 0.3 }); // a Shroom of radius 32 has bounce 1: a bounce would send it back at 0.75
   assert.strictEqual(result.avatar, 100);
-  assert.deepStrictEqual(plain(result.damagedRocks), {});
-  assert.strictEqual(result.vx, 0); // not sent back (a bounce of 0.5 x 0.75 would give -0.375)
+  assert.strictEqual(result.shroom, 20);
+  assert.strictEqual(result.vy, 0); // stopped, not sent back
 });
 
-test("71 every weight in the definitions is a whole number: the parts, and the weightPerRadius and radius of the still actors", () => {
+test("71 every weight in the definitions is a whole number: the parts, and the size of every still actor and object", () => {
   const weights = run(`
+    const sizes = [
+      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.size).map(([id, d]) => [id, d.size]),
+      ...Object.entries(DEFINITIONS.objects).map(([id, o]) => [id, o.size]),
+    ];
     return [
-      ...Object.entries(DEFINITIONS.actors).filter(([, d]) => d.weightPerRadius !== undefined).flatMap(([id, d]) => [[id + " weightPerRadius", d.weightPerRadius], [id + " radius", d.radius]]),
+      ...sizes.flatMap(([id, size]) => [[id + " weightPerRadius", size.weightPerRadius], [id + " minRadius", size.minRadius], [id + " maxRadius", size.maxRadius]]),
       ...Object.entries(DEFINITIONS.parts).map(([id, p]) => [id, p.weight]),
     ];
   `);
-  assert.ok(weights.length >= 17);
+  assert.ok(weights.length >= 20);
   for (const [id, weight] of weights) assert.ok(Number.isInteger(weight) && weight >= 0, id + ": " + weight);
 });
 
 test("72 a weight that is not a whole number (or is negative) stops the game when it loads; 0 is allowed", () => {
-  const brokenMultiplier = (text) => text.replace("weightPerRadius: 300,\n      healthRange", "weightPerRadius: 300.5,\n      healthRange");
-  const brokenRadius = (text) => text.replace("radius: 16,\n      weightPerRadius", "radius: 16.5,\n      weightPerRadius");
-  const brokenPart = (text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,');
-  assert.throws(() => loadGame(brokenMultiplier), /actor type stone.*300.5/);
-  assert.throws(() => loadGame(brokenRadius), /radius of the actor type stone.*16.5/);
-  assert.throws(() => loadGame(brokenPart), /part head.*-1/);
-  const box = loadGame((text) => text.replace("weightPerRadius: 300,\n      healthRange", "weightPerRadius: 0,\n      healthRange"));
-  assert.strictEqual(run("return weightOfType(DEFINITIONS.actors.stone);", box), 0);
+  const stone = "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      healthRange";
+  const patch = (to) => (text) => text.replace(stone, to + ",\n      healthRange");
+  assert.throws(() => loadGame(patch("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300.5 }")), /actor type stone.*300.5/);
+  assert.throws(() => loadGame(patch("size: { minRadius: 16.5, maxRadius: 16.5, weightPerRadius: 300 }")), /actor type stone/);
+  assert.throws(() => loadGame((text) => text.replace('head: { name: "Head", weight: 200,', 'head: { name: "Head", weight: -1,')), /part head.*-1/);
+  const box = loadGame(patch("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 }"));
+  assert.strictEqual(run("return weightOf({ type: 'stone', radius: 16 }, createRun(1).build);", box), 0);
 });
 
 test("73 a still actor with weight 0 and health 1 is harmless and breaks at the first hit, and the avatar goes through it", () => {
   const box = loadGame((text) => text
-    .replace("weightPerRadius: 300,\n      healthRange: { min: 10, max: 20 }", "weightPerRadius: 0,\n      healthRange: { min: 1, max: 1 }"));
+    .replace("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      healthRange: { min: 10, max: 20 }", "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 },\n      healthRange: { min: 1, max: 1 }"));
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -1338,10 +1350,85 @@ test("74 the list of still objects has the rock: radius from 16 to 32, weight mo
 });
 
 test("75 a size that is not whole, or has a minimum above the maximum, stops the game when it loads", () => {
-  const patch = (from, to) => (text) => text.replace(from, to);
-  const size = "size: { minRadius: 16, maxRadius: 32, weightPerRadius: 100 }";
-  assert.throws(() => loadGame(patch(size, "size: { minRadius: 16.5, maxRadius: 32, weightPerRadius: 100 }")), /object rock/);
-  assert.throws(() => loadGame(patch(size, "size: { minRadius: 40, maxRadius: 32, weightPerRadius: 100 }")), /object rock/);
-  assert.throws(() => loadGame(patch(size, "size: { minRadius: 16, maxRadius: 32, weightPerRadius: 99.5 }")), /object rock/);
-  loadGame(patch(size, "size: { minRadius: 16, maxRadius: 16, weightPerRadius: 0 }")); // a fixed size and weight 0 are allowed
+  const size = "const ROCK_SIZE = { minRadius: 16, maxRadius: 32, weightPerRadius: 100 };";
+  const patch = (to) => (text) => text.replace(size, "const ROCK_SIZE = " + to + ";");
+  assert.throws(() => loadGame(patch("{ minRadius: 16.5, maxRadius: 32, weightPerRadius: 100 }")), /shroom/);
+  assert.throws(() => loadGame(patch("{ minRadius: 40, maxRadius: 32, weightPerRadius: 100 }")), /shroom/);
+  assert.throws(() => loadGame(patch("{ minRadius: 16, maxRadius: 32, weightPerRadius: 99.5 }")), /shroom/);
+  loadGame(patch("{ minRadius: 16, maxRadius: 32, weightPerRadius: 0 }")); // weight 0 is allowed
+});
+
+test("76 a still actor gets its own radius: it must be given for a range, checked, and fixed sizes give it by themselves", () => {
+  const result = run(`
+    const attempt = (...args) => { try { createActor(...args); return "ok"; } catch (error) { return error.message; } };
+    return {
+      stone: createActor("a", "stone").radius,
+      dummy: createActor("b", "dummy").radius,
+      shroom: createActor("c", "shroom", 24).radius,
+      noRadius: attempt("d", "shroom"),
+      tooSmall: attempt("e", "shroom", 15),
+      tooBig: attempt("f", "shroom", 33),
+      notWhole: attempt("g", "shroom", 20.5),
+      noSize: attempt("h", "player", 16),
+      avatarRadius: radiusOf(createActor("player_1", "player")),
+    };
+  `);
+  assert.strictEqual(result.stone, 16);
+  assert.strictEqual(result.dummy, 16);
+  assert.strictEqual(result.shroom, 24);
+  assert.match(result.noRadius, /a radius must be given/);
+  assert.match(result.tooSmall, /whole number from 16 to 32/);
+  assert.match(result.tooBig, /whole number from 16 to 32/);
+  assert.match(result.notWhole, /whole number from 16 to 32/);
+  assert.match(result.noSize, /no size/);
+  assert.strictEqual(result.avatarRadius, 16); // the avatar keeps the radius of its definition
+});
+
+test("77 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; nothing else has a bounce", () => {
+  const result = run(`
+    const bounces = [];
+    for (let radius = 16; radius <= 32; radius++) bounces.push(bounceOf(createActor("s", "shroom", radius)));
+    return { bounces, stone: bounceOf(createActor("a", "stone")), dummy: bounceOf(createActor("b", "dummy")) };
+  `);
+  assert.ok(Math.abs(result.bounces[0] - 0.2) < 1e-9);
+  assert.ok(Math.abs(result.bounces[8] - 0.6) < 1e-9); // radius 24
+  assert.ok(Math.abs(result.bounces[16] - 1) < 1e-9);
+  for (let i = 1; i < result.bounces.length; i++) {
+    assert.ok(Math.abs(result.bounces[i] - result.bounces[i - 1] - 0.05) < 1e-9, "each pixel of radius adds 0.05"); // 0.8 / 16
+  }
+  assert.ok(Math.max(...result.bounces) <= 1 + 1e-9 && Math.min(...result.bounces) >= 0.2 - 1e-9);
+  assert.strictEqual(result.stone, 0);
+  assert.strictEqual(result.dummy, 0);
+});
+
+test("78 a bounce above 1 (it would eject, like a spring), or a { min, max } without a size, stops the game when it loads", () => {
+  const shroomBounce = "bounce: { min: 0.2, max: 1 }";
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.2, max: 1.5 }")), /bounce of the actor type shroom/);
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: 2")), /bounce of the actor type shroom/);
+  assert.throws(() => loadGame((text) => text.replace(shroomBounce, "bounce: { min: 0.8, max: 0.5 }")), /bounce of the actor type shroom/);
+  assert.throws(() => loadGame((text) => text.replace("defense: 0,\n", "defense: 0,\n      bounce: { min: 0.2, max: 1 },\n").replace("size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },\n      defense", "defense")), /needs a size/);
+});
+
+test("79 Chamber 1 has a Shroom of radius 24 at 130 px to the left; the first dash left hits it and comes back at 0.6 of the speed", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const player = s.actors[0];
+    const shroom = s.actors.find((actor) => actor.id === "shroom_1");
+    const start = { radius: shroom.radius, x: shroom.position.x, y: shroom.position.y, health: shroom.health.current };
+    step(s, { move: { x: -1, y: 0 }, dash: true });
+    let speedBefore = null, hitFrame = null;
+    for (let i = 1; i < 30 && hitFrame === null; i++) {
+      speedBefore = Math.abs(player.move.velocity.x);
+      step(s, { move: { x: -1, y: 0 } });
+      if (shroom.health.current < start.health) hitFrame = i;
+    }
+    return { start, hitFrame, speedBefore, vx: player.move.velocity.x, shroom: shroom.health.current, moved: shroom.position.x !== start.x, json: JSON.stringify(s) };
+  `);
+  assert.deepStrictEqual(plain(result.start), { radius: 24, x: -130, y: 0, health: 20 });
+  assert.ok(result.hitFrame !== null, "the first dash did not reach the Shroom");
+  assert.ok(result.vx > 0, "it bounced back");
+  assert.ok(Math.abs(result.vx / result.speedBefore - 0.6) < 0.05, "it gives back 0.6 of the speed, with the decay of a frame: " + result.vx / result.speedBefore);
+  assert.ok(result.shroom < 20);
+  assert.strictEqual(result.moved, false);
+  assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });

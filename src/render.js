@@ -6,6 +6,7 @@ const REFERENCE_GRID_COLOR = "#1d232b";
 const PLAYER_COLOR = "#ffffff";
 const ROCK_COLOR = "#5a5f66";
 const DUMMY_COLOR = "#8a6d3b";
+const SHROOM_COLOR = "#a8445c";
 
 function draw(context, state, build) {
   const { width, height } = context.canvas;
@@ -55,7 +56,7 @@ function drawRocks(context, state, player) {
   for (const rock of rocks) {
     const screenX = rock.position.x - left;
     const screenY = rock.position.y - top;
-    const radius = DEFINITIONS.actors[rock.type].radius;
+    const radius = radiusOf(rock);
 
     context.fillStyle = ROCK_COLOR;
     context.beginPath();
@@ -76,9 +77,9 @@ function drawStaticActors(context, state, player, build) {
     if (actor === player || actor.move) continue;
     const screenX = actor.position.x - player.position.x + width / 2;
     const screenY = actor.position.y - player.position.y + height / 2;
-    const radius = definitionOf(actor).radius;
+    const radius = radiusOf(actor);
 
-    context.fillStyle = DUMMY_COLOR;
+    context.fillStyle = actor.type === "shroom" ? SHROOM_COLOR : DUMMY_COLOR;
     context.beginPath();
     context.arc(screenX, screenY, radius, 0, Math.PI * 2);
     context.fill();

@@ -18,7 +18,10 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 13;
+const DEFINITIONS_VERSION = 14;
+
+// The size of a rock and of a Shroom (the user's values): radius from 16 to 32, 100 kg per pixel of radius.
+const ROCK_SIZE = { minRadius: 16, maxRadius: 32, weightPerRadius: 100 };
 
 const DEFINITIONS = {
   actors: {
@@ -49,60 +52,59 @@ const DEFINITIONS = {
       },
     },
 
-    // Rocks: static actors (no "move"). They are not stored in the state: the
-    // seed and the formula in "terrain" below say where they are (see rocksInArea).
-    // bounce: how much of the speed of whoever hits it comes back (0 = none, 1 = all).
-    // radius (guess, measured against the avatar's 16): stone = the same size, boulder = 1.25 x, rubber = 0.75 x.
+    // Still actors (no "move"): the stone, the training dummy and the Shroom. Each has a "size": the range of its
+    // radius and the weight per pixel of radius. weight = weightPerRadius x radius (the user's decision: the radius,
+    // not the area), all whole numbers, so nothing is rounded. A heavier thing hits harder (body slam: attack =
+    // weight x 0.001 x impact / 6). A fixed size has the same minRadius and maxRadius.
+    // bounce (how much of the speed of whoever hits it comes back, 0 = none, 1 = all) exists only on the Shroom for
+    // now: every other thing has none (the user's decision). A bounce is never above 1, or the thing would eject
+    // whoever hits it, like a spring (the user's rule). It is a number, or a { min, max } that grows linearly with
+    // the radius, from min at minRadius to max at maxRadius (see bounceOf in src/sim.js).
+
+    // The stone. A rock is not stored in the state: the seed and the formula in "terrain" below say where it is
+    // (see rocksInArea). Its size is fixed for now, so nothing is rolled for it yet.
+    // size: guess, the radius of the avatar (16) and 300 kg per pixel, so it weighs 4800 kg, close to the avatar's 5000 kg.
     //   rule: no radius above terrain.rocks.margin (20), or rocks of neighbor squares could overlap.
-    // bounce: the three reference points of the range (none, half, all), so the feel of each can be compared.
-    // weightPerRadius (kg per pixel of radius): the weight of a still actor is weightPerRadius x radius (the user's
-    //   decision: the radius, not the area, so a rock twice as wide weighs twice as much and hits twice as hard).
-    //   Both are whole numbers, so the weight is whole and nothing is rounded. A heavier rock hits harder
-    //   (body slam: attack = weight x 0.001 x impact / 6). guess: 300, a round number; the stone (radius 16) weighs
-    //   4800 kg, close to the avatar's 5000 kg, the boulder (20) 6000 kg, the rubber rock (12) 3600 kg.
     // healthRange: the user's first numbers, "between 10 and 20" for a rock of the first map. Each rock rolls its
-    //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0. Same range for all kinds for now.
+    //   own whole number inside the range from the seed (see rockInSquare), and it breaks at 0.
     stone: {
       name: "Stone",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
-      radius: 16,
-      weightPerRadius: 300,
+      size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },
       healthRange: { min: 10, max: 20 },
-      bounce: 0,
       initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
     },
-    boulder: {
-      name: "Boulder",
+
+    // The Shroom (the user's idea): like the rock (the same size: radius 16 to 32, 100 kg per pixel) but it bounces.
+    // Its bounce goes from 0.2 at the smallest radius to 1 at the largest, in a straight line (the user's values):
+    //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
+    // Each Shroom needs a radius (a whole number from 16 to 32). The seed does not create Shrooms yet, so for now
+    //   they are placed by hand in "chamber1" below, each with its radius.
+    // maxHealth: guess, 20, the top of the stone's range (10 to 20), since the seed does not roll it for the Shroom yet.
+    shroom: {
+      name: "Shroom",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
-      radius: 20,
-      weightPerRadius: 300,
-      healthRange: { min: 10, max: 20 },
-      bounce: 0.5,
-      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
-    },
-    rubber: {
-      name: "Rubber rock",
-      doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
-      radius: 12,
-      weightPerRadius: 300,
-      healthRange: { min: 10, max: 20 },
-      bounce: 1,
-      initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } },
+      size: ROCK_SIZE,
+      bounce: { min: 0.2, max: 1 },
+      maxHealth: 20,
+      initial: {
+        health: { current: 20 },
+        position: { x: 0, y: 0 },
+        cell: { x: 0, y: 0 },
+      },
     },
 
     // The training dummy: a still actor (no "move") that receives the avatar's body slam and hits back with its
     // own weight, to test the attack. Like a rock it does not move, but it is a real actor in the state.
-    // weightPerRadius: guess, the same as the stone (and the same radius), so a hit on it is as strong as a hit on a stone.
+    // size: guess, the same as the stone (radius 16, 300 kg per pixel), so a hit on it is as strong as a hit on a stone.
     // maxHealth: guess, 30 = six hits of 5, so a few dashes (one every 4 s) are needed to see it fall to 0. It stays at 0.
-    // defense 0: nothing is taken off the hits. radius: the avatar's. bounce 0.5: the boulder's, half of the speed comes back.
+    // defense 0: nothing is taken off the hits. No bounce: only the Shroom has one for now.
     dummy: {
       name: "Training dummy",
       doesDamage: true, // rule: touching it hurts (the body slam). A type without this never hurts what touches it
       maxHealth: 30,
-      weightPerRadius: 300,
+      size: { minRadius: 16, maxRadius: 16, weightPerRadius: 300 },
       defense: 0,
-      radius: 16,
-      bounce: 0.5,
       initial: {
         health: { current: 30 },
         position: { x: 0, y: 0 },
@@ -113,14 +115,14 @@ const DEFINITIONS = {
 
   // The list of still objects (the user's idea): rocks, and later boxes, logs, houses... Each entry holds the
   // creation parameters of that object, which the seed will roll for each one that is placed.
-  // Only the rock exists so far, and nothing uses it yet: stone, boulder and rubber above still have their own radius.
+  // Only the rock exists so far, and nothing uses it yet.
   // size (the user's values): minRadius 16 and maxRadius 32 (the avatar's radius up to twice it), and weightPerRadius 100:
-  //   weight = weightPerRadius x radius, the radius and not the area, all whole numbers, so nothing is rounded.
-  //   The weight of a rock therefore goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg (computed, never stored).
+  //   weight = weightPerRadius x radius. The weight of a rock therefore goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg
+  //   (computed, never stored). The Shroom has the same size (ROCK_SIZE is the only place with these numbers).
   objects: {
     rock: {
       name: "Rock",
-      size: { minRadius: 16, maxRadius: 32, weightPerRadius: 100 },
+      size: ROCK_SIZE,
     },
   },
 
@@ -194,7 +196,12 @@ const DEFINITIONS = {
     // position: rule, 130 px. At 130 px the dummy is touched after 98 px of a dash (130 minus the two
     //   radii), with an impact of 7, so the first dash reaches it. It is also inside the rocks' safe zone
     //   (200 px minus the largest rock radius 20 and the dummy radius 16 = 164), so no rock can overlap it.
-    actors: [{ id: "dummy_1", type: "dummy", position: { x: 0, y: -130 } }],
+    // The Shroom, to the left of the start, with a radius of 24 (the middle of 16 to 32, so a bounce of 0.6).
+    // position: rule, 130 px to the left, inside the safe zone too (200 minus the margin 20 and the radius 24 = 156).
+    actors: [
+      { id: "dummy_1", type: "dummy", position: { x: 0, y: -130 } },
+      { id: "shroom_1", type: "shroom", position: { x: -130, y: 0 }, radius: 24 },
+    ],
   },
 
   // How the ground is filled (provisional values, to be tuned).
@@ -204,7 +211,7 @@ const DEFINITIONS = {
       chancePercent: 35, // target: about 11 rocks on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in). Seed 1 gives 12
       margin: 20, // rule: the largest rock radius, so rocks of neighbor squares never overlap
       safeRadius: 200, // guess: bigger than the first dash (142 px), so the very first dash cannot hit a rock. No rock closer than this to the start (0, 0)
-      kinds: ["stone", "boulder", "rubber"], // which actor types a rock can be (the formula picks one)
+      kinds: ["stone"], // which actor types a rock can be (the formula picks one). Only the stone for now; Shrooms and the rolled radius come later
     },
   },
 };
