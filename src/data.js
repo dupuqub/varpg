@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 24;
+const DEFINITIONS_VERSION = 25;
 
 const DEFINITIONS = {
   actors: {
@@ -186,12 +186,22 @@ const DEFINITIONS = {
   },
 
   // How the ground is filled (provisional values, to be tuned). The seed places the objects, every one of them.
+  // The seed places them in layers (the user's idea: a thing that lives in the seed may one day be huge and rare, and
+  //   it cannot share the squares of the small ones). Each layer is complete and has its own numbers, nothing is shared.
+  //   The world is cut into squares of the size of the layer, with at most one object in each square. Every object of
+  //   a layer stays inside its own square, so the largest radius of its kinds must fit in it (the game refuses a layer
+  //   where it does not). When objects of two layers overlap, the layer with the larger square wins and the other
+  //   object is not placed. Only the layer "small" exists for now.
   terrain: {
     objects: {
-      cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one object in each
-      chancePercent: 35, // target: about 11 objects on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in)
-      safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
-      kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer; the user's decision: 50/50 for now, a correction for later)
+      layers: {
+        small: {
+          cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one object in each
+          chancePercent: 35, // target: about 11 objects on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in)
+          safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
+          kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer; the user's decision: 50/50 for now, a correction for later)
+        },
+      },
     },
 
     // The Dummies of Chamber 1: where the seed puts them is the real area of the game, the window of the

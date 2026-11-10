@@ -58,8 +58,7 @@ function drawObjects(context, state, player) {
   const { width, height } = context.canvas;
   const left = player.position.x - width / 2;
   const top = player.position.y - height / 2;
-  const padding = 64; // so an object that is only partly on the screen is also drawn
-  const objects = objectsInArea(state.seed, left - padding, top - padding, left + width + padding, top + height + padding)
+  const objects = objectsReaching(state.seed, left, top, left + width, top + height) // also an object that is only partly on the screen
     .filter((object) => !isObjectBroken(state, object)); // a broken object is gone
 
   for (const object of objects) {

@@ -749,15 +749,15 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0 });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0 });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
 test("40 the state keeps only the seed, not the objects; the seed rolls the type, the radius and the health of every object inside its ranges", () => {
   const result = run(`
     const s = createChamber1State(1, 5);
-    const rules = DEFINITIONS.terrain.objects;
+    const rules = DEFINITIONS.terrain.objects.layers.small;
     const seen = {};
     let outOfRange = 0;
     for (let seed = 1; seed <= 5; seed++) {
@@ -781,7 +781,7 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
       outOfRange,
       rock: spread("rock"),
       shroom: spread("shroom"),
-      margin: objectMargin(),
+      margin: objectMargin(rules),
       kinds: rules.kinds,
       dummyCount: DEFINITIONS.terrain.dummies.count,
     };
@@ -808,7 +808,7 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
 // Only the Shroom has a bounce: 0.2 at radius 16, 0.6 at 24 and 1 at 32 (0.2 + 0.8 x (radius - 16) / 16).
 
 // The rock of seed 1 used by these tests (see test 39).
-const ROCK = { x: 99, y: 456, radius: 28, key: "0,1", health: 10 };
+const ROCK = { x: 99, y: 456, radius: 28, key: "small:0,1", health: 10 };
 
 // Puts the avatar at (x, y) with the velocity (vx, vy), holds the direction, and runs one step.
 function hitOnce(x, y, vx, vy, direction, input = {}) {
@@ -992,7 +992,7 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the rock loses 2.5, th
     return { avatar: p.health.now, damagedObjects: s.damagedObjects, vx: p.move.velocity.x };
   `);
   assert.strictEqual(result.avatar, 99); // 2800 x 0.001 x 3 / 6 = 1.4, minus 3 is below the minimum damage, 1
-  assert.deepStrictEqual(plain(result.damagedObjects), { "0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
+  assert.deepStrictEqual(plain(result.damagedObjects), { "small:0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
   assert.strictEqual(result.vx, 0); // it still stopped (the bounce is a separate rule)
 });
 
@@ -1018,7 +1018,7 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
     return { avatar: p.health.now, damagedObjects: s.damagedObjects };
   `);
   assert.strictEqual(result.avatar, 99); // the attack is below the defense, so the minimum damage 1
-  const loss = 10 - result.damagedObjects["0,1"];
+  const loss = 10 - result.damagedObjects["small:0,1"];
   assert.ok(loss > 0 && loss < 2.5, "a graze should hurt the rock less than the head-on walk of test 47 (2.5), it lost " + loss);
 });
 
@@ -1217,7 +1217,7 @@ test("61 a rock that is hurt is stored by its square, and it keeps its health be
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: 0 } });
     return { damagedObjects: s.damagedObjects, json: JSON.stringify(s) };
   `);
-  assert.deepStrictEqual(plain(result.damagedObjects), { "0,1": 7.5 });
+  assert.deepStrictEqual(plain(result.damagedObjects), { "small:0,1": 7.5 });
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json); // still plain JSON
 });
 
@@ -1225,10 +1225,10 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
-    s.damagedObjects["0,1"] = 5; // the rock at 99,456 has 5 left
+    s.damagedObjects["small:0,1"] = 5; // the rock at 99,456 has 5 left
     p.position.x = 53; p.position.y = ${ROCK.y};
     step(s, { move: { x: 1, y: 0 }, dash: true }); // 5 - 10: it breaks (health stops at 0)
-    const afterHit = { broken: s.damagedObjects["0,1"], vx: p.move.velocity.x, x: p.position.x, health: p.health.now };
+    const afterHit = { broken: s.damagedObjects["small:0,1"], vx: p.move.velocity.x, x: p.position.x, health: p.health.now };
     for (let i = 0; i < 40; i++) step(s, { move: { x: 1, y: 0 } });
     return { afterHit, x: p.position.x, health: p.health.now };
   `);
@@ -1280,9 +1280,9 @@ test("65 pressing into a rock hurts it once, at the arrival (no bounce, so no se
     const player = s.actors[0];
     player.position.x = 0; player.position.y = ${ROCK.y};
     for (let i = 0; i < 100; i++) step(s, { move: { x: 1, y: 0 } }); // walks right into the rock and keeps pressing
-    const settled = { rock: s.damagedObjects["0,1"], avatar: player.health.now, x: player.position.x };
+    const settled = { rock: s.damagedObjects["small:0,1"], avatar: player.health.now, x: player.position.x };
     for (let i = 0; i < 200; i++) step(s, { move: { x: 1, y: 0 } }); // keeps pressing
-    return { settled, afterPressing: { rock: s.damagedObjects["0,1"], avatar: player.health.now, x: player.position.x } };
+    return { settled, afterPressing: { rock: s.damagedObjects["small:0,1"], avatar: player.health.now, x: player.position.x } };
   `);
   // The collision at impact 3: the rock loses 5000 x 0.001 x 3 / 6 = 2.5. The avatar loses the minimum damage 1
   // (the rock's attack, 2800 x 0.001 x 3 / 6 = 1.4, is below its defense 3). Without a bounce nothing else triggers.
@@ -1296,15 +1296,15 @@ test("66 touching again after separating is a new collision and hurts again; the
     const player = s.actors[0];
     player.position.x = 0; player.position.y = ${ROCK.y};
     for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 } });
-    const first = s.damagedObjects["0,1"];
+    const first = s.damagedObjects["small:0,1"];
     const ofAvatar = () => JSON.stringify(s.contacts.filter((contact) => contact.startsWith("avatar_1|"))); // the Dummies have contacts of their own
     const whileTouching = ofAvatar();
     for (let i = 0; i < 20; i++) step(s, { move: { x: -1, y: 0 } }); // walks away: no contact
     const apart = ofAvatar();
     for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 } }); // comes back: a new collision
-    return { first, second: s.damagedObjects["0,1"], whileTouching, apart, json: JSON.stringify(s) };
+    return { first, second: s.damagedObjects["small:0,1"], whileTouching, apart, json: JSON.stringify(s) };
   `);
-  assert.strictEqual(result.whileTouching, JSON.stringify(["avatar_1|rock 0,1"]));
+  assert.strictEqual(result.whileTouching, JSON.stringify(["avatar_1|rock small:0,1"]));
   assert.strictEqual(result.apart, "[]");
   assert.ok(result.second < result.first, "the second collision did not hurt: " + result.first + " -> " + result.second);
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
@@ -1375,7 +1375,7 @@ test("72 a rock with weight 0 and health 1 is harmless and breaks at the first h
     const p = s.actors[0];
     p.position.x = 53; p.position.y = ${ROCK.y}; // touching the rock at 99,456, which is now a box
     step(s, { move: { x: 1, y: 0 }, dash: true });
-    return { avatar: p.health.now, box: s.damagedObjects["0,1"], vx: p.move.velocity.x };
+    return { avatar: p.health.now, box: s.damagedObjects["small:0,1"], vx: p.move.velocity.x };
   `, box);
   assert.strictEqual(result.avatar, 100); // attack 0: no damage, not even the minimum
   assert.strictEqual(result.box, 0); // the avatar hit it for 10 (minimum damage 1 would be enough)
@@ -1428,7 +1428,7 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   assert.match(result.unknown, /Unknown type: nope/);
   assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0 });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
@@ -1488,7 +1488,7 @@ test("79 the avatar plays only with its own values: while stepping, the definiti
 const EMPTY = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0"));
 
 // A state with the avatar and only the Dummies of the given numbers, in the game without objects.
-const ROCK_KEY = "0,1";
+const ROCK_KEY = "small:0,1";
 const ROCK_HEALTH = 10;
 const ALONE = `
   function alone(...numbers) {
@@ -2089,4 +2089,117 @@ test("101 no recipe in the definitions allows an actor larger than the space bet
   });
   assert.deepStrictEqual(plain(actorsTooLarge(withSize(581)).tooLarge), ["dummy: 581 > 580"]);
   assert.deepStrictEqual(plain(actorsTooLarge(withSize(580)).tooLarge), []);
+});
+
+// ---- Layers of the ground ----
+// The real definitions have only the layer "small". These tests build other layers in a patched copy of the data, to prove that
+// the game is ready for huge things that live in the seed (the user's idea): the patch adds an object "giant" (radius 200 to 256)
+// and a layer "huge" with a square of 2048 where every square has one.
+
+// Replaces text in the data and fails loudly if it is not found exactly once (a patch that does not apply proves nothing).
+function patchOnce(text, from, to) {
+  assert.strictEqual(text.split(from).length - 1, 1, "the patch should apply once: " + from);
+  return text.replace(from, to);
+}
+
+const AFTER_SMALL = "        },\n      },\n    },\n\n    // The Dummies of Chamber 1";
+const HUGE_LAYER = (square, kind = "giant") => `        },\n        huge: { cellSize: ${square}, chancePercent: 100, safeRadius: 0, kinds: ["${kind}"] },\n      },\n    },\n\n    // The Dummies of Chamber 1`;
+const GIANT = '    giant: { name: "Giant", size: { min: 200, max: 256 }, weightPerRadius: 100, healthRange: { min: 10, max: 20 } },\n    rock: {';
+
+function withHugeLayer(square = 2048) {
+  return loadGame((text) => {
+    let patched = patchOnce(text, "    rock: {", GIANT);
+    patched = patchOnce(patched, AFTER_SMALL, HUGE_LAYER(square));
+    return patchOnce(patched, "dummies: { count: 1000,", "dummies: { count: 0,");
+  });
+}
+
+function loadError(patch) {
+  try {
+    loadGame(patch);
+  } catch (error) {
+    return error.message;
+  }
+  return null;
+}
+
+test("102 a layer that cannot be made is refused when the definitions load: an object that does not fit in its square, an unknown kind, no kinds, a chance above 100, two layers with the same square", () => {
+  const small = (change) => (text) => patchOnce(text, change.from, change.to);
+  const fit = (size) => small({ from: "cellSize: 256, // guess: the world", to: "cellSize: " + size + ", // guess: the world" });
+  assert.match(loadError(fit(64)), /above twice its largest radius, 64/); // radius 32 x 2 = 64: no room left for the center
+  assert.strictEqual(loadError(fit(65)), null); // one pixel of room is enough
+  assert.match(loadError(small({ from: 'kinds: ["rock", "shroom"]', to: 'kinds: ["rock", "nothing"]' })), /nothing, which is not an object/);
+  assert.match(loadError(small({ from: 'kinds: ["rock", "shroom"]', to: "kinds: []" })), /at least one object/);
+  assert.match(loadError(small({ from: "chancePercent: 35", to: "chancePercent: 101" })), /from 0 to 100/);
+  assert.match(loadError((text) => patchOnce(text, AFTER_SMALL, HUGE_LAYER(256, "rock"))), /square of 256/); // a layer of rocks with the same square as "small"
+  assert.strictEqual(loadError((text) => patchOnce(patchOnce(text, "    rock: {", GIANT), AFTER_SMALL, HUGE_LAYER(2048))), null); // the huge layer itself is valid
+});
+
+test("103 with a layer of huge objects: each one stays in its square, and the small ones that overlap one are the only small ones that go (all the others are exactly as before)", () => {
+  const list = (game) => plain(run(`
+    const out = {};
+    for (let seed = 1; seed <= 5; seed++) out[seed] = objectsInArea(seed, -6000, -6000, 6000, 6000);
+    return out;
+  `, game));
+  const before = list(context); // the real game: only the layer "small"
+  const after = list(withHugeLayer());
+  const inner = (object) => Math.abs(object.position.x) <= 5000 && Math.abs(object.position.y) <= 5000; // far from the edge of the area, where a huge center could be outside it
+  let giants = 0;
+  let removed = 0;
+  for (const seed of Object.keys(before)) {
+    const huge = after[seed].filter((object) => object.layer === "huge");
+    giants += huge.length;
+    for (const giant of huge) {
+      const { x, y } = giant.position;
+      assert.ok(giant.radius >= 200 && giant.radius <= 256, "radius " + giant.radius);
+      assert.ok(x - giant.radius >= giant.square.x * 2048 && x + giant.radius <= (giant.square.x + 1) * 2048, "the giant leaves its square in x");
+      assert.ok(y - giant.radius >= giant.square.y * 2048 && y + giant.radius <= (giant.square.y + 1) * 2048, "the giant leaves its square in y");
+    }
+    const touchesGiant = (object) => huge.some((giant) => {
+      const reach = object.radius + giant.radius;
+      return (object.position.x - giant.position.x) ** 2 + (object.position.y - giant.position.y) ** 2 < reach * reach;
+    });
+    const expected = before[seed].filter(inner).filter((object) => !touchesGiant(object));
+    assert.deepStrictEqual(after[seed].filter((object) => object.layer === "small").filter(inner), expected);
+    removed += before[seed].filter(inner).length - expected.length;
+  }
+  assert.ok(giants > 100, "too few giants to prove anything: " + giants);
+  assert.ok(removed > 0, "no small object overlapped a giant, so the rule was not exercised");
+});
+
+test("104 a huge object whose center is far from an actor is still found when its body reaches the actor, and it pushes the actor out", () => {
+  const game = withHugeLayer();
+  const result = run(`
+    const giant = objectsInArea(1, 0, 0, 2048, 2048).find((object) => object.layer === "huge");
+    const { x, y } = giant.position;
+    const area = [x + giant.radius - 5, y - 10, x + giant.radius + 15, y + 10]; // a small area on the edge of the giant, its center far away
+    const inArea = objectsInArea(1, ...area).some((object) => object.layer === "huge");
+    const reaching = objectsReaching(1, ...area).some((object) => object.layer === "huge");
+
+    const s = createChamber1State(1, 1);
+    const player = s.actors.find((actor) => actor.id === AVATAR_ID);
+    player.position.x = x + giant.radius + player.radius - 3; // 3 px inside the giant
+    player.position.y = y;
+    const near = objectsNear(s, player).some((object) => object.layer === "huge");
+    step(s, { move: { x: 0, y: 0 } });
+    const distance = Math.hypot(player.position.x - x, player.position.y - y);
+    return { inArea, reaching, near, gap: distance - (giant.radius + player.radius) };
+  `, game);
+  assert.strictEqual(result.inArea, false); // its center is not in the area
+  assert.strictEqual(result.reaching, true); // but its body is
+  assert.strictEqual(result.near, true);
+  assert.ok(result.gap >= -1e-9, "the avatar is still inside the giant by " + result.gap);
+});
+
+test("105 the damage of an object is kept by its layer and its square, so two layers never share a key", () => {
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    const rock = objectsInArea(1, -960, -540, 960, 540)[0];
+    const sameSquare = (layer) => objectKey({ layer, square: { x: 0, y: 0 } });
+    damageObject(s, rock, 3);
+    return { key: objectKey(rock), stored: s.damagedObjects, health: rock.health.now, smallZero: sameSquare("small"), hugeZero: sameSquare("huge") };
+  `);
+  assert.ok(/^small:-?\d+,-?\d+$/.test(result.key), result.key);
+  assert.deepStrictEqual(plain(result.stored), { [result.key]: result.health - 3 });
+  assert.notStrictEqual(result.smallZero, result.hugeZero);
 });

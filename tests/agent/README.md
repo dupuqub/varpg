@@ -98,7 +98,7 @@ node --test
 | 37 | No rock is closer than 200 px to the starting point, for 40 different seeds (and rocks do start right after that). | The avatar must never begin inside a rock. |
 | 38 | No two rocks overlap, for 5 seeds. | The formula keeps each rock inside its own square, with a margin. |
 | 39 | **Known answer:** seed 1 gives 10 objects on the first screen, the first a Shroom at 136,-375 (radius 16, health 17, weight 1600, bounce 0.2) and the last a rock at 99,456 (radius 28, health 10, weight 2800, bounce 0); the types in order are shroom, rock, rock, shroom, shroom, rock, shroom, shroom, rock, rock. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the OBJECTS lines of DATA in Chamber 2). |
-| 40 | The state keeps only the seed and the avatar (no objects). Over 5 seeds the seed rolls the type, the radius and the health of every object inside the ranges of its type, and every value of the ranges shows up (radius 16 to 32, health 10 to 20) for the rock and for the Shroom; `objectMargin()` is the largest radius. | The state stays small, and nothing about an object is a fixed value. |
+| 40 | The state keeps only the seed and the avatar (no objects). Over 5 seeds the seed rolls the type, the radius and the health of every object inside the ranges of its type, and every value of the ranges shows up (radius 16 to 32, health 10 to 20) for the rock and for the Shroom; `objectMargin(layer)` is the largest radius of the layer. | The state stays small, and nothing about an object is a fixed value. |
 
 ### Collision with rocks
 
@@ -193,6 +193,10 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 99 | Three Dummies in a row: the first overlaps the second, which is pushed over the border of a cell into the third, with which it shared no cell before. Both collisions happen in the same step. | The cells are written again at once when a Dummy is pushed. (Without that, this test and 100 fail; it was tried.) |
 | 100 | At the start and after each of 300 steps, the cells stored in every actor are the ones computed from its position and radius, with Dummies over borders, pushed and wrapped. | The stored cells are the truth the collision reads (the user's rule: read from the object). |
 | 101 | No actor recipe in the definitions (the avatar's `radius`, the Dummy's `size.max`) allows a radius above the smallest space between the screen (the canvas in `index.html`, 1920 x 1080) and the edge of the window of the grid: 580 px up and down (992 across). A Dummy recipe that goes up to 581 is caught; up to exactly 580 is not. | The user's rule: an actor wraps when its center leaves the window, and that jump must never be seen, so an actor that large cannot be made in the first place. |
+| 102 | A layer of the ground that cannot be made is refused when the definitions load: a square of 64 with a radius of 32 (no room for the center) is refused and 65 is accepted; an unknown kind, an empty list of kinds, a chance of 101 and two layers with the same square (256) are refused; a valid second layer loads. | The user's rule: the thing that cannot exist must not be creatable, so the mistake shows when the game loads and not as a wrong map. |
+| 103 | In a patched copy with a layer "huge" (an object "giant" of radius 200 to 256, a square of 2048, every square has one), over 5 seeds: every giant stays inside its square; the small objects that remain are exactly the ones of the real game, minus only those that overlap a giant (the layer with the larger square wins); more than 100 giants and at least one small object removed, so the rule really ran. | Preparing for huge things in the seed does not change the small ones except where a huge one sits on top. |
+| 104 | A giant whose center is far from an actor (the actor 3 px inside its edge) is found by `objectsReaching` and `objectsNear` but not by `objectsInArea` (its center is not in the area), and one step pushes the actor out until it just touches. | The collision and the drawing need the objects that touch, not only the ones whose center is near. |
+| 105 | The damage of an object is stored under `"layer:squareX,squareY"`; the same square in two layers gives two different keys. | Two layers never share the damage of an object. |
 
 ### Benchmark of the grid (not a test)
 
@@ -200,6 +204,18 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 
 - **still:** the Dummies of the game. On the agent's machine the cost was lowest around 60 to 100 px, and rose for much smaller cells (each Dummy covers many) and much larger ones (many Dummies per cell).
 - **giants:** the same, with the first eight Dummies made huge (radii 256 and 128). Small cells become expensive, because a huge Dummy covers thousands of them; 60 to 100 px stayed the cheapest.
+
+## Cost of the layers
+
+`node tests/agent/benchmark-layers.js` plays 300 steps with the real number of Dummies and counts the objects the seed makes in 20 seeds; with `huge` as an argument it adds, in memory only, a layer of huge objects (radius 128 to 256, a square of 2048, a chance of 50%, about one giant every four screens). Nothing in `src/data.js` has a huge object. Measured on the agent's machine, in Node:
+
+| | small objects in 20 seeds | huge objects | ms per step |
+|---|---|---|---|
+| before the layers (the last commit) | 15548 | 0 | 7.3 and 8.7 |
+| the layers, with the real definitions (one layer) | 15548, **exactly the same objects** | 0 | 7.0 to 8.7 (the same, within the noise of the machine) |
+| the layers, plus the huge layer | 15268 (280 removed, 1.8%: the ones under a giant) | 342 | 16.8 to 17.7 (about 2.2 times) |
+
+So **preparing for huge objects costs nothing while no huge layer exists**, and the small objects do not change (the same objects, found at the same cost). Once a huge layer exists, every search for the objects near a thing asks one more layer, and every small object that exists also asks the bigger layers whether it is under one, so a step costs about twice as much with 1000 Dummies. The search is the largest cost left in a step (it is the same lookup by formula as before, only repeated per layer), so the first thing to try, if it hurts, is to make a lookup cheaper (for example, to roll the position and the radius of a square without building the whole object, which copies the recipe) before asking the huge layer.
 
 ## Proof that the tests can fail
 

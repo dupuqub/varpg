@@ -105,7 +105,9 @@ function assertValidBlueprint(blueprint) {
 // - A healthRange is { min, max }: whole numbers, 1 or more, with min not above max.
 // - A bounce is { min, max }, never above 1 (the user's rule: more would eject whoever hits it, like a spring).
 //   It grows with the radius, so it works because every object has a size.
-// - The objects the seed places (terrain.objects.kinds) must exist.
+// - Every layer of the ground (terrain.objects.layers) has kinds that exist, a chance from 0 to 100, and a square large
+//   enough for its largest radius (see objectMargin): a layer where an object would not fit in its square cannot be
+//   made in the first place. Two layers cannot have the same square size, because the larger one wins an overlap.
 function assertValidDefinitions() {
   for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy })) {
     const where = "the object " + id;
@@ -136,8 +138,23 @@ function assertValidDefinitions() {
       throw new Error("The weight of the part " + id + " must be a whole number of kg, 0 or more, and it is " + part.weight);
     }
   }
-  for (const kind of DEFINITIONS.terrain.objects.kinds) {
-    if (!DEFINITIONS.objects[kind]) throw new Error("terrain.objects.kinds has " + kind + ", which is not an object");
+  const squareSizes = [];
+  for (const [id, layer] of Object.entries(DEFINITIONS.terrain.objects.layers)) {
+    const where = "the layer " + id + " of terrain.objects";
+    if (!Array.isArray(layer.kinds) || layer.kinds.length === 0) throw new Error("The kinds of " + where + " must be a list with at least one object");
+    for (const kind of layer.kinds) {
+      if (!DEFINITIONS.objects[kind]) throw new Error("The kinds of " + where + " has " + kind + ", which is not an object");
+    }
+    if (!(layer.chancePercent >= 0 && layer.chancePercent <= 100)) {
+      throw new Error("The chancePercent of " + where + " must go from 0 to 100, and it is " + layer.chancePercent);
+    }
+    if (!Number.isInteger(layer.cellSize) || layer.cellSize - 2 * objectMargin(layer) < 1) {
+      throw new Error("The square of " + where + " (cellSize " + layer.cellSize + ") must be a whole number above twice its largest radius, " + 2 * objectMargin(layer));
+    }
+    if (squareSizes.includes(layer.cellSize)) {
+      throw new Error("Two layers of terrain.objects have a square of " + layer.cellSize + ": the larger square wins an overlap, so the sizes must differ");
+    }
+    squareSizes.push(layer.cellSize);
   }
 }
 
@@ -318,10 +335,19 @@ function hashInts(seed, x, y, salt) {
   return h >>> 0;
 }
 
-// How far from the center of its square an object must stay, so objects of neighbor squares never overlap: the
-// largest radius an object can have. Computed from the objects the seed places, never stored.
-function objectMargin() {
-  return Math.max(...DEFINITIONS.terrain.objects.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
+// The layers of the ground (terrain.objects.layers) as a list, in the order of the definitions, each one with its id and
+// its place in the list (index: it goes into the salts, so two layers never roll the same numbers). Frozen definitions
+// never change, so the list is made once.
+let cachedLayers = null;
+function objectLayers() {
+  cachedLayers ??= Object.entries(DEFINITIONS.terrain.objects.layers).map(([id, rules], index) => ({ id, index, ...rules }));
+  return cachedLayers;
+}
+
+// How far from the center of its square an object of the layer must stay, so objects of neighbor squares of the same
+// layer never overlap: the largest radius an object of the layer can have. Computed from the kinds of the layer, never stored.
+function objectMargin(layer) {
+  return Math.max(...layer.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
 }
 
 // Rolls a whole number from min to max (both included) from the seed, for one square and one "salt".
@@ -330,36 +356,53 @@ function rollInRange(seed, squareX, squareY, salt, min, max) {
   return min + (hashInts(seed, squareX, squareY, salt) % (max - min + 1));
 }
 
-// The object in one square of the world, or null if that square has none.
-// An object is { type, position: { x, y }, square: { x, y }, radius, health: { now, max } }. Everything in it is a whole
-// number rolled from the seed inside a range of its type (size, healthRange); the square says which object it is
-// (see damageObject). The salts: 1 chance, 2 and 3 position, 4 type, 5 health, 6 radius.
-function objectInSquare(seed, squareX, squareY) {
-  const rules = DEFINITIONS.terrain.objects;
+// The object in one square of a layer of the world, or null if that square has none.
+// An object is { type, layer, position: { x, y }, square: { x, y }, radius, health: { now, max } }. Everything in it is a
+// whole number rolled from the seed inside a range of its type (size, healthRange); the layer and the square say which
+// object it is (see damageObject). The salts, added to 100 x the place of the layer in the list: 1 chance, 2 and 3
+// position, 4 type, 5 health, 6 radius. An object that overlaps an object of a layer with a larger square is not placed.
+function objectInSquare(seed, layer, squareX, squareY) {
+  const salt = (kind) => layer.index * 100 + kind;
 
-  if (hashInts(seed, squareX, squareY, 1) % 100 >= rules.chancePercent) return null;
+  if (hashInts(seed, squareX, squareY, salt(1)) % 100 >= layer.chancePercent) return null;
 
-  const margin = objectMargin();
-  const room = rules.cellSize - 2 * margin;
-  const x = squareX * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 2) % room);
-  const y = squareY * rules.cellSize + margin + (hashInts(seed, squareX, squareY, 3) % room);
-  if (x * x + y * y < rules.safeRadius * rules.safeRadius) return null;
+  const margin = objectMargin(layer);
+  const room = layer.cellSize - 2 * margin;
+  const x = squareX * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(2)) % room);
+  const y = squareY * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(3)) % room);
+  if (x * x + y * y < layer.safeRadius * layer.safeRadius) return null;
 
-  const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
+  const type = layer.kinds[hashInts(seed, squareX, squareY, salt(4)) % layer.kinds.length];
   const definition = DEFINITIONS.objects[type];
-  const health = rollInRange(seed, squareX, squareY, 5, definition.healthRange.min, definition.healthRange.max);
-  const radius = rollInRange(seed, squareX, squareY, 6, definition.size.min, definition.size.max);
-  return finalizeObject(type, { position: { x, y }, square: { x: squareX, y: squareY }, radius, health: { now: health, max: health } });
+  const health = rollInRange(seed, squareX, squareY, salt(5), definition.healthRange.min, definition.healthRange.max);
+  const radius = rollInRange(seed, squareX, squareY, salt(6), definition.size.min, definition.size.max);
+  const object = finalizeObject(type, { layer: layer.id, position: { x, y }, square: { x: squareX, y: squareY }, radius, health: { now: health, max: health } });
+  return isUnderBiggerLayer(seed, layer, object) ? null : object;
 }
 
-// Every object whose center is inside the area (world coordinates), in a fixed
-// order (row by row). Looking at a bigger area never changes an object, it only finds more.
-function objectsInArea(seed, left, top, right, bottom) {
-  const size = DEFINITIONS.terrain.objects.cellSize;
+// True if the object overlaps an object of a layer with a larger square (that layer wins). Only those layers are asked.
+function isUnderBiggerLayer(seed, layer, object) {
+  const { x, y } = object.position;
+  for (const bigger of objectLayers()) {
+    if (bigger.cellSize <= layer.cellSize) continue;
+    const reach = object.radius + objectMargin(bigger);
+    for (const other of objectsInLayer(seed, bigger, x - reach, y - reach, x + reach, y + reach)) {
+      const touching = object.radius + other.radius;
+      const dx = x - other.position.x;
+      const dy = y - other.position.y;
+      if (dx * dx + dy * dy < touching * touching) return true;
+    }
+  }
+  return false;
+}
+
+// Every object of one layer whose center is inside the area (world coordinates), in a fixed order (row by row).
+function objectsInLayer(seed, layer, left, top, right, bottom) {
+  const size = layer.cellSize;
   const objects = [];
   for (let squareY = Math.floor(top / size); squareY <= Math.floor(bottom / size); squareY++) {
     for (let squareX = Math.floor(left / size); squareX <= Math.floor(right / size); squareX++) {
-      const object = objectInSquare(seed, squareX, squareY);
+      const object = objectInSquare(seed, layer, squareX, squareY);
       if (!object) continue;
       const { x, y } = object.position;
       if (x >= left && x <= right && y >= top && y <= bottom) objects.push(object);
@@ -368,13 +411,32 @@ function objectsInArea(seed, left, top, right, bottom) {
   return objects;
 }
 
+// Every object whose center is inside the area (world coordinates), in a fixed order (layer by layer, in the order of
+// the definitions, and row by row inside each). Looking at a bigger area never changes an object, it only finds more.
+function objectsInArea(seed, left, top, right, bottom) {
+  const objects = [];
+  for (const layer of objectLayers()) objects.push(...objectsInLayer(seed, layer, left, top, right, bottom));
+  return objects;
+}
+
+// Every object that may touch the area: its center can be outside, as far as the largest radius of its layer.
+// Same order as objectsInArea.
+function objectsReaching(seed, left, top, right, bottom) {
+  const objects = [];
+  for (const layer of objectLayers()) {
+    const margin = objectMargin(layer);
+    objects.push(...objectsInLayer(seed, layer, left - margin, top - margin, right + margin, bottom + margin));
+  }
+  return objects;
+}
+
 // ---- Objects that are hurt ----
 // An object comes from the formula with its full health (object.health: now and max, equal). Only an object that
-// was hurt is in the state: state.damagedObjects maps "squareX,squareY" to its current health.
+// was hurt is in the state: state.damagedObjects maps "layer:squareX,squareY" to its current health.
 // An object at 0 is broken: it is not drawn and nothing collides with it any more.
 
 function objectKey(object) {
-  return object.square.x + "," + object.square.y;
+  return object.layer + ":" + object.square.x + "," + object.square.y;
 }
 
 function objectHealth(state, object) {
@@ -396,16 +458,11 @@ function damageObject(state, object, damage) {
 // ---- Collision with objects ----
 
 // The objects near the actor that it may touch (the broken ones are gone), in the fixed order of
-// objectsInArea. Only objects close enough to touch are looked at: the largest radius of an object is the margin.
+// objectsInArea. Only objects close enough to touch are looked at (objectsReaching).
 function objectsNear(state, actor) {
-  const reach = actor.radius + objectMargin();
-  return objectsInArea(
-    state.seed,
-    actor.position.x - reach,
-    actor.position.y - reach,
-    actor.position.x + reach,
-    actor.position.y + reach
-  ).filter((object) => !isObjectBroken(state, object));
+  const { x, y } = actor.position;
+  return objectsReaching(state.seed, x - actor.radius, y - actor.radius, x + actor.radius, y + actor.radius)
+    .filter((object) => !isObjectBroken(state, object));
 }
 
 // Pushes an actor out of the objects it overlaps, hurts both sides, and changes its velocity.
@@ -544,8 +601,7 @@ function isPlaceTaken(state, x, y, radius) {
     if (dx * dx + dy * dy < reach * reach) return true;
   }
 
-  const margin = objectMargin();
-  return objectsInArea(state.seed, x - radius - margin, y - radius - margin, x + radius + margin, y + radius + margin).some((object) => {
+  return objectsReaching(state.seed, x - radius, y - radius, x + radius, y + radius).some((object) => {
     const reach = radius + object.radius;
     const dx = x - object.position.x;
     const dy = y - object.position.y;
