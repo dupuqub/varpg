@@ -61,7 +61,7 @@ function drawObjects(context, state, player) {
 
     // Only an object that was hurt shows its health (current/maximum).
     if (state.damagedObjects[objectKey(object)] !== undefined) {
-      drawHealthLabel(context, screenX, screenY - radius - 8, objectHealth(state, object), object.maxHealth);
+      drawHealthLabel(context, screenX, screenY - radius - 8, objectHealth(state, object), object.health.max);
     }
   }
 }

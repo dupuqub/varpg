@@ -87,7 +87,7 @@ function objectsText(seed) {
   const objects = objectsInArea(seed, -960, -540, 960, 540);
   return [
     `objects on the first screen (seed ${seed}, x from -960 to 960, y from -540 to 540): ${objects.length}`,
-    ...objects.map((object) => `  ${object.type} at ${object.position.x},${object.position.y}, radius ${object.radius}, health ${object.maxHealth}`),
+    ...objects.map((object) => `  ${object.type} at ${object.position.x},${object.position.y}, radius ${object.radius}, health ${object.health.max}`),
   ].join("\n");
 }
 

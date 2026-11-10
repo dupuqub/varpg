@@ -324,7 +324,7 @@ test("17 unknown types fail loudly, and a type without 'move' is static", () => 
   const withTrap = loadGame((text) => {
     const patched = text.replace(
       "const DEFINITIONS = {\n  actors: {",
-      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", maxHealth: 1, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
+      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'
     );
     assert.notStrictEqual(patched, text, "the patch of data.js should apply");
     return patched;
@@ -735,8 +735,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17, weight: 1600, bounce: 0.2 });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, maxHealth: 10, weight: 2800, bounce: 0 });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0 });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -751,11 +751,11 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
         const definition = DEFINITIONS.objects[object.type];
         seen[object.type] ??= { radii: new Set(), healths: new Set() };
         seen[object.type].radii.add(object.radius);
-        seen[object.type].healths.add(object.maxHealth);
+        seen[object.type].healths.add(object.health.max);
         const { size, healthRange } = definition;
         if (object.radius < size.min || object.radius > size.max) outOfRange++;
-        if (object.maxHealth < healthRange.min || object.maxHealth > healthRange.max) outOfRange++;
-        if (!Number.isInteger(object.radius) || !Number.isInteger(object.maxHealth)) outOfRange++;
+        if (object.health.max < healthRange.min || object.health.max > healthRange.max) outOfRange++;
+        if (!Number.isInteger(object.radius) || !Number.isInteger(object.health.max)) outOfRange++;
       }
     }
     const spread = (type) => ({ radii: [...seen[type].radii].sort((a, b) => a - b), healths: [...seen[type].healths].sort((a, b) => a - b) });
@@ -815,9 +815,9 @@ function findShroom(radius) {
     for (let seed = 1; seed <= 300; seed++) {
       const objects = objectsInArea(seed, -3000, -3000, 3000, 3000);
       for (const object of objects) {
-        if (object.type !== "shroom" || object.radius !== ${radius} || object.maxHealth < 11) continue;
+        if (object.type !== "shroom" || object.radius !== ${radius} || object.health.max < 11) continue;
         const alone = objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300);
-        if (alone) return { seed, x: object.position.x, y: object.position.y, maxHealth: object.maxHealth, key: objectKey(object) };
+        if (alone) return { seed, x: object.position.x, y: object.position.y, maxHealth: object.health.max, key: objectKey(object) };
       }
     }
     throw new Error("no isolated Shroom of radius ${radius} in seeds 1 to 300");
@@ -1230,9 +1230,9 @@ test("63 every rock rolls its own health from the seed: whole numbers from 10 to
     let outOfRange = 0, notWhole = 0;
     for (let seed = 1; seed <= 5; seed++) {
       for (const rock of objectsInArea(seed, -3000, -3000, 3000, 3000)) {
-        seen.add(rock.maxHealth);
-        if (rock.maxHealth < 10 || rock.maxHealth > 20) outOfRange++;
-        if (!Number.isInteger(rock.maxHealth)) notWhole++;
+        seen.add(rock.health.max);
+        if (rock.health.max < 10 || rock.health.max > 20) outOfRange++;
+        if (!Number.isInteger(rock.health.max)) notWhole++;
       }
     }
     const again = JSON.stringify(objectsInArea(3, -2000, -2000, 2000, 2000)) === JSON.stringify(objectsInArea(3, -2000, -2000, 2000, 2000));
@@ -1398,7 +1398,7 @@ test("74 a size that is not whole, or has a min above the max, stops the game wh
 test("75 everything is made by finalizeObject: an unknown type is refused, an object gets the radius the seed rolled, and the avatar is the only actor type", () => {
   const result = run(`
     const attempt = (type) => { try { finalizeObject(type, {}); return "ok"; } catch (error) { return error.message; } };
-    const rock = finalizeObject("rock", { radius: 28, maxHealth: 12, position: { x: 1, y: 2 }, square: { x: 0, y: 0 } });
+    const rock = finalizeObject("rock", { radius: 28, health: { now: 12, max: 12 }, position: { x: 1, y: 2 }, square: { x: 0, y: 0 } });
     return {
       actors: Object.keys(DEFINITIONS.actors),
       unknown: attempt("nope"),
@@ -1409,9 +1409,9 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   `);
   assert.deepStrictEqual(plain(result.actors), ["avatar"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, maxHealth: 12, weight: 2800, bounce: 0 });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0 });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, maxHealth: 17, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {

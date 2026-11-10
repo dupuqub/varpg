@@ -327,7 +327,7 @@ function rollInRange(seed, squareX, squareY, salt, min, max) {
 }
 
 // The object in one square of the world, or null if that square has none.
-// An object is { type, position: { x, y }, square: { x, y }, radius, maxHealth }. Everything in it is a whole
+// An object is { type, position: { x, y }, square: { x, y }, radius, health: { now, max } }. Everything in it is a whole
 // number rolled from the seed inside a range of its type (size, healthRange); the square says which object it is
 // (see damageObject). The salts: 1 chance, 2 and 3 position, 4 type, 5 health, 6 radius.
 function objectInSquare(seed, squareX, squareY) {
@@ -343,9 +343,9 @@ function objectInSquare(seed, squareX, squareY) {
 
   const type = rules.kinds[hashInts(seed, squareX, squareY, 4) % rules.kinds.length];
   const definition = DEFINITIONS.objects[type];
-  const maxHealth = rollInRange(seed, squareX, squareY, 5, definition.healthRange.min, definition.healthRange.max);
+  const health = rollInRange(seed, squareX, squareY, 5, definition.healthRange.min, definition.healthRange.max);
   const radius = rollInRange(seed, squareX, squareY, 6, definition.size.min, definition.size.max);
-  return finalizeObject(type, { position: { x, y }, square: { x: squareX, y: squareY }, radius, maxHealth });
+  return finalizeObject(type, { position: { x, y }, square: { x: squareX, y: squareY }, radius, health: { now: health, max: health } });
 }
 
 // Every object whose center is inside the area (world coordinates), in a fixed
@@ -365,7 +365,7 @@ function objectsInArea(seed, left, top, right, bottom) {
 }
 
 // ---- Objects that are hurt ----
-// An object comes from the formula with its full health (object.maxHealth). Only an object that
+// An object comes from the formula with its full health (object.health: now and max, equal). Only an object that
 // was hurt is in the state: state.damagedObjects maps "squareX,squareY" to its current health.
 // An object at 0 is broken: it is not drawn and nothing collides with it any more.
 
@@ -374,7 +374,7 @@ function objectKey(object) {
 }
 
 function objectHealth(state, object) {
-  return state.damagedObjects[objectKey(object)] ?? object.maxHealth;
+  return state.damagedObjects[objectKey(object)] ?? object.health.now;
 }
 
 function isObjectBroken(state, object) {
