@@ -590,15 +590,23 @@ function moveDummy(state, dummy, player) {
   wrapIntoWindow(dummy, player, state.grid);
 }
 
-// Pushes a Dummy out of one thing it overlaps, and turns it if this is a new contact (it was not touching in the last
-// frame). If the other thing is a Dummy too, both are pushed half way and both turn. The avatar and the objects are
-// not pushed. No damage is done yet: a Dummy collision only changes the angle.
-function touchDummy(state, lastContacts, dummy, other, key, otherIsDummy) {
+// What happens when a Dummy touches one thing (an object, the avatar or another Dummy). If they overlap:
+// 1. If this is a NEW contact (the pair was not touching in the last frame) and the speed at which they close in on
+//    each other (the impact: the part of the difference of their velocities along the line between the centers) is at
+//    least collision.minImpact, it is a hit: the same body slam as the avatar's (damageOf), and BOTH sides hurt the
+//    other with their own weight. An object that breaks in the hit has no collision: nothing is pushed and the Dummy
+//    keeps its angle and goes on.
+// 2. The Dummy is pushed out along the line until they just touch (two Dummies are pushed half each; the avatar and
+//    the objects are not pushed).
+// 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
+//    still pushes, but does not hurt and does not turn.
+function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
   const dx = dummy.position.x - other.position.x;
   const dy = dummy.position.y - other.position.y;
   const touching = dummy.radius + other.radius;
   if (dx * dx + dy * dy >= touching * touching) return;
 
+  const otherIsDummy = other.wander !== undefined;
   const isNewContact = !lastContacts.includes(key);
   state.contacts.push(key);
 
@@ -606,6 +614,22 @@ function touchDummy(state, lastContacts, dummy, other, key, otherIsDummy) {
   const distance = Math.sqrt(dx * dx + dy * dy);
   const normalX = distance === 0 ? 1 : dx / distance;
   const normalY = distance === 0 ? 0 : dy / distance;
+
+  if (isNewContact) {
+    const otherVelocity = other.move ? other.move.velocity : { x: 0, y: 0 }; // an object does not move
+    const closing = -((dummy.move.velocity.x - otherVelocity.x) * normalX + (dummy.move.velocity.y - otherVelocity.y) * normalY);
+    if (closing >= DEFINITIONS.constants.collision.minImpact) {
+      const hit = { impact: closing };
+      applyDamage(dummy, damageOf(other, hit, dummy, blueprint));
+      const damage = damageOf(dummy, hit, other, blueprint);
+      if (other.square !== undefined) {
+        if (damageObject(state, other, damage)) return; // the object broke: no collision
+      } else {
+        applyDamage(other, damage);
+      }
+    }
+  }
+
   const overlap = touching - distance;
   const share = otherIsDummy ? 0.5 : 1;
   dummy.position.x += normalX * overlap * share;
@@ -624,18 +648,18 @@ function touchDummy(state, lastContacts, dummy, other, key, otherIsDummy) {
 // The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
 // the Dummies after it in the list (so each pair is looked at once). It brute-forces the pairs (100 Dummies are
 // about five thousand pairs); the collision grid is meant to replace this.
-function collideDummies(state, lastContacts) {
+function collideDummies(state, lastContacts, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.wander);
 
   for (let i = 0; i < dummies.length; i++) {
     const dummy = dummies[i];
     for (const object of objectsNear(state, dummy)) {
-      touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), false);
+      touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
     }
-    touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, false);
+    touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
     for (let j = i + 1; j < dummies.length; j++) {
-      touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, true);
+      touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
     }
   }
 }
@@ -789,7 +813,7 @@ function step(state, input, blueprint) {
   }
 
   // 3. The Dummies collide (with objects, the avatar and each other) and turn.
-  collideDummies(state, lastContacts);
+  collideDummies(state, lastContacts, blueprint);
 
   // 4. Cells: where every actor is, relative to the player.
   // Every actor must already have a "cell" (it fails loudly if one does not).

@@ -21,7 +21,7 @@ node --test
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
 - Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
-- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 92) only walk and turn; they do not attack.
+- Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 94) walk, turn and hurt what they touch, with the same body slam.
 
 ## The tests, one by one
 
@@ -167,23 +167,25 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 
 ### The Dummies
 
-Tests 80 to 92 (most run in a game without objects, so only the collisions the test sets up happen).
+Tests 80 to 94 (most run in a game without objects, so only the collisions the test sets up happen). The other tests of the file play in a game with no Dummies, because a wandering Dummy also hurts rocks.
 
 | # | What it checks | Why it matters |
 |---|---|---|
 | 80 | The seed makes 100 Dummies (`dummy_0` to `dummy_99`), each with a radius of 16 to 32, health 100 (`now` and `max`), speed 2, a first angle from 0 to 359, inside the window of the grid, and the same every time for the same seed (another seed gives others). | The Dummies come from the seed and their ranges, and nothing is placed by hand. |
 | 81 | In five seeds, no Dummy starts on top of another Dummy, on top of an object, or closer to the avatar than the safe distance. | The 100 do not all start already in collision. |
 | 82 | A Dummy with no collision walks 60 frames in a straight line at speed 2, and keeps its angle (37) and its turns (0). | The walk is a straight line. |
-| 83 | A Dummy that walks into the rock of seed 1 is pushed out until it just touches, its turns become 1 and its new angle is `hash(seed, number, 1, 16) % 360`; the rock and the Dummy lose no health. | The new angle is rolled from the seed, and a Dummy collision does not hurt (provisional). |
+| 83 | A Dummy that walks into the rock of seed 1 hurts it and is hurt by it: at impact 2 both attacks are below 1, so the minimum damage of 1 applies to each (the rock goes from 10 to 9, the Dummy from 100 to 99); it is pushed out until it just touches, its turns become 1 and its new angle is `hash(seed, number, 1, 16) % 360`. | The new angle is rolled from the seed, and a Dummy collision is a hit like the avatar's. |
 | 84 | The angles of 40 turns are exactly `hash(seed, 3, turns, 16) % 360`, whole degrees from 0 to 359, at least 20 different, and the direction always has length 1. | The `rand(360)` is reproducible and varied. |
-| 85 | A pair that was touching in the last frame still pushes the Dummy out to just touching, but does not turn it; a new contact turns it once. The avatar does not move. | Only a new contact picks an angle, so a Dummy pressed against something does not turn at every frame. |
-| 86 | Two Dummies that walk into each other are pushed half each (their middle does not move), end just touching, and both turn once. | A Dummy against a Dummy is symmetric. |
-| 87 | A Dummy that bumps into the avatar turns once and is pushed out to just touching; the avatar keeps its position (0,0) and its health (100). | A Dummy never pushes or hurts the avatar (provisional). |
+| 85 | A pair that was touching in the last frame still pushes the Dummy out to just touching, but does not turn it and does not hurt anyone; a new contact turns it once and is a hit (the avatar hits for 1.667, the Dummy for the minimum of 1 because the avatar's defense is 3). The avatar does not move. | Only a new contact turns and hurts, so a Dummy pressed against something does not turn or lose health at every frame. |
+| 86 | Two Dummies that walk into each other (closing at 4) hurt each other with their own weight (`weight x 0.001 x 4 / 6`, at least 1), are pushed half each (their middle does not move), end just touching, and both turn once. | A Dummy against a Dummy is symmetric, and both sides hurt. |
+| 87 | A Dummy that bumps into the avatar turns once and is pushed out to just touching; the avatar loses 1 (the minimum, its defense is 3), the Dummy loses 1.667, and the avatar keeps its position (0,0). | The Dummy hurts the avatar and the avatar hurts it, and the avatar is not pushed. |
 | 88 | A Dummy 1 pixel past the left edge of the window comes back 1 pixel inside the right edge; the same for the other three edges, exactly on the left edge is still inside, and it follows the avatar when the avatar is somewhere else. Walking left across the edge in `step` keeps its angle (180), its turns (0) and its speed. | The window of the grid is the area of the game, and it wraps. |
 | 89 | `sinDegrees` and `cosDegrees` give unit length (error below 1e-10) for 360 whole degrees, the known values (sin 30 = 0.5, cos 180 = -1, ...) and work with negative degrees and more than 360. | An own series, so the result is the same in every browser. |
-| 90 | After 600 frames with the avatar walking, every Dummy is still inside the window around the avatar, the Dummies collided (more than 20 turns), none has less than 100 health, and the state is still plain JSON. | The Dummies stay in the game and the state stays reproducible data. |
+| 90 | After 600 frames with the avatar walking, every Dummy is still inside the window around the avatar, the Dummies collided (more than 20 turns) and more than 10 of them were hurt, none has a health below 0, and the state is still plain JSON. | The Dummies stay in the game, hurt each other, and the state stays reproducible data. |
 | 91 | Two runs of 300 frames with 100 Dummies and the same inputs end with the same state, and the cross-check of the replay is clean. | The reproducibility the project depends on survives the Dummies. |
 | 92 | The speed of a Dummy comes from its recipe through `finalSpeed` (a recipe of 3 gives Dummies of 3); a thing without a speed has 0; a Dummy speed of 0 or less stops the game when it loads. | Everything goes through the final functions, and the definitions are checked. |
+| 93 | Two Dummies side by side at the same velocity (they do not close in on each other) overlap: both turn once, and nobody is hurt. | Below the minimum impact there is no hit, but the contact still turns the Dummy. |
+| 94 | A Dummy that breaks a rock (1 health left) is still hurt by it (100 to 99), but is not pushed and does not turn, and goes through the broken rock. | The same rule as the avatar's: an object that breaks in the hit has no collision. |
 
 ## Proof that the tests can fail
 
