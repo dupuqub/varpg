@@ -83,13 +83,13 @@ function drawHealthLabel(context, x, y, current, maximum) {
 function drawDashStatus(context, player) {
   const rules = definitionOf(player).dash;
   const { charges, recharge } = player.dash;
-  const status = charges < rules.maxCharges ? `${recharge}/${rules.rechargeFrames}` : "";
-  const ready = charges > 0 ? "READY" : "";
+  const status = charges.now < charges.max ? `${recharge}/${rules.rechargeFrames}` : "";
+  const ready = charges.now > 0 ? "READY" : "";
 
   context.font = "24px monospace";
   context.textBaseline = "bottom";
-  context.fillStyle = charges > 0 ? AVATAR_COLOR : "#888888";
-  context.fillText(`DASH ${charges}/${rules.maxCharges}  ${ready}${status}`, 24, context.canvas.height - 24);
+  context.fillStyle = charges.now > 0 ? AVATAR_COLOR : "#888888";
+  context.fillText(`DASH ${charges.now}/${charges.max}  ${ready}${status}`, 24, context.canvas.height - 24);
 }
 
 // Lines every REFERENCE_GRID_CELL world pixels, shifted by the camera position.

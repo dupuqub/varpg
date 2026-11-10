@@ -132,6 +132,12 @@ function finalDashSpeed(actor, build) {
   return fromParts(actor, build, "dashSpeed");
 }
 
+// The most charges of dash the avatar can have: the sum of the dashCharges of the parts (the Booster is the
+// primary source). Without any, there is no charge and no dash. Pure, like finalSpeed.
+function finalDashMaxCharges(actor, build) {
+  return fromParts(actor, build, "dashCharges");
+}
+
 // The maximum health of the avatar: the sum of the health of its parts (nothing else gives it health).
 // (The player shows it as "armor", but the code calls it health.)
 function finalMaxHealth(actor, build) {
@@ -212,15 +218,15 @@ function updateDash(actor, wantsDash, build) {
   const rules = definitionOf(actor).dash;
   const dash = actor.dash;
 
-  if (dash.charges < rules.maxCharges) {
+  if (dash.charges.now < dash.charges.max) {
     dash.recharge += 1;
     if (dash.recharge >= rules.rechargeFrames) {
-      dash.charges += 1;
+      dash.charges.now += 1;
       dash.recharge = 0;
     }
   }
 
-  if (!wantsDash || dash.charges === 0) return false;
+  if (!wantsDash || dash.charges.now === 0) return false;
 
   const { direction, velocity } = actor.move;
   const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
@@ -230,7 +236,7 @@ function updateDash(actor, wantsDash, build) {
   if (strength <= 0) return false; // no part gives a dash
   velocity.x = (direction.x / length) * strength;
   velocity.y = (direction.y / length) * strength;
-  dash.charges -= 1;
+  dash.charges.now -= 1;
   return true;
 }
 
@@ -435,10 +441,12 @@ function createRun(id) {
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
-// build: the build of the run, used only to give the avatar its starting health.
+// build: the build of the run, used only to give the avatar its starting health and dash charges.
 function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBuild) {
   const avatar = createActor(AVATAR_ID, "avatar");
   avatar.health = { current: finalMaxHealth(avatar, build) };
+  const maxCharges = finalDashMaxCharges(avatar, build);
+  avatar.dash.charges = { now: maxCharges, max: maxCharges };
 
   const state = {
     run: runId,

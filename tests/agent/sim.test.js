@@ -535,12 +535,14 @@ test("26 a dash makes the velocity the dash speed in the direction held (always 
       fullVelocity: full.actors[0].move.velocity.x,
       fullPosition: full.actors[0].position.x,
       fullCharges: full.actors[0].dash.charges,
+      fullMax: full.actors[0].dash.charges.max,
       halfVelocity: half.actors[0].move.velocity.x,
     };
   `);
   assert.strictEqual(result.fullVelocity, 12);
   assert.strictEqual(result.fullPosition, 12); // the frame of the dash already moves at full dash speed
-  assert.strictEqual(result.fullCharges, 0);
+  assert.deepStrictEqual(plain(result.fullCharges), { now: 0, max: 1 }); // spent one, the maximum stays
+  assert.strictEqual(result.fullMax, 1);
   assert.strictEqual(result.halfVelocity, 12);
 });
 
@@ -548,7 +550,7 @@ test("27 a dash without a direction does nothing, and the charge is kept", () =>
   const result = run(`
     const s = createChamber1State();
     step(s, { move: { x: 0, y: 0 }, dash: true });
-    return { velocity: s.actors[0].move.velocity.x, charges: s.actors[0].dash.charges };
+    return { velocity: s.actors[0].move.velocity.x, charges: s.actors[0].dash.charges.now };
   `);
   assert.strictEqual(result.velocity, 0);
   assert.strictEqual(result.charges, 1);
@@ -594,9 +596,9 @@ test("30 a charge comes back 240 frames after it was spent, and a dash before th
     step(s, { move: { x: 1, y: 0 }, dash: true }); // spends the only charge
     for (let i = 0; i < 238; i++) step(s, hold);
     step(s, { move: { x: 1, y: 0 }, dash: true }); // 239 frames later: no charge yet
-    const early = { charges: player.dash.charges, velocity: player.move.velocity.x };
+    const early = { charges: player.dash.charges.now, velocity: player.move.velocity.x };
     step(s, { move: { x: 1, y: 0 }, dash: true }); // 240 frames later: the charge is back, and it is used
-    const late = { charges: player.dash.charges, velocity: player.move.velocity.x };
+    const late = { charges: player.dash.charges.now, velocity: player.move.velocity.x };
     return { early, late };
   `);
   assert.strictEqual(result.early.charges, 0);
@@ -1111,17 +1113,27 @@ test("56 taking a part off changes health and defense by exactly what it gave", 
   assert.deepStrictEqual(plain(result), { noTorso: { health: 45, defense: 1 }, noHead: { health: 85, defense: 3 } });
 });
 
-test("57 without the Booster there is no dash, and the charge is kept", () => {
+test("57 without the Booster there is no dash charge and no dash: the maximum comes from the parts (finalDashMaxCharges)", () => {
   const result = withBuilds(`
     const noBooster = without("booster");
-    const s = createChamber1State();
+    const s = createChamber1State(1, 1, noBooster);
     const p = s.actors[0];
     step(s, { move: { x: 1, y: 0 }, dash: true }, noBooster);
-    return { dashSpeed: finalDashSpeed(avatar, noBooster), charges: p.dash.charges, vx: p.move.velocity.x };
+    return {
+      withBooster: finalDashMaxCharges(avatar, full),
+      withoutBooster: finalDashMaxCharges(avatar, noBooster),
+      dashSpeed: finalDashSpeed(avatar, noBooster),
+      charges: p.dash.charges,
+      vx: p.move.velocity.x,
+      startsWith: createChamber1State(1, 1, full).actors[0].dash.charges,
+    };
   `);
+  assert.strictEqual(result.withBooster, 1);
+  assert.strictEqual(result.withoutBooster, 0);
   assert.strictEqual(result.dashSpeed, 0);
-  assert.strictEqual(result.charges, 1); // nothing spent
+  assert.deepStrictEqual(plain(result.charges), { now: 0, max: 0 }); // nothing to spend, nothing to recharge
   assert.strictEqual(result.vx, 0.25); // only the normal acceleration (a dash would have set 12)
+  assert.deepStrictEqual(plain(result.startsWith), { now: 1, max: 1 }); // a new avatar starts full
 });
 
 test("58 a build over the capacity of the Torso is refused, and so is an unknown part", () => {

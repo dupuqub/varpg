@@ -104,6 +104,7 @@ function buildText(build) {
     `maximum health: ${sumSpec(build, "health")} = ${finalMaxHealth(avatar, build)}`,
     `defense: ${sumSpec(build, "defense")} = ${finalDefense(avatar, build)}`,
     `dash speed: ${sumSpec(build, "dashSpeed")} = ${finalDashSpeed(avatar, build)}`,
+    `dash charges (maximum): ${sumSpec(build, "dashCharges")} = ${finalDashMaxCharges(avatar, build)}`,
   ].join("\n");
 }
 

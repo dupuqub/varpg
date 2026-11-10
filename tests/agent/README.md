@@ -79,7 +79,7 @@ node --test
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 26 | A dash sets the velocity to the dash speed (12) in the direction held, with the same strength even if the stick is half tilted, and spends the charge. | The basic dash rule. The frame of the dash already moves at 12. |
+| 26 | A dash sets the velocity to the dash speed (12) in the direction held, with the same strength even if the stick is half tilted, and spends the charge (`dash.charges` goes from `{ now: 1, max: 1 }` to `{ now: 0, max: 1 }`). | The basic dash rule. The frame of the dash already moves at 12. |
 | 27 | A dash without a direction does nothing, and the charge is kept. | The user's choice: no wasted charge when there is nowhere to go. |
 | 28 | Holding the direction after a dash, the speed falls 0.5 per frame and reaches the top speed in 18 frames. | The decay is linear and exact (12, 11.5, 11, ... 3), easy to show in the audit. |
 | 29 | Releasing the keys after a dash, it still falls 0.5 per frame down to 3, then brakes at the normal 0.125. | The two rates take turns correctly. |
@@ -159,7 +159,7 @@ The avatar's final values are the sum of the specs of the parts in its build (st
 | 54 | Taking off a 650 kg arm gives back 0.13 px/frame of speed (650 x 0.0002), a 200 kg head 0.04. | The weight effect is direct and easy to see: kg times a constant. |
 | 55 | Without the Legs the speed would be negative (0.5 - 3700 x 0.0002), and it is 0. | The controls never reverse. |
 | 56 | Without the Torso health is 45 and defense 1; without the Head health is 85 and defense 3. | Each part adds exactly what it gives. |
-| 57 | Without the Booster a dash does nothing and the charge is kept. | A dash comes from a part, not from nowhere. |
+| 57 | Without the Booster there is no dash charge (`finalDashMaxCharges` is 0, and a new avatar starts with `{ now: 0, max: 0 }`) and a dash does nothing; with it the maximum is 1 and a new avatar starts full. | A dash, and its charges, come from a part, not from nowhere. |
 | 58 | A build of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
 | 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a build. |
 | 60 | The cross-check is clean with the build the run was played with, and finds a difference with another. | The build is an input of the replay, as the seed and the inputs are. |

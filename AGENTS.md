@@ -39,7 +39,8 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 
 | What | Where |
 |---|---|
-| The avatar (radius, acceleration, deceleration, dash charges and recharge) | `DEFINITIONS.actors` in `src/data.js` |
+| The avatar (radius, acceleration, deceleration, dash recharge) | `DEFINITIONS.actors` in `src/data.js` |
+| Dash charges (the maximum is the sum of `dashCharges` of the parts; the Booster is the primary source) | `DEFINITIONS.parts` in `src/data.js`, computed by `finalDashMaxCharges` |
 | Mecha parts (weight and specs) and the starter build | `DEFINITIONS.parts`, `DEFINITIONS.starterBuild` |
 | Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `bodySlam.minDamage`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | How the ground is filled with objects (`cellSize`, `chancePercent`, `safeRadius`, `kinds`) | `DEFINITIONS.terrain.objects` |
@@ -129,13 +130,14 @@ The user asked for the kit with **only what is used now**: weight, speed, health
   - maximum health (`finalMaxHealth`) = sum of `health`;
   - defense (`finalDefense`) = sum of `defense`;
   - dash speed (`finalDashSpeed`) = sum of `dashSpeed`; without any part giving it there is no dash and the charge is kept;
+  - maximum dash charges (`finalDashMaxCharges`) = sum of `dashCharges`; the state holds `dash.charges: { now, max }` (the user's structure), filled when the state is created, like the health; without any part giving it there is no charge and no dash;
   - capacity = sum of `capacity`.
 - **Weight (the user's decisions):** its effect on speed must be **direct and easy to perceive**: a fixed amount of speed per unit of weight, shown as such in the audit. The unit label is only flavor for the player.
 - **Capacity (the user's decision):** it belongs to the **torso** and is a **hard limit** on the build, not a speed penalty: the part is not technologically able to carry more (wiring, structure), and weight cannot be stacked without limit. The agent's reading: it works as a **build budget**, so every upgrade has to fit, which creates real choices. Static builds (standing still on auto attack) are **welcome**: the user finds them fun and still challenging to make work.
 - The avatar's starting health is not written by hand: `createChamber1State(runId, seed, build)` sets it to `finalMaxHealth`.
 - **Known weakness:** the values of the parts were chosen by the agent to reproduce what the avatar had before parts existed. They are not wrong, but they did not come from a goal of play, which is the opposite of the user's "no normalization". They are the first candidates to be redone.
 - From the user's old project, for reference: each part had `Specs` that add up, `Mods` that look like multipliers (not used here yet), and `Weight`, which was simply subtracted from the speed.
-- Open: whether other parts (the generator) add to the capacity; taking the charges and the recharge of the dash from the Booster.
+- Open: whether other parts (the generator) add to the capacity; whether the recharge of the dash also comes from the Booster (the maximum of charges already does).
 
 ### Parts made by seed (the user's idea, not implemented)
 
@@ -265,13 +267,13 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 An actor is any entity that can act in combat. Today the avatar is the only one. A thing without `move` (a trap, for example) would be a static actor, but none exists, so nothing in the game handles it.
 
-An actor **in the state** only holds what changes: `id`, `type`, `health.current`, `position`, `cell`, and, if it has them, `move` (`direction`, `velocity`) and `dash` (`charges`, `recharge`). The fixed values come from the definitions by `type`; the shape of each type is its `initial` in `src/data.js`. The avatar's maximum health, defense, top speed and dash speed are not in its definition: they come from the parts of its build, and its health is set when the state is created.
+An actor **in the state** only holds what changes: `id`, `type`, `health.current`, `position`, `cell`, and, if it has them, `move` (`direction`, `velocity`) and `dash` (`charges: { now, max }`, `recharge`). The fixed values come from the definitions by `type`; the shape of each type is its `initial` in `src/data.js`. The avatar's maximum health, defense, top speed and dash speed are not in its definition: they come from the parts of its build, and its health is set when the state is created.
 
 ## Code layout
 
 - `index.html`, `style.css`: the screens.
 - `src/data.js`: the definitions (`DEFINITIONS`, `DEFINITIONS_VERSION`), frozen. Every value has its reason beside it.
-- `src/sim.js`: the rules. No DOM access. Things (`definitionOf`, `findDefinition`, `createActor`); the build (`partsOf`, `totalWeight`, `sumSpec`, `assertValidBuild`, `createRun`); the final values (`finalSpeed`, `finalDashSpeed`, `finalMaxHealth`, `finalDefense`, `finalAttack`, `weightOf`); damage (`damageOf`, `applyDamage`); movement (`updateDash`, `approach`); objects (`hashInts`, `rollInRange`, `objectMargin`, `objectInSquare`, `objectsInArea`, `objectHealth`, `isObjectBroken`, `damageObject`); collision (`objectsNear`, `collideWithObjects`); the grid (`cellIndex`, `isInWindow`, `assertValidGrid`); `createChamber1State(runId, seed, build)` and `step(state, input, build)`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
+- `src/sim.js`: the rules. No DOM access. Things (`definitionOf`, `findDefinition`, `createActor`); the build (`partsOf`, `totalWeight`, `sumSpec`, `assertValidBuild`, `createRun`); the final values (`finalSpeed`, `finalDashSpeed`, `finalDashMaxCharges`, `finalMaxHealth`, `finalDefense`, `finalAttack`, `weightOf`); damage (`damageOf`, `applyDamage`); movement (`updateDash`, `approach`); objects (`hashInts`, `rollInRange`, `objectMargin`, `objectInSquare`, `objectsInArea`, `objectHealth`, `isObjectBroken`, `damageObject`); collision (`objectsNear`, `collideWithObjects`); the grid (`cellIndex`, `isInWindow`, `assertValidGrid`); `createChamber1State(runId, seed, build)` and `step(state, input, build)`. `step` changes the state in place (the agent's choice, to avoid copying the state every frame).
 - `src/history.js`: the run history: `createHistory(state, build)`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`. No DOM access.
 - `src/input.js`: reads keyboard and gamepad, and returns `{ move, dash }` for the frame.
 - `src/render.js`: draws the state and never changes it.
@@ -297,7 +299,7 @@ They only become decisions when the user approves.
   3. A **damage trace** of real hits on screen, each hit written as its own arithmetic, coming from the simulation itself. This replaces the idea of printing static arithmetic of the body slam in DATA, which would be one more copy of the numbers.
   4. Only then decide the known weaknesses listed in "Damage", "The kit of parts" and "Collision with still things".
 - The user has not yet confirmed in his Chrome the final position of the SIMULATION CHECK since inertia was added. The scripted run has no dash and never releases the keys, so the dash and the deceleration are only tested in Node; changing the script changes the final position.
-- Parts still to come in the code: Radar, Magnet, the shield, the weapons, and the charges and recharge of the dash.
+- Parts still to come in the code: Radar, Magnet, the shield, the weapons, and the recharge of the dash.
 - The attack of weapons, death, and the shield.
 - Collision between moving actors, with mass and the dash opening space, using the collision grid; and the window as the universe (the invariant and the wrap).
 - Move `src/data.js` to the library structure.
