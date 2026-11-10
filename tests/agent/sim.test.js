@@ -1201,26 +1201,47 @@ test("65 the training dummy: the first dash up hits it with an impact of 7, and 
   assert.strictEqual(result.dummyMoved, false);
 });
 
-test("66 walking and pressing into the dummy keeps hurting it a little (known consequence of no minimum impact); at 0 it stays", () => {
+test("66 walking and pressing into the dummy hurts it once, at the moment of the collision; friction does not hurt; at 0 it stays", () => {
   const result = run(`
     const s = createChamber1State();
     const player = s.actors[0];
     const dummy = s.actors.find((actor) => actor.id === "dummy_1");
-    for (let i = 0; i < 120; i++) step(s, { move: { x: 0, y: -1 } }); // walks up into the dummy and presses
-    const afterWalking = { dummy: dummy.health.current, avatar: player.health.current };
-    // Known consequence, recorded for the user to decide: with no minimum impact, pressing drains the dummy
+    for (let i = 0; i < 60; i++) step(s, { move: { x: 0, y: -1 } }); // walks up into the dummy and presses
+    const afterArriving = { dummy: dummy.health.current, avatar: player.health.current };
+    for (let i = 0; i < 120; i++) step(s, { move: { x: 0, y: -1 } }); // keeps pressing
+    const afterPressing = { dummy: dummy.health.current, avatar: player.health.current };
     applyDamage(dummy, 100);
     for (let i = 0; i < 10; i++) step(s, { move: { x: 0, y: -1 } });
-    return { afterWalking, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
+    return { afterArriving, afterPressing, dummyAtZero: dummy.health.current, stillThere: s.actors.includes(dummy), y: player.position.y };
   `);
-  assert.strictEqual(result.afterWalking.avatar, 100); // each frame's hit is below the defense 3
-  assert.ok(result.afterWalking.dummy < 30 && result.afterWalking.dummy > 0, "the dummy health after pressing: " + result.afterWalking.dummy);
+  assert.ok(result.afterArriving.dummy < 30, "the arrival should have hurt the dummy");
+  assert.strictEqual(result.afterArriving.avatar, 100); // 2.5 - 3 is below 0
+  assert.deepStrictEqual(plain(result.afterPressing), plain(result.afterArriving)); // pressing for 2 s more changed nothing
   assert.strictEqual(result.dummyAtZero, 0);
   assert.strictEqual(result.stillThere, true);
   assert.ok(result.y >= -130 + 32 - 1e-9, "the avatar went into the dummy: y=" + result.y); // still collides at 0 health
 });
 
-test("67 only something with doesDamage hits: a type without it never hurts what touches it", () => {
+test("67 touching again after separating is a new collision and hurts again; the contacts are plain state", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const player = s.actors[0];
+    const dummy = s.actors.find((actor) => actor.id === "dummy_1");
+    for (let i = 0; i < 60; i++) step(s, { move: { x: 0, y: -1 } });
+    const first = dummy.health.current;
+    const whileTouching = JSON.stringify(s.contacts);
+    for (let i = 0; i < 20; i++) step(s, { move: { x: 0, y: 1 } }); // walks away: no contact
+    const apart = JSON.stringify(s.contacts);
+    for (let i = 0; i < 60; i++) step(s, { move: { x: 0, y: -1 } }); // comes back: a new collision
+    return { first, second: dummy.health.current, whileTouching, apart, json: JSON.stringify(s) };
+  `);
+  assert.strictEqual(result.whileTouching, JSON.stringify(["player_1" + "|dummy_1"]));
+  assert.strictEqual(result.apart, "[]");
+  assert.ok(result.second < result.first, "the second collision did not hurt: " + result.first + " -> " + result.second);
+  assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
+});
+
+test("68 only something with doesDamage hits: a type without it never hurts what touches it", () => {
   const patched = loadGame((text) => text.replace(
     "const DEFINITIONS = {\n  actors: {",
     'const DEFINITIONS = {\n  actors: {\n    soft: { name: "Soft", weight: 5000, radius: 16, bounce: 0, healthRange: { min: 10, max: 20 }, initial: { position: { x: 0, y: 0 }, cell: { x: 0, y: 0 } } },'

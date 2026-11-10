@@ -115,7 +115,7 @@ These tests use three rocks of seed 1 (see test 39): a stone at 159,444 (bounce 
 
 ### Body slam: damage from collisions
 
-Rule: every contact with something that has `doesDamage` is a hit, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
+Rule: a collision (a pair that was not touching in the last frame) with something that has `doesDamage` is a hit; friction is not, and the attack is weight x 0.001 x impact / 6 (the impact is the speed going into the other thing; provisional formula). `damage = max(0, attack - defense)`. The avatar weighs 5000 kg, has defense 3 and health 100. These tests use the rocks of seed 1: the stone at 159,444 (5000 kg, health 10), the boulder at 172,-435 (7800 kg, health 17) and the rubber rock at 711,-63 (2800 kg, health 15).
 
 | # | What it checks | Why it matters |
 |---|---|---|
@@ -135,8 +135,9 @@ Rule: every contact with something that has `doesDamage` is a hit, and the attac
 | 63 | Every rock rolls a whole health from 10 to 20, the same every time, and over 5 seeds every value from 10 to 20 shows up. | The range is respected and fully used. |
 | 64 | The rock weights follow the area (5000 / 7800 / 2800). | The reason of the weights is checked, not only the values. |
 | 65 | The first dash up reaches the training dummy (130 px up), takes it from 30 to 24.17 (5000 x 0.001 x 7 / 6 = 5.83) and the avatar from 100 to 97.17 (5.83 - 3). The avatar bounces back and the dummy does not move. | The first combat test works from the very first dash. |
-| 66 | Walking and pressing into the dummy hurts it a little each frame and the avatar not at all (known consequence of having no minimum impact, listed in AGENTS.md). At 0 health the dummy stays and still collides. | The grinding is recorded, not hidden. |
-| 67 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 10. | The rule is modular: the flag decides who hits. |
+| 66 | Walking into the dummy and pressing for 3 more seconds hurts it once, at the arrival; the health does not change while pressing. At 0 health the dummy stays and still collides. | Only the moment of the collision hurts, not friction. |
+| 67 | After walking away (no contact) and coming back, the second collision hurts again; the contacts list is plain state (`["player_1|dummy_1"]` while touching, empty when apart). | A new collision is a new hit. |
+| 68 | A type without `doesDamage` has attack 0 even with the weight of a stone; the stone at impact 12 has 10. | The rule is modular: the flag decides who hits. |
 
 ### The kit of parts
 

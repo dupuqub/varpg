@@ -286,7 +286,7 @@ function staticsNear(state, actor) {
 // Pushes an actor out of the still things it overlaps, hurts both sides, and changes its velocity.
 // For each thing that overlaps (circle against circle):
 // 1. The "normal" is the direction from the thing to the actor (a unit vector).
-// 2. If the actor is going toward the thing, that is a hit, and its impact is the speed
+// 2. If the actor is going toward the thing and was not already touching it in the last frame, that is a hit, and its impact is the speed
 //    going INTO the thing (along the normal). Each side hurts the other with its own
 //    weight (damageOf, the body slam): the actor takes the damage of the thing, and the
 //    thing takes the damage of the actor. A rock keeps its health in state.damagedRocks,
@@ -298,7 +298,7 @@ function staticsNear(state, actor) {
 //    the bounce of the thing: -bounce x (what was going in). The part along the
 //    thing is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
-function collideWithStatics(state, actor, build) {
+function collideWithStatics(state, actor, build, lastContacts) {
   const radius = definitionOf(actor).radius;
 
   for (const other of staticsNear(state, actor)) {
@@ -307,6 +307,12 @@ function collideWithStatics(state, actor, build) {
     const dx = actor.position.x - other.position.x;
     const dy = actor.position.y - other.position.y;
     if (dx * dx + dy * dy >= touching * touching) continue;
+
+    // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
+    // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
+    const contact = actor.id + "|" + (other.square !== undefined ? "rock " + rockKey(other) : other.id);
+    const isNewContact = !lastContacts.includes(contact);
+    state.contacts.push(contact);
 
     // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
     const distance = Math.sqrt(dx * dx + dy * dy);
@@ -317,7 +323,7 @@ function collideWithStatics(state, actor, build) {
     const velocity = actor.move.velocity;
     const goingIn = velocity.x * normalX + velocity.y * normalY;
 
-    if (goingIn < 0) {
+    if (goingIn < 0 && isNewContact) {
       const hit = { impact: -goingIn };
       if (actor.health) applyDamage(actor, damageOf(other, hit, actor, build));
       const damage = damageOf(actor, hit, other, build);
@@ -379,6 +385,10 @@ function createChamber1State(runId = 1, seed = 1, build = DEFINITIONS.starterBui
     // The rocks that were hurt: "squareX,squareY" -> current health (see "Rocks that are hurt").
     // Empty at the start: every rock has its full health, which comes from the seed.
     damagedRocks: {},
+
+    // The pairs that were touching in the last frame ("actor id|thing"), to tell a new collision (a hit)
+    // from friction (still touching, no new hit). Rebuilt every frame by step.
+    contacts: [],
 
     // Version of the definitions this state was made with (see src/data.js).
     definitionsVersion: DEFINITIONS_VERSION,
@@ -451,6 +461,9 @@ function step(state, input, build) {
   // while the actor wants to move, and slows down toward zero when it does not.
   // Above the top speed (after a dash) it slows down by the fixed overspeedDecay instead.
   // The top speed is asked every frame, because it can change from one frame to the next.
+  // The contacts of the last frame are kept to tell a new collision from friction (see collideWithStatics).
+  const lastContacts = state.contacts;
+  state.contacts = [];
   for (const actor of state.actors) {
     if (!actor.move) continue;
     const { direction, velocity } = actor.move;
@@ -480,7 +493,7 @@ function step(state, input, build) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithStatics(state, actor, build);
+    collideWithStatics(state, actor, build, lastContacts);
   }
 
   // 3. Cells: where every actor is, relative to the player.
