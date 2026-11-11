@@ -178,7 +178,7 @@ library
 - The seed is `state.seed` (a whole number). It is in the state so a snap alone is enough to replay.
 - `objectsInArea(seed, left, top, right, bottom)` in `src/sim.js` is a pure function: it returns `{ type, layer, position, square, radius, health: { now, max }, weight, bounce }` for every object whose center is in the area, in a fixed order (layer by layer, in the order of the definitions, row by row inside each). `objectsReaching` returns every object that may **touch** the area (its center can be outside, as far as the largest radius of its layer); the collision, the drawing and the placement of Dummies use it. **The ground is made of layers (the user's idea, 2026-11-10):** a thing that lives in the seed may one day be huge and rare, and it cannot share the squares of the small ones. Each layer in `terrain.objects.layers` is complete and has its own numbers: the world is cut into squares of the size of the layer, each with at most one object (`chancePercent`), kept away from the edges of its square by `objectMargin(layer)`, so objects of one layer never overlap; no object within the layer's `safeRadius` of the starting point. The place of the layer in the list goes into the salts (`100 x place + salt`), so layers do not roll the same numbers, and the first layer keeps the salts it always had. When objects of two layers overlap, **the layer with the larger square wins** and the other object is not placed (`isUnderBiggerLayer`; deterministic, and only the bigger layers are asked). Only one layer exists in the definitions; tests 103 to 105 build a layer of huge objects in a patched copy to prove the mechanism. The type is picked from `kinds` of the layer, and the radius and the health are rolled inside the `size` and the `healthRange` of that type (`rollInRange`; every roll has its own salt, listed in `objectInSquare`). Looking at a bigger area never changes an object. `layer` and `square` say which object it is.
 - `hashInts(seed, x, y, salt)` makes the numbers: only `Math.imul`, xor and shifts, so it is exact in every browser (no trigonometry, no `Math.random`). A **known answer** for one seed is fixed by a test, and DATA in Chamber 2 prints the same objects; the user compared them in his Chrome and they were identical.
-- The kinds are entries of `DEFINITIONS.objects` (the **rock** and the **Shroom**), each an independent set of ranges. The definitions have exactly three things, the avatar, the rock and the Shroom: stone, boulder, rubber rock and the training dummy were the agent's inventions and were **removed**, and so was every hand-placed object and every fixed value of an object (the user's rule: no leftovers, no placeholders).
+- The kinds are entries of `DEFINITIONS.objects` (the **rock** and the **Shroom**), each an independent set of ranges. Stone, boulder, rubber rock and a first "training dummy" were the agent's inventions and were **removed**, and so was every hand-placed object and every fixed value of an object (the user's rule: no leftovers, no placeholders).
 - **Objects have health (the user's decision):** each object rolls a whole number inside the `healthRange` of its type from the seed. An object comes from the formula at full health and carries it as `health: { now, max }` (the user's mold: everything with a variable amount has a now and a max: health, shield, ammunition...), both equal at creation; only a **hurt** object is in the state, in `state.damagedObjects`, a plain object from `"layer:squareX,squareY"` to its current health (the `now` of a hurt object; the object itself is made again from the seed and so keeps its full values). An object at zero is **broken** (the agent's choice; the user did not say what happens at zero): it is not drawn and nothing collides with it. The hit that breaks it has no collision response (the actor is not pushed or bounced and keeps its speed), but still hurts the actor. Health numbers are drawn above any hurt object.
 - **Push between actors by weight (the user's decision, 2026-11-11, `pushShare` in `src/sim.js`):** when two actors overlap (the avatar included), each is pushed back by the other's weight over the sum of the two, so the heavier moves less: the heavy mecha pushes light enemies and heavy enemies push it (the avatar's weight is the total weight of its blueprint). Two actors of weight 0 move half each. An object never moves: the actor takes the whole push. The avatar's cells are written again when it is pushed, like a Dummy's. A consequence: a Dummy can push the avatar into an object at the end of a step; the next step's collision with objects pushes it out (a standing avatar is pushed with no hit). Planned (the user's ideas, **not implemented**): the user wants the **dash force to push enemies a little and open space** when surrounded, and he wants the tension of being surrounded (the push by weight is the base of it); later three kinds of dash: normal, **blink** (goes through rocks) and **charge** (breaks rocks; `crushes` is the mechanism). Agent's cautions: pushes in a chain need a fixed order (they have one: list order) and the result of a step depends on it; the rock formula must be reviewed if rocks are ever generated outside the collision window.
 
@@ -272,14 +272,14 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the Chambe
 
 The user's idea (2026-11-10): a test actor that does not attack, made to see many things colliding. Numbers are in `src/data.js` (`DEFINITIONS.actors.dummy` and `DEFINITIONS.terrain.dummies`), with their reasons; nothing is repeated here.
 
-- **Made by the seed, lives in the state.** `createDummies` (called by `createChamber1State`) makes `count` Dummies through `finalizeObject("dummy", …)`, the same function as everything else. The seed rolls radius, health, first angle and position (the salts 11 to 15 are in the code, with the number of the Dummy and the try). Its speed comes from its recipe through `finalSpeed`, and the Dummy carries it. Ids are `dummy_0`, `dummy_1`, and so on.
+- **Made by the seed, lives in the state.** `createDummies` (called by `createChamber1State`) makes `count` Dummies through `finalizeObject("dummy", …)`, the same function as everything else. The seed rolls radius, health, first angle and position (the salts are in the code, with the number of the Dummy). Its speed comes from its recipe through `finalSpeed`, and the Dummy carries it. Ids are `dummy_0`, `dummy_1`, and so on.
 - **Where:** born like any actor (see "Birth" under "Actor"): anywhere off the screen and inside the window of the collision grid around the avatar, with no search for a free place (`birthOffset`, salts 17 and 18). (History: on its first day a taken place was refused and the seed tried another, up to a number of tries; the user replaced that with the birth rule the same night, and `safeRadius` and `placementTries` of the Dummies died with it.)
 - **How it moves:** it walks in a straight line at its speed (no acceleration), pointing at `wander.angle`, in whole degrees. `wander` is `{ index, angle, turns }`. At every **new** collision (with an object that is still whole, with the avatar, or with another Dummy) it gets a new angle, `hash(seed, index, turns) % 360` (the user's `rand(360)`, but from the seed, so the run is reproducible). A pair that was already touching in the last frame still pushes it out, but does not turn it (the same contact rule as the avatar's hits).
 - **Sine and cosine** come from our own series (`sinDegrees`, `cosDegrees`), with additions and multiplications only, because `Math.sin` may differ in the last digits between browsers.
 - **Wrap:** a Dummy that leaves the window comes back on the opposite side (`wrapIntoWindow`), around the avatar wherever it is.
 - **Only the avatar hurts a Dummy and only the avatar is hurt by it (the user's rule, 2026-11-10, see "Who hurts whom" in "Damage"), with the same body slam as the avatar's** (`damageOf`): at a new contact with the avatar whose impact reaches the minimum, the Dummy and the avatar each hurt the other with their own weight. The impact is the speed at which the two close in on each other (the difference of their velocities along the line between the centers). Against an object or another Dummy the contact pushes and turns, and nobody is hurt, so a Dummy never breaks an object. The Dummy weighs by the same rule as the objects (weight per radius times radius), from its own recipe. Health stops at 0: there is no death yet, so a Dummy at 0 goes on walking. A contact below the minimum impact turns the Dummy but hurts no one. The push between a Dummy and the avatar, or two Dummies, is split by weight (see "Push between actors by weight" in "The world: seed and objects"). (History: on its first day the Dummy hurt and was hurt by everything it touched, and the avatar was not pushed; the user changed both the same night.)
 - **Drawn** as blue circles by `drawDummies` in `src/render.js`. The window is twice the screen, so about a quarter of the Dummies are on screen at a time.
-- Tests: 80 to 101 in `tests/agent/README.md`. Most tests play in a game with no Dummies (`count` 0 in a patched copy of the data), because a wandering Dummy also hurts rocks; the Dummy tests use the real data (with 100 Dummies, to stay fast).
+- Tests: 80 to 101 and 106 to 110 in `tests/agent/README.md`. Most tests play in a game with no Dummies (`count` 0 in a patched copy of the data), because a wandering Dummy pushes and hurts the avatar and would change their results; the Dummy tests use the real data (with 100 Dummies, to stay fast).
 
 ### Actor
 
@@ -301,7 +301,8 @@ An actor **in the state** holds **its own value for everything it uses** (the us
 - `src/render.js`: draws the state and never changes it.
 - `src/chamber-2.js`: the test bench of Chamber 2. The text builders do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the Chamber 1 loop (it also records the history every frame).
-- `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` tests the rules, and `README.md` explains each test in plain words, with the worked numbers. `benchmark-grid.js` measures the collision grid (it is not a test). Any other kind of test the user writes later should go in its own folder.
+- `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` tests the rules, and `README.md` explains each test in plain words, with the worked numbers (a test checks that every test has its row). `benchmark-grid.js` and `benchmark-layers.js` measure the collision grid and the layers of the ground (they are not tests). Any other kind of test the user writes later should go in its own folder.
+- `docs/`: reviews written by an agent at the user's request. `docs/review-2026-11-11.md` is the map of the relations in the code, the fragile ones included, the tensions in the structure, the costs measured and what the direction of the game asks of today's code. **Read it before adding a rule.** Delete from it what gets solved.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node outside the tests.
 
 ## Ideas (agent proposals, not decided)
@@ -330,45 +331,51 @@ They only become decisions when the user approves.
 - Running the cross-check automatically.
 - The user's second monitor is stuck near 60 Hz (parked; not a problem of the game).
 
-## Handoff (2026-11-10 and the night of the 11th, written by one agent for the next)
+## Handoff (2026-11-11, written by one agent for the next)
 
 What changed last, and what to keep in mind when picking the work up. Remove or rewrite this section when it is stale.
 
-**Where the work stopped (the night of 2026-11-11, the user's credits ran out; he resumes at 4:40).** Everything below under "Decided by the user on the night" is done and pushed (commits f733747 to the last one on `main`). The hygiene pass was in progress: done so far are the test patch guard (test 111), the drifted comments, `contactBetween`, and the wording of the definitions check. **Still owed to the user, promised and not delivered:** (1) a deep report of the relations in the code, including fragile ones, the invariants no test guards, and strategy considerations about where the game is going (library, stages, weapons, shield, death, the damage audit, machine learning), as a file in the repository pointed to from here; (2) guidelines and patterns for the next agent in "How to work on this project". The next agent should write both before new rules, or tell the user plainly that they are not written.
+**State of the work.** Everything the user asked for on the night of 2026-11-10 to 11 is done and pushed. Nothing is half made. The tests pass and the README table matches them (test 112 checks it).
 
-**What was done**
+**What was done in this stretch (each has its section above)**
 
-- The Dummies (see "The Dummy"), their damage, the stress setting (count and size are in `src/data.js`), the fps counter.
-- The collision grid is in use between Dummies and between a Dummy and the avatar, with **several cells per actor** (`actor.cells`, see "Collision grid"). The earlier design (one cell per actor, looking at the neighbor cells) and its rule of a minimum cell size are gone; so are the `dash` and `pair` scenarios of the benchmark, which only measured that rule.
+- The Dummies, the collision grid with several cells per actor, the layers of the ground.
+- Who hurts whom: the body slam hurts only where the avatar is one side ("Damage").
+- Birth: off the screen, inside the window, no search for a free place ("Actor").
+- Crushing: a potential behavior of every actor, off for everyone ("Actor").
+- The push between actors by weight, the avatar included ("The world: seed and objects").
+- Cells counted in the world and not around the avatar (the agent's change, forced by the push of the avatar; "Collision grid").
+- Guards in the tests: a patch that changes nothing fails (111), the README table (112), nothing non-deterministic in the rules (113).
+- The review of the code: `docs/review-2026-11-11.md`.
 
-- The ground is made of **layers** (see "The world: seed and objects"). Only one layer is in the definitions; a huge layer exists only in the tests (102 to 105) and in `tests/agent/benchmark-layers.js`, where it roughly doubles the cost of a step. Nothing huge exists in the game yet.
+**Decided by the agent while the user was away, for him to confirm**
 
-**Decided by the user on the night of 2026-11-10, NOT implemented yet (the next agent's job; one commit each, tests first, in this order)**
+- The size of the screen is written once more in the rules (`state.grid`), with a loud check against the canvas.
+- Cells in the world (above).
+- Birth keeps the whole body off the screen and only the center inside the window.
+- Two actors of weight 0 split a push half each.
+- `crushes` is copied from the `initial` of each actor's recipe.
 
-1. ~~Who hurts whom~~ **Done** (see "Who hurts whom" in "Damage"): the body slam hurts only where the avatar is one side, both directions.
-2. ~~How an actor is born~~ **Done** for the Dummies (see "Birth" under "Actor"). The array of each stage (which actors, when, how many) is not designed yet: ask the user before inventing its shape.
-3. ~~Crushing~~ **Done** (see "Crushing" under "Actor").
+**None of the rules of this stretch was played by the user.** They are tested for what they do, not for whether they feel good. The first thing to ask him is to play Chamber 1 and say what he sees.
 
 **Properties to keep (tests guard them)**
 
-- The grid gives exactly the state of testing every pair in list order (tests 95 and 98 compare the whole state; 99 builds the case of a Dummy pushed into a third one). If a change breaks that, it changed a rule, not only the speed: stop and tell the user.
-- `actor.cells` is always right at the end of a step (test 100), because the collision reads it from the actor.
-- Most tests play in a game without Dummies (`withDummies(0)` in `tests/agent/sim.test.js`); a wandering Dummy hurts rocks and would change their counts.
+- The grid gives exactly the state of testing every pair in list order (95, 98, 99, 110). If a change breaks that, it changed a rule, not only the speed: stop and tell the user.
+- `actor.cells` is always right at the end of a step (100, 110), because the collision reads it from the actor.
+- Most tests play in a game without Dummies (`withDummies(0)` in `tests/agent/sim.test.js`).
+- The final position of the SIMULATION CHECK (README, "Known answers in the browser") changes with any rule; record the new one when it does.
 
 **Open, for the user to decide (raise one at a time, when it comes up)**
 
-- The point under "Huge actors" in "Open items" (the wrap of a huge actor is decided, and so are the layers of the ground; what is left is the cost of the search).
-- The array of each stage (which actors are summoned, when, how many): not designed. What happens when a summoned actor lands on something is decided (the push resolves it, see "Birth").
-- A Dummy at zero health goes on walking.
+The list, in the order the agent would ask, is at the end of `docs/review-2026-11-11.md` ("Questions for the user"). The first after he plays: whether the rules may read every value through a final function, with the actor holding only the base (the review, 4.1). It shapes buffs, auras and transformations.
 
 **Mistakes made in this stretch, so they are not repeated**
 
 - The user said "let's try it, so I can see the feeling" and the agent started to build, when he only wanted the idea considered. When he says "try" or "see", say what would be built and confirm in one line before building; when he says he needs the implementation, build it.
-
-- A patch of the data by `text.replace` stopped matching after the data changed, silently, and every test played with the full number of Dummies. `loadGame` now refuses any patch that changes nothing, and `patchOnce` refuses a text found zero or two times (test 111 guards the guards).
-- An edit of `tests/agent/README.md` replaced a heading by accident. Read the diff of the docs before committing.
+- A patch of the data by `text.replace` stopped matching after the data changed, silently, and every test played with the full number of Dummies. `loadGame` now refuses any patch that changes nothing, and `patchOnce` refuses a text found zero or two times (test 111).
+- An edit of `tests/agent/README.md` replaced a heading by accident, and once a commit went in before its docs. Read `git status` and the diff of the docs before committing.
 - A claim was made from a random run that never met the worst case ("this cell size holds"). Only a case built on purpose, or a proof, shows a limit. Say which of the two a statement rests on.
-- When a test is meant to guard something, break that thing once and see the test fail (it was done for the rewriting of the cells: tests 99 and 100 fail without it).
+- A test said it checked the avatar's cells after a push, and it rewrote the cells before looking, so it could not fail. Breaking the code on purpose showed it. Always break the thing once and see the test fail.
 
 ## How to run
 
@@ -392,3 +399,45 @@ From the root of the repository: `node --test` (no path; Node finds the `*.test.
 - **Say when a decision rests mostly on the user's preference**, briefly and plainly, and keep going: the game is his, so a preference is a valid reason, but he wants to know which decisions are preference and which are need. The same goes for the agent's own preferences. **Filter (the user's rule):** do not raise a suggestion unless it has the potential for a positive change to the game. Do not challenge a choice of taste only to offer alternatives (the user's example: "you chose cats, but what about dogs, or squirrels?"). A taste choice is worth a remark only when it carries a concrete cost or risk into the structure. The same applies to numbers: suggest a different value only if it would measurably change the experience.
 - Small corrections, not over-corrections: the user said the agent rushes, and then brakes too much when corrected.
 - After changing something visual, ask the user to open it and describe what he sees and feels. For anything that can be printed as text, add a button to Chamber 2 and ask the user to paste its output.
+
+### Patterns that work here (written by one agent for the next, 2026-11-11)
+
+These are not new rules of the user. They are what the agent saw working, and failing, over many sessions. Use judgement; when one of them fights a rule of the user, the user's rule wins.
+
+**Reading the user**
+
+- He thinks while he types: fast, with typos, sometimes cut in the middle. Never remark on the typing. If a message is cut, say what you understood and ask him to finish; do not guess the rest.
+- He often answers a question with a principle instead of a yes or no ("all actors are the same box", "everything has a now and a max", "names are useful"). That principle is worth more than the answer: it is a rule of the structure. Write it in this file in his words, and apply it to the cases he did not mention.
+- When he decides something, say it back as **one rule in one sentence**, then the consequences he may not have seen, then stop. If the sentence is right he says so, and it becomes the comment above the function.
+- **"Let's try", "I want to see", "consider"** are not requests to build. **"I need the implementation", "do it", "you can run it"** are. When in doubt, one line: what you would build, and wait.
+- One open question per reply: the one that blocks. Park the others in "Open" and bring them when their turn comes. A list of questions reads to him as obstacles thrown in his path.
+- When he will be away, list the choices you will make alone **before** starting, with your default for each, so he can overrule in one line. Mark them in this file as the agent's, for him to confirm.
+- When he asks for the "effect" of something, he wants a before and an after with numbers, measured, in a small table, and one sentence of what it means.
+- After a mistake: say what happened in one sentence, fix it, go on. No promises about the future and no swing to the opposite excess; he named both as failures.
+- He cannot read the tests. The README table is how he reads them: one row per test, in plain words, with the worked numbers.
+
+**Writing the rules**
+
+- **A rule of the game is one small function with the user's sentence above it** (`bodySlamHurts`, `pushShare`, `crushObject`, `birthOffset`). A new rule is a new named function that the other code asks; never the same condition written in two places. When the user changes his mind, one function changes.
+- **What must not exist cannot be made.** A limit is checked when the definitions load (`assertValidDefinitions`) or by a test on the definitions (101, 102), not by an `if` during play. The user asked for this twice.
+- **A mechanism that has no content yet is proven with patched data in the tests** (`patchOnce`: the huge layer, the weightless Dummy), never with placeholder content in `src/data.js`. What is not used does not live in the data.
+- **A faster way must give the same state as the plain way**, and the plain way stays in the tests as the reference (`EVERY_PAIR`). An optimization that changes a result is a change of rule and needs the user.
+- **Before a refactor, say what must stay bit for bit the same and which test shows it** (the known answers of seed 1, the whole-state comparisons, the Chromium position). Keep the operations in the same order: floating point is not associative.
+- **Name things for what they are today.** `collideDummies` handles Dummies, so it is not called `collideActors`. An honest narrow name is a note to the future; a wide name over narrow code is a trap.
+- **When a rule the user asked for forces a change he did not ask for** (the cells stopped being relative to the avatar because the avatar became pushable), make that change its own commit, say why in the message, and record it here as the agent's change.
+- The seed answers questions through `hashInts` with a salt per question. A new question takes a new salt. The place of a layer in the list of layers, and the number of an actor, are part of the world: changing them changes every run.
+- The result of a step depends on the order of `state.actors`. Never reorder it; add at the end; remove without reordering.
+
+**Proving the work**
+
+- Rule, tests, README row and the note in this file go in **the same commit**. Run `git status` and read the diff of the docs before committing; test 112 fails if a row is missing.
+- **Break it once.** For every test that is meant to guard something, break that thing in the code, see the test fail, put it back, and say in the commit message which tests fail without the change. Twice a test was found that could not fail.
+- Say what a claim rests on: **read** in the code, **measured** (and how), or **opinion**. A random run is not a worst case.
+- Raise `DEFINITIONS_VERSION` when `src/data.js` changes.
+- After a change of the rules, open the game in a real browser (Chamber 2's SIMULATION CHECK: the cross-check must say none, and no error on the page), and record the new final position in the README when it moves.
+
+**Thinking ahead**
+
+- The run is `seed + blueprint + inputs`. Before adding anything to the state, ask whether it can be derived from those; before adding anything to the rules, ask whether it reads a clock, a random number or the order of a set. Test 113 guards the obvious cases only.
+- New content will multiply whatever is written in two places. Before the second weapon, the second enemy, the second source of damage, look for the thing that should become one function or one table first (`docs/review-2026-11-11.md`, section 4, names them).
+- The user's three axes are the tie-breakers, in order: the player's time, the transparency of the data, reproducibility. A design that hides how a number was made loses to one that shows it, even when it is shorter.
