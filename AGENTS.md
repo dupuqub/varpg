@@ -363,7 +363,7 @@ What changed last, and what to keep in mind when picking the work up. Remove or 
 
 - The user said "let's try it, so I can see the feeling" and the agent started to build, when he only wanted the idea considered. When he says "try" or "see", say what would be built and confirm in one line before building; when he says he needs the implementation, build it.
 
-- A patch of the data by `text.replace` stopped matching after the data changed, silently, and every test played with the full number of Dummies. `withDummies` now fails loudly; the other patches passed to `loadGame` still do not check that they matched. Check the match when writing a new one.
+- A patch of the data by `text.replace` stopped matching after the data changed, silently, and every test played with the full number of Dummies. `loadGame` now refuses any patch that changes nothing, and `patchOnce` refuses a text found zero or two times (test 111 guards the guards).
 - An edit of `tests/agent/README.md` replaced a heading by accident. Read the diff of the docs before committing.
 - A claim was made from a random run that never met the worst case ("this cell size holds"). Only a case built on purpose, or a proof, shows a limit. Say which of the two a statement rests on.
 - When a test is meant to guard something, break that thing once and see the test fail (it was done for the rewriting of the cells: tests 99 and 100 fail without it).

@@ -18,11 +18,19 @@ function readSource(name) {
   return fs.readFileSync(path.join(SRC, name), "utf8");
 }
 
-// A fresh context with the game scripts loaded. "extraSource" can replace the text of a file.
-function loadGame(patchData = (text) => text) {
+// A fresh context with the game scripts loaded. "patchData" can change the text of src/data.js before it loads (a game
+// with other numbers). A patch that changes nothing fails loudly: the text it looked for is no longer in the data, and
+// the test would silently play the real game instead of the one it meant (it happened once, and every test played with
+// the full count of Dummies).
+function loadGame(patchData = null) {
   const context = vm.createContext({});
   for (const name of FILES) {
-    const text = name === "data.js" ? patchData(readSource(name)) : readSource(name);
+    let text = readSource(name);
+    if (name === "data.js" && patchData !== null) {
+      const patched = patchData(text);
+      if (patched === text) throw new Error("A patch of src/data.js changed nothing: the text it looks for is no longer there");
+      text = patched;
+    }
     vm.runInContext(text, context);
   }
   // The rules need the blueprint of the run as the third argument of step. Most tests do not care
@@ -31,14 +39,10 @@ function loadGame(patchData = (text) => text) {
   return context;
 }
 
-// How many Dummies a game has (the data says how many for the stress test). A patch that does not find the text fails
-// loudly, so a change in the data cannot silently bring back the full count and make every test slow.
+// How many Dummies a game has (the data says how many for the stress test). If the count is no longer written that way,
+// loadGame fails loudly (the patch would change nothing).
 function withDummies(count) {
-  return loadGame((text) => {
-    const original = /dummies: \{ count: \d+ \}/;
-    if (!original.test(text)) throw new Error("the count of Dummies was not found in src/data.js");
-    return text.replace(original, "dummies: { count: " + count + " }");
-  });
+  return loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: " + count + " }"));
 }
 
 // The game most tests play in has no Dummies (the rock and avatar tests count every hit on a rock, and a wandering
@@ -2394,4 +2398,14 @@ test("110 the avatar pushed by a Dummy has its cells written again at once (push
   assert.strictEqual(border.after, JSON.stringify({ from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }));
   assert.ok(result.same, "the grid and every pair disagree once the avatar is pushed");
   assert.ok(result.moved > 1, "the avatar was not pushed at all: " + result.moved);
+});
+
+// ---- The test helpers ----
+
+test("111 the helpers refuse a patch of the data that changes nothing, so a test cannot silently play the real game", () => {
+  assert.throws(() => loadGame((text) => text.replace("this text is not in the data", "x")), /changed nothing/);
+  assert.throws(() => patchOnce("abc", "z", "y"), /should apply once/);
+  assert.throws(() => patchOnce("abab", "ab", "y"), /should apply once/);
+  assert.strictEqual(patchOnce("abc", "b", "y"), "ayc");
+  assert.doesNotThrow(() => loadGame()); // no patch: the real game
 });
