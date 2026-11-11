@@ -42,7 +42,7 @@ const DEFINITIONS = {
       // of its blueprint (createChamber1State).
       initial: {
         position: { x: 0, y: 0 },
-        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the user's decision: a potential behavior of every actor (see crushObject in src/sim.js), off until a buff switches it on
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
@@ -69,7 +69,7 @@ const DEFINITIONS = {
       speed: 2,
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
-        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the user's decision: the same potential behavior as every actor's (see the avatar), off; the Dummy does not crush
         move: {
           direction: { x: 0, y: 0 }, // the unit vector of the angle it is walking at

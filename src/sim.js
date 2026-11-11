@@ -734,19 +734,19 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
 // ---- The cells of an actor ----
 // Every actor holds the cells it covers, in actor.cells: { from: { x, y }, to: { x, y } }, a rectangle of cells with
 // both corners included (the user's decision: any actor can have several cells). It is the rectangle of cells that
-// the square around its circle touches (position -/+ radius), relative to the avatar, like cellIndex. A small actor
-// covers one cell, or up to four when it is over a border; a huge one covers many. Two circles that overlap always
-// share at least one cell, whatever their sizes, so nothing has to look at neighbor cells and the size of a cell
-// does not limit the size of an actor: it only changes how much work the grid saves.
+// the square around its circle touches (position -/+ radius), counted in the world (cellIndex: cell 0 is around the
+// origin of the world, not around the avatar), so the cells of an actor change only when IT moves, and pushing the
+// avatar does not move everyone's cells. A small actor covers one cell, or up to four when it is over a border; a huge
+// one covers many. Two circles that overlap always share at least one cell, whatever their sizes, so nothing has to
+// look at neighbor cells and the size of a cell does not limit the size of an actor: it only changes how much work
+// the grid saves.
 
 // Writes the cells an actor covers now.
-function setCells(actor, player, grid) {
-  const dx = actor.position.x - player.position.x;
-  const dy = actor.position.y - player.position.y;
-  actor.cells.from.x = cellIndex(dx - actor.radius, grid.cellSize);
-  actor.cells.from.y = cellIndex(dy - actor.radius, grid.cellSize);
-  actor.cells.to.x = cellIndex(dx + actor.radius, grid.cellSize);
-  actor.cells.to.y = cellIndex(dy + actor.radius, grid.cellSize);
+function setCells(actor, grid) {
+  actor.cells.from.x = cellIndex(actor.position.x - actor.radius, grid.cellSize);
+  actor.cells.from.y = cellIndex(actor.position.y - actor.radius, grid.cellSize);
+  actor.cells.to.x = cellIndex(actor.position.x + actor.radius, grid.cellSize);
+  actor.cells.to.y = cellIndex(actor.position.y + actor.radius, grid.cellSize);
 }
 
 // True if two rectangles of cells have at least one cell in common.
@@ -808,7 +808,7 @@ function collideDummies(state, lastContacts, blueprint) {
   // A Dummy moved: its cells are written again, in the actor and in the index.
   const refreshCells = (number) => {
     removeFromCells(inCell, number, dummies[number].cells);
-    setCells(dummies[number], player, state.grid);
+    setCells(dummies[number], state.grid);
     addToCells(inCell, number, dummies[number].cells);
   };
 
@@ -884,10 +884,10 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     //   its circle reaches (actor.cells), so two actors that touch always share a cell. It only decides how much
     //   work the grid saves: a cell much smaller than the actors makes each one cover many cells, a cell much larger
     //   puts many actors in the same cell. Measure with `node tests/agent/benchmark-grid.js`.
-    // - windowWidth, windowHeight: cells across and down in the window around
-    //   the player. Each is odd, 3 or more. The player is in the center cell.
-    //   Collision is only tested inside this window, so it must cover all the
-    //   ground where an actor can be, and some actors are off screen. The
+    // - windowWidth, windowHeight: the window around the player, measured in cells (its size in pixels is
+    //   windowWidth x cellSize by windowHeight x cellSize, centered on the player). Each is odd, 3 or more.
+    //   It is the real area of the game: an actor that leaves it comes back on the opposite side (wrapIntoWindow),
+    //   so it must cover all the ground where an actor can be, and some actors are off screen. The
     //   window is twice the screen (1920 x 1080), so 3840 x 2160 pixels: half
     //   of it is 1920 x 1080, and the center cell already covers 32. So 30 cells
     //   on each side across (61 columns) and 17 up and down (35 rows).
@@ -904,7 +904,7 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 
   assertValidGrid(state.grid);
   createDummies(state);
-  for (const actor of state.actors) setCells(actor, avatar, state.grid);
+  for (const actor of state.actors) setCells(actor, state.grid);
   return state;
 }
 
@@ -924,18 +924,10 @@ function assertValidGrid(grid) {
   }
 }
 
-// Index of the cell that contains a position, on one axis.
-// offset = distance from the player. The player is at the center of cell 0,
-// so cell 0 covers from -cellSize / 2 up to (not including) +cellSize / 2.
-function cellIndex(offset, cellSize) {
-  return Math.floor((offset + cellSize / 2) / cellSize);
-}
-
-// True if the cell is inside the window around the player.
-function isInWindow(grid, cell) {
-  const reachX = (grid.windowWidth - 1) / 2;
-  const reachY = (grid.windowHeight - 1) / 2;
-  return Math.abs(cell.x) <= reachX && Math.abs(cell.y) <= reachY;
+// Index of the cell that contains a coordinate of the world, on one axis. The origin of the world is at the center
+// of cell 0, so cell 0 covers from -cellSize / 2 up to (not including) +cellSize / 2.
+function cellIndex(coordinate, cellSize) {
+  return Math.floor((coordinate + cellSize / 2) / cellSize);
 }
 
 // Advances the state by one frame. Changes the state in place.
@@ -991,9 +983,9 @@ function step(state, input, blueprint) {
     collideWithObjects(state, actor, blueprint, lastContacts);
   }
 
-  // 3. Cells: the cells every actor covers now, relative to the player (see "The cells of an actor").
+  // 3. Cells: the cells every actor covers now (see "The cells of an actor").
   // Every actor must already have "cells" and a radius (it fails loudly if one does not).
-  for (const actor of state.actors) setCells(actor, player, state.grid);
+  for (const actor of state.actors) setCells(actor, state.grid);
 
   // 4. The Dummies collide (with objects, the avatar and each other) and turn. The collision reads the cells from
   // the actors, and writes them again for every Dummy it pushes, so at the end of the step they are still right.

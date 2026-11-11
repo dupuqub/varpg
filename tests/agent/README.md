@@ -48,10 +48,10 @@ node --test
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 10 | The state carries the grid settings (64 / 61 / 35) and the player covers only the cell (0, 0) (`cells` from 0,0 to 0,0: a radius of 16 inside a cell of 64). | The grid settings live in the state so a run is reproducible. |
-| 11 | Cell boundaries: a point (radius 0, which covers one cell) at an offset of 31.9 is still in the center cell, at 32 it is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
-| 12 | When the player walks, another actor (a marker without a type, only a test fixture) changes cells. | Cells are relative to the player, not fixed to the world. |
-| 13 | `isInWindow` for a 3x3, an 11x11 and the 61 x 35 rectangle. | Checks the edges of the window, on each axis separately. |
+| 10 | The state carries the grid settings (64 / 61 / 35) and the player, at the origin, covers only the cell (0, 0) (`cells` from 0,0 to 0,0: a radius of 16 inside a cell of 64). | The grid settings live in the state so a run is reproducible. |
+| 11 | Cell boundaries: a point (radius 0, which covers one cell) at 31.9 is still in cell 0, at 32 it is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
+| 12 | When the player walks, another actor (a marker without a type, only a test fixture) keeps its cells and the player changes its own. | Cells are counted in the world, not around the player: an actor's cells change only when it moves, so pushing the avatar does not move everyone's cells. |
+| 13 | Two actors of radius 16 that touch (31 px apart) share a cell at the origin, at (10000, -10000) and at (-7777, 3333); 200 px apart they never do. | The grid works the same everywhere in the world. |
 | 14 | The default window reaches at least 1920 px and 1080 px from the player. | The user's requirement: the window covers at least twice the screen. |
 | 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field, a missing or broken screen size) are refused with an error. | The settings must fail loudly, not run with nonsense. |
 

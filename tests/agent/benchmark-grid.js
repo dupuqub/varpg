@@ -49,7 +49,7 @@ const makeGame = () => new Function(source + `
 
   return {
     createChamber1State, createRun, step,
-    writeCells(state) { for (const actor of state.actors) setCells(actor, state.actors[0], state.grid); },
+    writeCells(state) { for (const actor of state.actors) setCells(actor, state.grid); },
     useGrid() { collideDummies = withGrid; },
     useEveryPair() { collideDummies = everyPair; },
     pairs: () => pairs,
