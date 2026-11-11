@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 26;
+const DEFINITIONS_VERSION = 27;
 
 const DEFINITIONS = {
   actors: {
@@ -43,6 +43,7 @@ const DEFINITIONS = {
       initial: {
         position: { x: 0, y: 0 },
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
+        crushes: false, // the user's decision: a potential behavior of every actor (see crushObject in src/sim.js), off until a buff switches it on
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
@@ -69,6 +70,7 @@ const DEFINITIONS = {
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, relative to the avatar, written every frame
+        crushes: false, // the user's decision: the same potential behavior as every actor's (see the avatar), off; the Dummy does not crush
         move: {
           direction: { x: 0, y: 0 }, // the unit vector of the angle it is walking at
           velocity: { x: 0, y: 0 }, // direction x speed, in pixels per frame

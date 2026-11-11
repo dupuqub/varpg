@@ -2229,3 +2229,83 @@ test("105 the damage of an object is kept by its layer and its square, so two la
   assert.deepStrictEqual(plain(result.stored), { [result.key]: result.health - 3 });
   assert.notStrictEqual(result.smallZero, result.hugeZero);
 });
+
+// ---- Crushing ----
+// The user's decision (2026-11-11): a potential behavior of every actor, on or off. Nobody crushes in the definitions; the
+// tests switch it on in the state, which is where a buff will switch it on later.
+
+test("106 every actor in the state carries crushes, off: the avatar and every Dummy, a plain boolean, from their recipes", () => {
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    return { values: s.actors.map((actor) => actor.crushes), count: s.actors.length };
+  `, WITH_DUMMIES);
+  assert.strictEqual(result.count, 101);
+  assert.ok(plain(result.values).every((value) => value === false));
+});
+
+test("107 an avatar that crushes walks through a rock and a Shroom: each breaks at once whatever its health, nobody is hurt, no push, no bounce, no contact, and it still needs no minimum impact (pressing slowly also crushes)", () => {
+  const result = run(`
+    const s = createChamber1State(1, 1);
+    const avatar = s.actors[0];
+    avatar.crushes = true;
+    // Walking down into the rock at ${ROCK.x},${ROCK.y} (radius ${ROCK.radius}), at the top speed.
+    avatar.position.x = ${ROCK.x}; avatar.position.y = ${ROCK.y} - ${ROCK.radius} - 16 - 1;
+    avatar.move.velocity.y = 3;
+    const before = { y: avatar.position.y, health: avatar.health.now };
+    step(s, { move: { x: 0, y: 1 } });
+    const rock = { broken: s.damagedObjects["${ROCK.key}"], moved: avatar.position.y - before.y, vy: avatar.move.velocity.y, health: avatar.health.now, contacts: s.contacts.slice() };
+    for (let i = 0; i < 30; i++) step(s, { move: { x: 0, y: 1 } });
+    rock.through = avatar.position.y - before.y;
+
+    // The Shroom at 136,-375 (radius 16, bounce 0.2) is crushed while pressing slowly: speed 0.5, below the minimum impact (1).
+    const t = createChamber1State(1, 1);
+    const slow = t.actors[0];
+    slow.crushes = true;
+    slow.position.x = 136; slow.position.y = -375 - 16 - 16 - 0.25;
+    slow.move.velocity.y = 0.5;
+    step(t, { move: { x: 0, y: 0.5 / 3 } });
+    const shroom = { broken: t.damagedObjects["small:0,-2"], vy: slow.move.velocity.y, health: slow.health.now, contacts: t.contacts.slice() };
+    return { rock, shroom };
+  `);
+  assert.strictEqual(result.rock.broken, 0); // the rock had 10 health: gone in one touch
+  assert.ok(Math.abs(result.rock.moved - 3) < 1e-9, "the avatar was pushed: it moved " + result.rock.moved);
+  assert.strictEqual(result.rock.vy, 3);
+  assert.strictEqual(result.rock.health, 100);
+  assert.deepStrictEqual(plain(result.rock.contacts), []);
+  assert.ok(result.rock.through > 60, "the avatar did not walk through: " + result.rock.through);
+  assert.strictEqual(result.shroom.broken, 0);
+  assert.ok(Math.abs(result.shroom.vy - 0.5) < 1e-9, "the Shroom bounced the avatar: " + result.shroom.vy); // no bounce
+  assert.strictEqual(result.shroom.health, 100);
+  assert.deepStrictEqual(plain(result.shroom.contacts), []);
+});
+
+test("108 a Dummy that crushes goes through a rock without turning, and the rock is gone; against another Dummy it collides as always", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0, 1);
+    const [, d, other] = s.actors;
+    d.crushes = true;
+    face(d, 90); // down, toward the rock at ${ROCK.x},${ROCK.y}
+    d.position.x = ${ROCK.x}; d.position.y = ${ROCK.y} - ${ROCK.radius} - d.radius - 30;
+    other.position.x = 5000; other.position.y = 5000; // far away for now
+    const startY = d.position.y;
+    let frames = 0;
+    while (s.damagedObjects["${ROCK.key}"] === undefined && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
+    const atCrush = { rock: s.damagedObjects["${ROCK.key}"], turns: d.wander.turns, angle: d.wander.angle, health: d.health.now };
+    for (let i = 0; i < 40; i++) step(s, { move: { x: 0, y: 0 } });
+    const later = { turns: d.wander.turns, walked: d.position.y - startY, expected: (frames + 40) * 2 };
+
+    // Now the other Dummy stands in its way: an ordinary collision, the crusher turns and is pushed.
+    other.position.x = d.position.x; other.position.y = d.position.y + d.radius + other.radius + 1;
+    face(other, 270); // up, toward the crusher
+    step(s, { move: { x: 0, y: 0 } });
+    const gap = Math.hypot(d.position.x - other.position.x, d.position.y - other.position.y) - (d.radius + other.radius);
+    return { atCrush, later, meeting: { turns: [d.wander.turns, other.wander.turns], gap, contacts: s.contacts } };
+  `, WITH_DUMMIES);
+  assert.deepStrictEqual(plain(result.atCrush), { rock: 0, turns: 0, angle: 90, health: 100 });
+  assert.strictEqual(result.later.turns, 0);
+  assert.ok(Math.abs(result.later.walked - result.later.expected) < 1e-9, "the crusher did not keep its straight line: " + result.later.walked + " vs " + result.later.expected);
+  assert.deepStrictEqual(plain(result.meeting.turns), [1, 1]);
+  assert.ok(Math.abs(result.meeting.gap) < 1e-9, "the two Dummies were not pushed to just touching: " + result.meeting.gap);
+  assert.deepStrictEqual(plain(result.meeting.contacts), ["dummy_0|dummy_1"]);
+});

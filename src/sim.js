@@ -463,6 +463,23 @@ function damageObject(state, object, damage) {
   return current === 0;
 }
 
+// Breaks an object at once, whatever its health: it is gone, like an object that reached 0.
+function breakObject(state, object) {
+  state.damagedObjects[objectKey(object)] = 0;
+}
+
+// Crushing (the user's decision, 2026-11-11): a potential behavior of EVERY actor, on or off (actor.crushes; today it
+// is off for everyone, a buff will switch it on and off later and the time is the buff's, not this field's). An actor
+// that crushes breaks every object it touches: the object vanishes (breakObject: no new state, the user chose this
+// over flinging it), no damage goes either way, the actor is not pushed, not bounced, not turned, and keeps going.
+// It is a rule, not a huge damage in disguise, so a damage trace must show it as such. Objects only: what a crusher
+// does to another actor is the ordinary collision. Returns true if the object was crushed (so there is no collision).
+function crushObject(state, actor, object) {
+  if (!actor.crushes) return false;
+  breakObject(state, object);
+  return true;
+}
+
 // ---- Collision with objects ----
 
 // The objects near the actor that it may touch (the broken ones are gone), in the fixed order of
@@ -476,14 +493,15 @@ function objectsNear(state, actor) {
 // Pushes an actor out of the objects it overlaps, hurts both sides, and changes its velocity.
 // For each object that overlaps (circle against circle):
 // 1. The "normal" is the direction from the object to the actor (a unit vector).
-// 2. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
+// 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens.
+// 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
 //    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
 //    pair is one that hurts (bodySlamHurts: the avatar is one side), each side hurts the other with its own weight
 //    (damageOf, the body slam): the actor takes the damage of the object, and the object takes the damage of the
 //    actor. An object keeps its health in state.damagedObjects. An object that breaks has no collision: nothing is
 //    pushed, and the actor keeps its speed and goes on.
-// 3. The actor is moved along the normal until it just touches the object.
-// 4. The velocity is split in two: the part that goes INTO the object (along the
+// 4. The actor is moved along the normal until it just touches the object.
+// 5. The velocity is split in two: the part that goes INTO the object (along the
 //    normal) and the part that goes ALONG it. The part going in is replaced by
 //    the bounce of the object: -bounce x (what was going in); below the minimum impact there is no
 //    bounce, the part going in is just removed. The part along the
@@ -497,6 +515,7 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
     const dx = actor.position.x - object.position.x;
     const dy = actor.position.y - object.position.y;
     if (dx * dx + dy * dy >= touching * touching) continue;
+    if (crushObject(state, actor, object)) continue;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
@@ -652,6 +671,7 @@ function moveDummy(state, dummy, player) {
 }
 
 // What happens when a Dummy touches one thing (an object, the avatar or another Dummy). If they overlap:
+// 0. A Dummy that crushes (crushObject) breaks an object and goes on: nothing below happens.
 // 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
 //    only against the avatar) and the speed at which they close in on each other (the impact: the part of the
 //    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
@@ -669,6 +689,7 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
   const dy = dummy.position.y - other.position.y;
   const touching = dummy.radius + other.radius;
   if (dx * dx + dy * dy >= touching * touching) return false;
+  if (other.square !== undefined && crushObject(state, dummy, other)) return false;
 
   const otherIsDummy = other.wander !== undefined;
   const isNewContact = !lastContacts.includes(key);
