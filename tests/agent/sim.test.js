@@ -1490,8 +1490,6 @@ test("79 the avatar plays only with its own values: while stepping, the definiti
 const EMPTY = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0"));
 
 // A state with the avatar and only the Dummies of the given numbers, in the game without objects.
-const ROCK_KEY = "small:0,1";
-const ROCK_HEALTH = 10;
 const ALONE = `
   function alone(...numbers) {
     const s = createChamber1State(1, 1);

@@ -482,6 +482,22 @@ function crushObject(state, actor, object) {
 
 // ---- Collision with objects ----
 
+// How two circles touch, or null if they do not overlap: the normal (the unit vector from b to a), the distance
+// between the centers and the overlap (how far a must move along the normal to just touch b). Same centers cannot
+// happen in practice; if they did, the normal points to the right, so the result is still the same everywhere.
+function contactBetween(a, b) {
+  const touching = a.radius + b.radius;
+  const dx = a.position.x - b.position.x;
+  const dy = a.position.y - b.position.y;
+  if (dx * dx + dy * dy >= touching * touching) return null;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  return {
+    normalX: distance === 0 ? 1 : dx / distance,
+    normalY: distance === 0 ? 0 : dy / distance,
+    overlap: touching - distance,
+  };
+}
+
 // The objects near the actor that it may touch (the broken ones are gone), in the fixed order of
 // objectsInArea. Only objects close enough to touch are looked at (objectsReaching).
 function objectsNear(state, actor) {
@@ -508,25 +524,17 @@ function objectsNear(state, actor) {
 //    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
 function collideWithObjects(state, actor, blueprint, lastContacts) {
-  const radius = actor.radius;
-
   for (const object of objectsNear(state, actor)) {
-    const touching = radius + object.radius;
-    const dx = actor.position.x - object.position.x;
-    const dy = actor.position.y - object.position.y;
-    if (dx * dx + dy * dy >= touching * touching) continue;
+    const contact = contactBetween(actor, object);
+    if (contact === null) continue;
     if (crushObject(state, actor, object)) continue;
+    const { normalX, normalY, overlap } = contact;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
-    const contact = actor.id + "|" + object.type + " " + objectKey(object);
-    const isNewContact = !lastContacts.includes(contact);
-    state.contacts.push(contact);
-
-    // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const normalX = distance === 0 ? 1 : dx / distance;
-    const normalY = distance === 0 ? 0 : dy / distance;
+    const key = actor.id + "|" + object.type + " " + objectKey(object);
+    const isNewContact = !lastContacts.includes(key);
+    state.contacts.push(key);
 
     // Negative when the actor is going toward the object.
     const velocity = actor.move.velocity;
@@ -541,7 +549,6 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
       if (damageObject(state, object, damageOf(actor, hit, object, blueprint))) continue; // the object broke: no collision
     }
 
-    const overlap = touching - distance;
     actor.position.x += normalX * overlap;
     actor.position.y += normalY * overlap;
 
@@ -694,20 +701,14 @@ function pushShare(a, b) {
 //    still pushes, but does not hurt and does not turn.
 // Returns true if something was pushed (so the cells of what moved must be written again).
 function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
-  const dx = dummy.position.x - other.position.x;
-  const dy = dummy.position.y - other.position.y;
-  const touching = dummy.radius + other.radius;
-  if (dx * dx + dy * dy >= touching * touching) return false;
+  const contact = contactBetween(dummy, other);
+  if (contact === null) return false;
   if (other.square !== undefined && crushObject(state, dummy, other)) return false;
+  const { normalX, normalY, overlap } = contact;
 
   const otherIsDummy = other.wander !== undefined;
   const isNewContact = !lastContacts.includes(key);
   state.contacts.push(key);
-
-  // Same centers (cannot happen in practice): push to the right, so the result is still the same everywhere.
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  const normalX = distance === 0 ? 1 : dx / distance;
-  const normalY = distance === 0 ? 0 : dy / distance;
 
   if (isNewContact && bodySlamHurts(dummy, other)) {
     const otherVelocity = other.move ? other.move.velocity : { x: 0, y: 0 }; // an object does not move
@@ -724,7 +725,6 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
     }
   }
 
-  const overlap = touching - distance;
   const otherMoves = other.move !== undefined; // an actor; an object stays where it is
   const share = otherMoves ? pushShare(dummy, other) : 1;
   dummy.position.x += normalX * overlap * share;
