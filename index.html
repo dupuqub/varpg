@@ -19,8 +19,8 @@
   <!-- Choose the test map -->
   <main id="screen-chambers" class="screen" hidden>
     <h1>TEST CHAMBERS</h1>
+    <button data-goto="screen-chamber-0">CHAMBER 0: DIAGNOSTICS</button>
     <button data-goto="screen-chamber-1">CHAMBER 1: MOVEMENT</button>
-    <button data-goto="screen-chamber-2">CHAMBER 2: DIAGNOSTICS</button>
     <button data-goto="screen-menu">BACK</button>
   </main>
 
@@ -34,9 +34,9 @@
     </div>
   </main>
 
-  <!-- Chamber 2: not a place in the game. Buttons that print text to copy. -->
-  <main id="screen-chamber-2" class="screen" hidden>
-    <h1>CHAMBER 2: DIAGNOSTICS</h1>
+  <!-- Chamber 0: not a place in the game. Buttons that print text to copy. -->
+  <main id="screen-chamber-0" class="screen" hidden>
+    <h1>CHAMBER 0: DIAGNOSTICS</h1>
     <p class="hint">PRESS A BUTTON, THEN COPY THE OUTPUT</p>
     <div class="tools">
       <button id="tool-environment">ENVIRONMENT</button>
@@ -56,7 +56,7 @@
   <script src="src/history.js"></script>
   <script src="src/input.js"></script>
   <script src="src/render.js"></script>
-  <script src="src/chamber-2.js"></script>
+  <script src="src/chamber-0.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>

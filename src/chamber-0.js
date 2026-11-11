@@ -1,4 +1,4 @@
-// Chamber 2: not a place in the game, only a test bench.
+// Chamber 0: not a place in the game, only a test bench.
 // Each button runs something in the real browser and writes plain text into
 // the output box, so the text can be copied and pasted anywhere.
 // The text builders (environmentText, simulationCheckText, dataText) do not

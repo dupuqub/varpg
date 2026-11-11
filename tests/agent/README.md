@@ -20,7 +20,7 @@ node --test
 
 - They load `src/data.js`, `src/sim.js` and `src/history.js` the way a browser does, as plain scripts, without changing them.
 - They test **rules** (numbers and state). They do not test how the game looks or feels: for that, open Chamber 1 and describe what you see.
-- Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 2: Diagnostics**, not here.
+- Things that only a real browser can show (frame rate, final position in each browser) are in **Chamber 0: Diagnostics**, not here.
 - Combat is only the collision with rocks and Shrooms so far (tests 47 to 52). There are no enemies, weapons or shield yet. The Dummies (tests 80 to 101) walk, turn and hurt what they touch, with the same body slam.
 
 ## The tests, one by one
@@ -97,7 +97,7 @@ node --test
 | 36 | Looking at a small area finds exactly the rocks that a big area has inside that same region. | A rock must not depend on where you look from, or rocks would pop in and out while walking. |
 | 37 | No rock is closer than 200 px to the starting point, for 40 different seeds (and rocks do start right after that). | The avatar must never begin inside a rock. |
 | 38 | No two rocks overlap, for 5 seeds. | The formula keeps each rock inside its own square, with a margin. |
-| 39 | **Known answer:** seed 1 gives 10 objects on the first screen, the first a Shroom at 136,-375 (radius 16, health 17, weight 1600, bounce 0.2) and the last a rock at 99,456 (radius 28, health 10, weight 2800, bounce 0); the types in order are shroom, rock, rock, shroom, shroom, rock, shroom, shroom, rock, rock. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the OBJECTS lines of DATA in Chamber 2). |
+| 39 | **Known answer:** seed 1 gives 10 objects on the first screen, the first a Shroom at 136,-375 (radius 16, health 17, weight 1600, bounce 0.2) and the last a rock at 99,456 (radius 28, health 10, weight 2800, bounce 0); the types in order are shroom, rock, rock, shroom, shroom, rock, shroom, shroom, rock, rock. | A fixed point of comparison. If it fails after a change, every map changed. If it fails on another browser, the hash is not exact there (compare with the OBJECTS lines of DATA in Chamber 0). |
 | 40 | The state keeps only the seed and the avatar (no objects). Over 5 seeds the seed rolls the type, the radius and the health of every object inside the ranges of its type, and every value of the ranges shows up (radius 16 to 32, health 10 to 20) for the rock and for the Shroom; `objectMargin(layer)` is the largest radius of the layer. | The state stays small, and nothing about an object is a fixed value. |
 
 ### Collision with rocks
@@ -217,7 +217,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 
 ## Known answers in the browser
 
-The SIMULATION CHECK of Chamber 2 plays a scripted run of the real game (the Dummies included) twice and prints the final position of the avatar. On the agent's Chromium it is `x=94.85277763889981, y=201.26268181996477`, with the cross-check `none`. It changes whenever a rule or a value changes (the last change: the Dummies meet the objects by the same routine as the avatar), so compare it with the value of the commit being checked, not with an old one.
+The SIMULATION CHECK of Chamber 0 plays a scripted run of the real game (the Dummies included) twice and prints the final position of the avatar. On the agent's Chromium it is `x=94.85277763889981, y=201.26268181996477`, with the cross-check `none`. It changes whenever a rule or a value changes (the last change: the Dummies meet the objects by the same routine as the avatar), so compare it with the value of the commit being checked, not with an old one.
 
 ## Cost of the layers
 
