@@ -530,8 +530,9 @@ function objectsNear(state, actor) {
     .filter((object) => !isObjectBroken(state, object));
 }
 
-// Pushes an actor out of the objects it overlaps, hurts both sides, and changes its velocity.
-// For each object that overlaps (circle against circle):
+// What happens when an actor meets the objects (the one routine for every actor that moves: the avatar and the
+// Dummies; the user's rule, 2026-11-11: a Shroom bounces everyone, it only does not hurt everyone).
+// For each object the actor overlaps (circle against circle):
 // 1. The "normal" is the direction from the object to the actor (a unit vector).
 // 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens.
 // 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
@@ -547,7 +548,10 @@ function objectsNear(state, actor) {
 //    bounce, the part going in is just removed. The part along the
 //    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
+// Returns true if the actor met an object it was not touching in the last frame (and the object is still there),
+// so an actor that reacts to a new contact can (the Dummy turns).
 function collideWithObjects(state, actor, lastContacts) {
+  let metSomethingNew = false;
   for (const object of objectsNear(state, actor)) {
     const contact = contactBetween(actor, object);
     if (contact === null) continue;
@@ -572,6 +576,7 @@ function collideWithObjects(state, actor, lastContacts) {
       applyDamage(actor, damageOf(object, hit, actor));
       if (damageObject(state, object, damageOf(actor, hit, object))) continue; // the object broke: no collision
     }
+    if (isNewContact) metSomethingNew = true;
 
     actor.position.x += normalX * overlap;
     actor.position.y += normalY * overlap;
@@ -583,6 +588,7 @@ function collideWithObjects(state, actor, lastContacts) {
       velocity.y -= factor * goingIn * normalY;
     }
   }
+  return metSomethingNew;
 }
 
 // ---- Dummies ----
@@ -700,57 +706,42 @@ function pushShare(a, b) {
   return total === 0 ? 0.5 : b.weight / total;
 }
 
-// What happens when a Dummy touches one thing (an object, the avatar or another Dummy). If they overlap:
-// 0. A Dummy that crushes (crushObject) breaks an object and goes on: nothing below happens.
+// What happens when a Dummy touches another actor (the avatar or another Dummy). If they overlap:
 // 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
 //    only against the avatar) and the speed at which they close in on each other (the impact: the part of the
 //    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
-//    the same body slam as the avatar's (damageOf), and BOTH sides hurt the other with their own weight. Against an
-//    object or another Dummy nobody is hurt, so a Dummy never breaks an object (an object that broke in a hit would
-//    have no collision: nothing pushed, the Dummy keeping its angle; that is written here for the day an actor other
-//    than the avatar hurts objects).
-// 2. The two are pushed apart along the line until they just touch. An object stays where it is (the Dummy takes the
-//    whole push); two actors, the avatar included, split the push by weight (pushShare): the heavier moves less.
-// 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
-//    still pushes, but does not hurt and does not turn.
-// Returns true if something was pushed (so the cells of what moved must be written again).
+//    the same body slam as the avatar's (damageOf), and BOTH sides hurt the other with their own weight.
+// 2. The two are pushed apart along the line until they just touch, the push split by weight (pushShare): the
+//    heavier moves less. Nobody's velocity changes.
+// 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not, and so does the other if it is a
+//    Dummy. A pair that was already touching still pushes, but does not hurt and does not turn.
+// Returns true if they touched (so the cells of both must be written again).
 function touchDummy(state, lastContacts, dummy, other, key) {
   const contact = contactBetween(dummy, other);
   if (contact === null) return false;
-  if (other.square !== undefined && crushObject(state, dummy, other)) return false;
   const { normalX, normalY, overlap } = contact;
 
-  const otherIsDummy = other.wander !== undefined;
   const isNewContact = !lastContacts.includes(key);
   state.contacts.push(key);
 
   if (isNewContact && bodySlamHurts(dummy, other)) {
-    const otherVelocity = other.move ? other.move.velocity : { x: 0, y: 0 }; // an object does not move
-    const closing = -((dummy.move.velocity.x - otherVelocity.x) * normalX + (dummy.move.velocity.y - otherVelocity.y) * normalY);
+    const closing = -((dummy.move.velocity.x - other.move.velocity.x) * normalX + (dummy.move.velocity.y - other.move.velocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
       const hit = { impact: closing };
       applyDamage(dummy, damageOf(other, hit, dummy));
-      const damage = damageOf(dummy, hit, other);
-      if (other.square !== undefined) {
-        if (damageObject(state, other, damage)) return false; // the object broke: no collision, nothing moved
-      } else {
-        applyDamage(other, damage);
-      }
+      applyDamage(other, damageOf(dummy, hit, other));
     }
   }
 
-  const otherMoves = other.move !== undefined; // an actor; an object stays where it is
-  const share = otherMoves ? pushShare(dummy, other) : 1;
+  const share = pushShare(dummy, other);
   dummy.position.x += normalX * overlap * share;
   dummy.position.y += normalY * overlap * share;
-  if (otherMoves) {
-    other.position.x -= normalX * overlap * (1 - share);
-    other.position.y -= normalY * overlap * (1 - share);
-  }
+  other.position.x -= normalX * overlap * (1 - share);
+  other.position.y -= normalY * overlap * (1 - share);
 
   if (isNewContact) {
     turnDummy(state, dummy);
-    if (otherIsDummy) turnDummy(state, other);
+    if (other.wander !== undefined) turnDummy(state, other);
   }
   return true;
 }
@@ -814,8 +805,9 @@ function nextInCells(inCell, cells, after) {
   return next;
 }
 
-// The collisions of every Dummy, in list order: with the objects that are still whole, with the avatar, and with
-// the Dummies after it in the list (so each pair is looked at once). The result is exactly the one of testing every
+// The collisions of every Dummy with the other actors, in list order: with the avatar, and with the Dummies after it
+// in the list (so each pair is looked at once). (The objects were met in the movement, by collideWithObjects, like
+// the avatar's.) The result is exactly the one of testing every
 // pair in that order; the grid only skips the pairs that cannot touch:
 // - a Dummy is tested against the avatar only if they share a cell, and against the Dummies that share a cell with it;
 //   the avatar is pushed too, so its cells are written again after a push (it is not in the index, only read);
@@ -839,12 +831,6 @@ function collideDummies(state, lastContacts) {
 
   for (let i = 0; i < dummies.length; i++) {
     const dummy = dummies[i];
-
-    let pushed = false;
-    for (const object of objectsNear(state, dummy)) {
-      if (touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object))) pushed = true;
-    }
-    if (pushed) refreshCells(i);
 
     if (shareCell(dummy.cells, player.cells)) {
       if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID)) {
@@ -1011,15 +997,18 @@ function step(state, input, blueprint) {
     // opposite side. (The avatar is first in the list, so it has already moved.)
     if (!isAvatar(actor)) wrapIntoWindow(actor, player, state.grid);
 
-    if (!actor.wander) collideWithObjects(state, actor, lastContacts); // the Dummies meet the objects in step 4
+    // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
+    const metSomethingNew = collideWithObjects(state, actor, lastContacts);
+    if (metSomethingNew && actor.wander) turnDummy(state, actor);
   }
 
   // 3. Cells: the cells every actor covers now (see "The cells of an actor").
   // Every actor must already have "cells" and a radius (it fails loudly if one does not).
   for (const actor of state.actors) setCells(actor, state.grid);
 
-  // 4. The Dummies collide (with objects, the avatar and each other) and turn. The collision reads the cells from
-  // the actors, and writes them again for every Dummy it pushes, so at the end of the step they are still right.
+  // 4. The actors collide with each other (a Dummy with the avatar, and the Dummies among themselves) and the Dummies
+  // turn. The collision reads the cells from the actors, and writes them again for everyone it pushes, so at the end
+  // of the step they are still right.
   collideDummies(state, lastContacts);
 
   state.frame += 1;

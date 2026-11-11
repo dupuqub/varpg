@@ -37,9 +37,6 @@ const makeGame = () => new Function(source + `
     const dummies = state.actors.filter((actor) => actor.wander);
     for (let i = 0; i < dummies.length; i++) {
       const dummy = dummies[i];
-      for (const object of objectsNear(state, dummy)) {
-        touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
-      }
       touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
       for (let j = i + 1; j < dummies.length; j++) {
         touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);

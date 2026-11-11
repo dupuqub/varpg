@@ -1912,9 +1912,6 @@ const EVERY_PAIR = `
     const dummies = state.actors.filter((actor) => actor.wander);
     for (let i = 0; i < dummies.length; i++) {
       const dummy = dummies[i];
-      for (const object of objectsNear(state, dummy)) {
-        touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint);
-      }
       touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
       for (let j = i + 1; j < dummies.length; j++) touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
     }
@@ -2463,4 +2460,39 @@ test("114 a Dummy moves like any actor: born still, it reaches its speed of 2 in
   assert.ok(Math.abs(result.turning[0] - 1.875) < 1e-9, "the turn jumped: " + result.turning[0]); // one frame after turning it has only lost 0.125
   assert.ok(Math.abs(result.turning[15]) < 1e-9, "not stopped after 16 frames: " + result.turning[15]);
   assert.ok(Math.abs(result.turning[31] + 2) < 1e-9 && Math.abs(result.turning[35] + 2) < 1e-9, "not at full speed the other way after 32 frames: " + result.turning[31]);
+});
+
+test("115 one routine for every actor that meets an object: a Shroom bounces a Dummy like it bounces the avatar (0.2 of the speed going in comes back) and a rock makes it slide (the part going in is removed, the part along is kept); nobody is hurt and the Dummy turns", () => {
+  const result = run(`
+    ${ALONE}
+    // Head on into the Shroom of seed 1 at 136,-375 (radius 16, bounce 0.2), walking down at 2.
+    const s = alone(0);
+    const d = s.actors[1];
+    face(d, 90);
+    d.position.x = 136; d.position.y = -375 - 16 - d.radius - 1;
+    step(s, { move: { x: 0, y: 0 } });
+    const shroom = { vx: d.move.velocity.x, vy: d.move.velocity.y, turns: d.wander.turns, health: d.health.now, damaged: JSON.stringify(s.damagedObjects),
+      gap: Math.hypot(d.position.x - 136, d.position.y + 375) - (16 + d.radius), contacts: s.contacts.slice() };
+
+    // Off center into the rock at ${ROCK.x},${ROCK.y} (radius ${ROCK.radius}, no bounce), walking down at 2.
+    const t = alone(0);
+    const e = t.actors[1];
+    face(e, 90);
+    e.position.x = ${ROCK.x} + 20;
+    e.position.y = ${ROCK.y} - Math.sqrt((${ROCK.radius} + e.radius) ** 2 - 20 * 20) - 1; // 1 px above the point where it touches
+    step(t, { move: { x: 0, y: 0 } });
+    const nx = (e.position.x - ${ROCK.x}) / (${ROCK.radius} + e.radius);
+    const ny = (e.position.y - ${ROCK.y}) / (${ROCK.radius} + e.radius);
+    const into = e.move.velocity.x * nx + e.move.velocity.y * ny; // what is left of the speed going into the rock
+    const along = Math.hypot(e.move.velocity.x - into * nx, e.move.velocity.y - into * ny);
+    const alongBefore = Math.abs(2 * nx); // a velocity of (0, 2): its part along the surface is 2 x |nx|
+    return { shroom, rock: { into, along, alongBefore, turns: e.wander.turns, health: e.health.now, damaged: JSON.stringify(t.damagedObjects) } };
+  `, WITH_DUMMIES);
+  assert.ok(Math.abs(result.shroom.vx) < 1e-9 && Math.abs(result.shroom.vy + 0.4) < 1e-9, "the Shroom did not bounce the Dummy back at 0.2 x 2: " + result.shroom.vx + ", " + result.shroom.vy);
+  assert.ok(Math.abs(result.shroom.gap) < 1e-9);
+  assert.deepStrictEqual([result.shroom.turns, result.shroom.health, result.shroom.damaged], [1, 100, "{}"]);
+  assert.deepStrictEqual(plain(result.shroom.contacts), ["dummy_0|shroom small:0,-2"]);
+  assert.ok(Math.abs(result.rock.into) < 1e-9, "the rock left a speed going in, or bounced: " + result.rock.into);
+  assert.ok(Math.abs(result.rock.along - result.rock.alongBefore) < 1e-9, "the part along the rock changed: " + result.rock.along + " vs " + result.rock.alongBefore);
+  assert.deepStrictEqual([result.rock.turns, result.rock.health, result.rock.damaged], [1, 100, "{}"]);
 });

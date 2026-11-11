@@ -206,6 +206,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 112 | Every test of `sim.test.js` has exactly one row in this table and every row has its test; no number is used twice. | The table is how the user reads the tests; a test without a row, or a row whose test is gone, is a silent drift. |
 | 113 | `src/sim.js` and `src/history.js` contain no `Math.random`, no trigonometry, powers, exponentials or logarithms of the browser, no `**`, no `Date` and no `performance` (comments aside). | Reproducibility: those can differ between browsers or between runs. The rules use only + - x / and `Math.sqrt`, `Math.imul`, `Math.floor`, and our own sine series. |
 | 114 | A Dummy born still and pointed to the right gains 0.125 px/frame every frame, is at 1 after 8 frames and at its speed of 2 after 16, with no sideways drift. Turned around, it does not jump: one frame later it is at 1.875, after 16 frames it is stopped, after 32 it walks at 2 the other way. | The user's decision: every actor that moves has an acceleration and a deceleration in its recipe, and its velocity is calculated like anyone's. A turn is a curve. |
+| 115 | A Dummy walking down at 2 head on into the Shroom of seed 1 (bounce 0.2) leaves it at 0.4 upward, just touching; off center into the rock (no bounce) the part of its velocity going into the rock is gone and the part along the surface is unchanged, so it slides. In both the Dummy keeps its 100, the object is not hurt, and the Dummy turns once. | The user's rule: a Shroom bounces everyone, it only does not hurt everyone. One routine, `collideWithObjects`, for every actor that meets an object. |
 
 ### Benchmark of the grid (not a test)
 
@@ -216,7 +217,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 
 ## Known answers in the browser
 
-The SIMULATION CHECK of Chamber 2 plays a scripted run of the real game (the Dummies included) twice and prints the final position of the avatar. On the agent's Chromium it is `x=94.33272002620532, y=207.3281661196866`, with the cross-check `none`. It changes whenever a rule or a value changes (the last change: the Dummies move with inertia), so compare it with the value of the commit being checked, not with an old one.
+The SIMULATION CHECK of Chamber 2 plays a scripted run of the real game (the Dummies included) twice and prints the final position of the avatar. On the agent's Chromium it is `x=94.85277763889981, y=201.26268181996477`, with the cross-check `none`. It changes whenever a rule or a value changes (the last change: the Dummies meet the objects by the same routine as the avatar), so compare it with the value of the commit being checked, not with an old one.
 
 ## Cost of the layers
 
