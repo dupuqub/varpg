@@ -4,15 +4,15 @@
 
 const AVATAR_ID = "avatar_1";
 
-// The fixed values of a thing (an actor or an object) live in DEFINITIONS (src/data.js). The thing only
-// keeps its type, and what changes.
+// The recipe of a thing (an actor or an object) lives in DEFINITIONS (src/data.js). A thing points to it by type;
+// its own values are made from the recipe when it is created (finalizeObject), and the code reads them from the thing.
 function definitionOf(thing) {
   const definition = findDefinition(thing.type);
   if (!definition) throw new Error("Unknown type: " + thing.type);
   return definition;
 }
 
-// A type is an actor (DEFINITIONS.actors: the avatar) or an object (DEFINITIONS.objects: the rock and the Shroom).
+// A type is an actor (DEFINITIONS.actors: the avatar and the Dummy) or an object (DEFINITIONS.objects: the rock and the Shroom).
 function findDefinition(type) {
   return DEFINITIONS.actors[type] ?? DEFINITIONS.objects[type];
 }
@@ -860,8 +860,8 @@ function createRun(id) {
   return { id, blueprint };
 }
 
-// Initial state of Chamber 1: the avatar at the center of the world, with the full health of
-// its blueprint. Everything else is an object, and objects come from the seed, not from the state.
+// Initial state of Chamber 1: the avatar at the center of the world, with the full health of its blueprint, and the
+// Dummies born around it. The objects come from the seed and are not in the state.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
@@ -878,7 +878,7 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     // It must be a whole number.
     seed,
 
-    // The objects that were hurt: "squareX,squareY" -> current health (see "Objects that are hurt").
+    // The objects that were hurt: "layer:squareX,squareY" -> current health (see "Objects that are hurt").
     // Empty at the start: every object has its full health, which comes from the seed.
     damagedObjects: {},
 
@@ -975,7 +975,7 @@ function step(state, input, blueprint) {
     // slowing down starts in the next frame.
     let dashed = false;
     if (actor.dash) {
-      const wantsDash = actor.id === AVATAR_ID && input.dash === true;
+      const wantsDash = isAvatar(actor) && input.dash === true;
       dashed = updateDash(actor, wantsDash, blueprint);
     }
 

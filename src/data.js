@@ -13,7 +13,7 @@
 //   anchor  = tied to something in the real world
 //   rule    = forced by another number or by a rule of the game
 //   guess   = a placeholder, to be tuned by playing
-// The relations between numbers are collected in AGENTS.md ("Numbers and why").
+// The relations between numbers are collected in AGENTS.md ("Where the numbers are", "Relations").
 // Every weight is a whole number of kg, 0 or more: the weight of a part, and for an object its "size"
 // ({ min, max }: the range of its radius) and its "weightPerRadius", all whole: weight = weightPerRadius x radius,
 // so it is whole by construction. src/sim.js checks it when it loads. A weight of 0 means harmless and easy to
@@ -53,7 +53,7 @@ const DEFINITIONS = {
     },
 
     // The Dummy (the user's idea, a test actor): it does not attack, it only walks in a straight line and, at every
-    // collision, picks a new random angle (see createDummies and collideWanderers in src/sim.js). Like an object, it is
+    // collision, picks a new random angle (see createDummies and collideDummies in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
     // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
     // weightPerRadius: guess, the same number as the objects', written here on their own. The weight is the attack of
@@ -84,8 +84,8 @@ const DEFINITIONS = {
   // ranges: the seed rolls one value inside each range for every object it places (see objectInSquare in
   // src/sim.js), so no object has a fixed number. An object is not stored in the state until it is hurt.
   // size ({ min, max }, the radius range in pixels) and weightPerRadius: weight = weightPerRadius x radius, the
-  //   radius and not the area, all whole numbers, so nothing is rounded. The weight is computed from the radius
-  //   (never stored). A heavier thing hits harder (body slam: attack = weight x 0.001 x impact / 6).
+  //   radius and not the area, all whole numbers, so nothing is rounded. The weight is computed from the radius when
+  //   the object is made, and the object carries it. A heavier thing hits harder (body slam: attack = weight x 0.001 x impact / 6).
   // healthRange ({ min, max }): the health, a whole number rolled from the seed. The object breaks at 0.
   // bounce (how much of the speed of whoever hits it comes back, 0 = none, 1 = all) exists only on the Shroom for
   //   now (the user's decision). It is never above 1, or the thing would eject whoever hits it, like a spring (the
