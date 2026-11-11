@@ -334,6 +334,14 @@ What changed last, and what to keep in mind when picking the work up. Remove or 
 - The Dummies (see "The Dummy"), their damage, the stress setting (count and size are in `src/data.js`), the fps counter.
 - The collision grid is in use between Dummies and between a Dummy and the avatar, with **several cells per actor** (`actor.cells`, see "Collision grid"). The earlier design (one cell per actor, looking at the neighbor cells) and its rule of a minimum cell size are gone; so are the `dash` and `pair` scenarios of the benchmark, which only measured that rule.
 
+- The ground is made of **layers** (see "The world: seed and objects"). Only one layer is in the definitions; a huge layer exists only in the tests (102 to 105) and in `tests/agent/benchmark-layers.js`, where it roughly doubles the cost of a step. Nothing huge exists in the game yet.
+
+**Decided by the user on the night of 2026-11-10, NOT implemented yet (the next agent's job; one commit each, tests first, in this order)**
+
+1. **Actors are not hurt; they only hurt the avatar.** Today the Dummies hurt and are hurt (see "The Dummy"), by the avatar, by objects and by each other. The tests about the damage of Dummies (see the README) will change. One thing the user did not say, to ask him before touching it: whether an actor still hurts the **objects** it touches, and whether the avatar still hurts actors.
+2. **How an actor is born.** Off screen, inside the window of the grid, and **no search for a free place**: if it lands on something, the push that already separates overlapping things resolves it (the same rule as a wrap), and an object in the way is removed (rule 3). The position comes from `(seed, entry)`, so a run is reproducible. Birth order: the things of the seed first, the moving actors after. The array of each stage (which actors, when, how many) is not designed yet: ask the user before inventing its shape. The band between the screen and the edge of the window always exists, because of test 101.
+3. **A behavior of the actor, `crushes`, a field of the recipe that any actor may have (the first users will be the giants, but it is not theirs).** An actor that crushes breaks every object it touches: the object **vanishes** (it is marked as broken in `damagedObjects`, exactly as an object that reaches zero health; no new state, the user chose this on purpose over flinging it), the actor takes no damage, is not pushed or bounced, and keeps going. It must appear in the audit as a rule, not as a huge damage in disguise. Cost to know: every broken object adds an entry to the state, so a crusher that crosses much ground grows `damagedObjects`.
+
 **Properties to keep (tests guard them)**
 
 - The grid gives exactly the state of testing every pair in list order (tests 95 and 98 compare the whole state; 99 builds the case of a Dummy pushed into a third one). If a change breaks that, it changed a rule, not only the speed: stop and tell the user.
@@ -348,6 +356,8 @@ What changed last, and what to keep in mind when picking the work up. Remove or 
 - `isInWindow` is called by nothing in the game (only by tests). By the user's rule that what is not used dies, it is a candidate to remove; it was left because the invariant "every actor is inside the window" is still planned.
 
 **Mistakes made in this stretch, so they are not repeated**
+
+- The user said "let's try it, so I can see the feeling" and the agent started to build, when he only wanted the idea considered. When he says "try" or "see", say what would be built and confirm in one line before building; when he says he needs the implementation, build it.
 
 - A patch of the data by `text.replace` stopped matching after the data changed, silently, and every test played with the full number of Dummies. `withDummies` now fails loudly; the other patches passed to `loadGame` still do not check that they matched. Check the match when writing a new one.
 - An edit of `tests/agent/README.md` replaced a heading by accident. Read the diff of the docs before committing.
