@@ -2407,3 +2407,23 @@ test("111 the helpers refuse a patch of the data that changes nothing, so a test
   assert.strictEqual(patchOnce("abc", "b", "y"), "ayc");
   assert.doesNotThrow(() => loadGame()); // no patch: the real game
 });
+
+test("112 every test has one row in tests/agent/README.md and every row has its test (the numbers are unique)", () => {
+  const here = (name) => fs.readFileSync(path.join(__dirname, name), "utf8");
+  const tests = [...here("sim.test.js").matchAll(/^test\("(\d+) /gm)].map((match) => Number(match[1]));
+  const rows = [...here("README.md").matchAll(/^\| (\d+) \|/gm)].map((match) => Number(match[1]));
+  assert.deepStrictEqual(tests.filter((number, index) => tests.indexOf(number) !== index), [], "two tests with the same number");
+  assert.deepStrictEqual(rows.filter((number, index) => rows.indexOf(number) !== index), [], "two rows with the same number");
+  assert.deepStrictEqual(tests.filter((number) => !rows.includes(number)), [], "tests without a row in the README");
+  assert.deepStrictEqual(rows.filter((number) => !tests.includes(number)), [], "rows of the README without a test");
+});
+
+test("113 the rules use nothing that can differ between machines or runs: no Math.random, no trigonometry or powers of the browser, no clock (src/sim.js and src/history.js, comments aside)", () => {
+  const forbidden = /Math\.(random|sin|cos|tan|asin|acos|atan|atan2|pow|exp|log|log2|log10|sinh|cosh|tanh|cbrt|hypot)\b|\bDate\b|\bperformance\b|\*\*/;
+  for (const name of ["sim.js", "history.js"]) {
+    const code = readSource(name).split("\n").map((line) => line.replace(/\/\/.*$/, "")); // the comments may name them
+    const found = code.map((line, index) => (forbidden.test(line) ? name + ":" + (index + 1) + " " + line.trim() : null)).filter(Boolean);
+    assert.deepStrictEqual(found, []);
+  }
+  assert.ok(forbidden.test("x = Math.sin(1)") && forbidden.test("Date.now()") && forbidden.test("a ** 2") && !forbidden.test("Math.sqrt(2) + Math.imul(3, 4) + Math.floor(1.5)"));
+});
