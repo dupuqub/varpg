@@ -1583,7 +1583,7 @@ test("82 without a collision a Dummy walks in a straight line at its own speed, 
   assert.ok(Math.abs(result.speed - 2) < 1e-9);
 });
 
-test("83 at a collision with an object the Dummy hurts it and is hurt by it, is pushed out and picks a new angle from the seed: hash(seed, number, turns) % 360", () => {
+test("83 at a collision with an object the Dummy is pushed out and picks a new angle from the seed, hash(seed, number, turns) % 360, and nobody is hurt (the body slam only hurts against the avatar)", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0);
@@ -1604,10 +1604,10 @@ test("83 at a collision with an object the Dummy hurts it and is hurt by it, is 
   assert.strictEqual(result.turns, 1);
   assert.strictEqual(result.angle, result.expected);
   assert.ok(result.gap > -1e-9, "the Dummy is still inside the rock: " + result.gap);
-  // The impact is the speed of the Dummy toward the rock (2). The Dummy weighs 1600 to 3200 kg and the rock 2800 kg, so
-  // both attacks are below 2 and the minimum damage of 1 applies to both.
-  assert.strictEqual(result.damaged, JSON.stringify({ [ROCK_KEY]: ROCK_HEALTH - 1 }));
-  assert.strictEqual(result.health, 99);
+  // The impact is the speed of the Dummy toward the rock (2), enough for a collision, but a Dummy against an object is not
+  // a pair that hurts (the user's rule: only against the avatar), so the rock keeps its health and so does the Dummy.
+  assert.strictEqual(result.damaged, "{}");
+  assert.strictEqual(result.health, 100);
   assert.ok(Math.abs(result.length - 1) < 1e-9);
 });
 
@@ -1658,7 +1658,7 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
   assert.deepStrictEqual(plain(result.contacts), ["dummy_0|avatar_1", "dummy_0|avatar_1"]);
 });
 
-test("86 two Dummies that collide hurt each other with their own weight, are pushed half way each and both pick a new angle", () => {
+test("86 two Dummies that collide are pushed half way each and both pick a new angle, and neither is hurt", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0, 1);
@@ -1674,11 +1674,10 @@ test("86 two Dummies that collide hurt each other with their own weight, are pus
       middle: (a.position.x + b.position.x) / 2 - middle,
       contacts: s.contacts,
       health: [a.health.now, b.health.now],
-      expected: [100 - Math.max(1, b.weight * 0.001 * 4 / 6), 100 - Math.max(1, a.weight * 0.001 * 4 / 6)], // they close in at 2 + 2 = 4
     };
   `, EMPTY);
   assert.deepStrictEqual(plain(result.turns), [1, 1]);
-  assert.ok(Math.abs(result.health[0] - result.expected[0]) < 1e-9 && Math.abs(result.health[1] - result.expected[1]) < 1e-9, "health " + result.health + " is not " + result.expected);
+  assert.deepStrictEqual(plain(result.health), [100, 100]); // they close in at 2 + 2 = 4, a collision, but two Dummies never hurt each other
   assert.ok(Math.abs(result.gap) < 1e-9, "not just touching: " + result.gap);
   assert.ok(Math.abs(result.middle) < 1e-9, "the pair moved as a whole: " + result.middle); // each moved the same amount
   assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1"]);
@@ -1759,12 +1758,18 @@ test("89 the sine and cosine of whole degrees (own series, no Math.sin): unit le
   [1, 0.5, 0, -1, 0].forEach((expected, i) => near(result.cos[i], expected));
 });
 
-test("90 after 600 frames of play every Dummy is still inside the window around the avatar, the Dummies did collide and hurt each other, nobody has less than 0, and the state is still plain JSON", () => {
+test("90 after 600 frames of play every Dummy is still inside the window around the avatar, the Dummies did collide, only what touched the avatar was hurt, nobody has less than 0, and the state is still plain JSON", () => {
   const result = run(`
     const s = createChamber1State(1, 1);
     let outside = 0;
+    const touchedAvatar = new Set(); // the ids of the Dummies and the keys of the objects that were ever in contact with the avatar
     for (let frame = 0; frame < 600; frame++) {
       step(s, { move: { x: 1, y: 0 } });
+      for (const contact of s.contacts) {
+        const [a, b] = contact.split("|");
+        if (a === AVATAR_ID) touchedAvatar.add(b.split(" ")[1]);
+        if (b === AVATAR_ID) touchedAvatar.add(a);
+      }
       if (frame % 100 === 99) {
         const width = s.grid.windowWidth * s.grid.cellSize;
         const height = s.grid.windowHeight * s.grid.cellSize;
@@ -1777,17 +1782,21 @@ test("90 after 600 frames of play every Dummy is still inside the window around 
       }
     }
     const dummies = s.actors.filter((actor) => actor.wander);
+    const hurtDummies = dummies.filter((d) => d.health.now < 100).map((d) => d.id);
+    const hurtObjects = Object.keys(s.damagedObjects);
     return {
       outside,
       turns: dummies.reduce((sum, d) => sum + d.wander.turns, 0),
-      hurt: dummies.filter((d) => d.health.now < 100).length,
+      hurt: hurtDummies.length + hurtObjects.length,
+      hurtWithoutAvatar: [...hurtDummies, ...hurtObjects].filter((id) => !touchedAvatar.has(id)),
       fine: dummies.every((d) => d.health.now >= 0 && Number.isFinite(d.health.now)),
       json: JSON.stringify(s),
     };
   `, WITH_DUMMIES);
   assert.strictEqual(result.outside, 0);
   assert.ok(result.turns > 20, "the Dummies hardly collided: " + result.turns);
-  assert.ok(result.hurt > 10, "the Dummies hardly hurt each other: " + result.hurt);
+  assert.ok(result.hurt > 0, "nothing was hurt, so the rule was not exercised");
+  assert.deepStrictEqual(plain(result.hurtWithoutAvatar), []); // the body slam hurts only against the avatar
   assert.ok(result.fine);
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });
@@ -1843,25 +1852,24 @@ test("93 a contact below the minimum impact (two Dummies side by side at the sam
   assert.deepStrictEqual(plain(result.health), [100, 100]);
 });
 
-test("94 a Dummy that breaks an object in the hit is still hurt by it, but is not pushed and does not turn, and goes through", () => {
+test("94 a Dummy cannot break an object: a rock with 1 health left keeps it, and the Dummy is pushed out and turns like at any contact", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0);
     const d = s.actors[1];
     face(d, 90); // down, toward the rock at ${ROCK.x},${ROCK.y}
     d.position.x = ${ROCK.x}; d.position.y = ${ROCK.y} - ${ROCK.radius} - d.radius - 30;
-    s.damagedObjects["${ROCK.key}"] = 1; // one more hit breaks it
+    s.damagedObjects["${ROCK.key}"] = 1; // one hit of the avatar would break it
     let frames = 0;
-    while (s.damagedObjects["${ROCK.key}"] !== 0 && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
-    const atBreak = { turns: d.wander.turns, health: d.health.now, y: d.position.y, angle: d.wander.angle };
-    for (let i = 0; i < 40; i++) step(s, { move: { x: 0, y: 0 } });
-    return { atBreak, later: { turns: d.wander.turns, y: d.position.y }, rock: s.damagedObjects["${ROCK.key}"], startAngle: 90 };
+    while (d.wander.turns === 0 && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
+    const gap = Math.hypot(d.position.x - ${ROCK.x}, d.position.y - ${ROCK.y}) - (d.radius + ${ROCK.radius});
+    return { turns: d.wander.turns, health: d.health.now, rock: s.damagedObjects["${ROCK.key}"], gap, hitRock: s.contacts.includes("dummy_0|rock ${ROCK.key}") };
   `, WITH_DUMMIES);
-  assert.strictEqual(result.rock, 0);
-  assert.deepStrictEqual([result.atBreak.turns, result.atBreak.angle], [0, 90]); // no turn, same angle
-  assert.strictEqual(result.atBreak.health, 99); // the rock still hit back, with the minimum damage
-  assert.deepStrictEqual([result.later.turns], [0]); // it kept walking through the broken rock
-  assert.ok(result.later.y > result.atBreak.y + 70, "the Dummy did not go through: " + result.atBreak.y + " -> " + result.later.y);
+  assert.ok(result.hitRock, "the first collision was not with the rock");
+  assert.strictEqual(result.rock, 1); // still 1: a Dummy does not hurt an object
+  assert.strictEqual(result.health, 100); // and the object does not hurt a Dummy
+  assert.strictEqual(result.turns, 1);
+  assert.ok(result.gap > -1e-9, "the Dummy is still inside the rock: " + result.gap);
 });
 
 // The old way, kept here as the reference: every Dummy against every object near it, the avatar, and every Dummy after

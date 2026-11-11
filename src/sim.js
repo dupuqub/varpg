@@ -260,6 +260,14 @@ function damageOf(attacker, hit, target, blueprint) {
   return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, blueprint));
 }
 
+// Whether a collision between two things is a hit at all (the user's rule, 2026-11-10): the body slam hurts only where
+// the avatar is one of the two sides, in both directions. The avatar hurts actors and objects, and actors and objects
+// hurt the avatar; an actor against an object, an object against an actor, or two actors, hurt nobody. The weight of
+// the mecha is the center of the damage of contact, and nothing else fights by itself (the weapons will, later).
+function bodySlamHurts(a, b) {
+  return isAvatar(a) || isAvatar(b);
+}
+
 // Takes damage off the health. Health stops at 0 (there is no death yet).
 function applyDamage(actor, damage) {
   actor.health.now = Math.max(0, actor.health.now - damage);
@@ -468,11 +476,12 @@ function objectsNear(state, actor) {
 // Pushes an actor out of the objects it overlaps, hurts both sides, and changes its velocity.
 // For each object that overlaps (circle against circle):
 // 1. The "normal" is the direction from the object to the actor (a unit vector).
-// 2. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the last frame, that is a hit, and its impact is the speed
-//    going INTO the object (along the normal). Each side hurts the other with its own
-//    weight (damageOf, the body slam): the actor takes the damage of the object, and the
-//    object takes the damage of the actor. An object keeps its health in state.damagedObjects.
-//    An object that breaks has no collision: nothing is pushed, and the actor keeps its speed and goes on.
+// 2. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
+//    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
+//    pair is one that hurts (bodySlamHurts: the avatar is one side), each side hurts the other with its own weight
+//    (damageOf, the body slam): the actor takes the damage of the object, and the object takes the damage of the
+//    actor. An object keeps its health in state.damagedObjects. An object that breaks has no collision: nothing is
+//    pushed, and the actor keeps its speed and goes on.
 // 3. The actor is moved along the normal until it just touches the object.
 // 4. The velocity is split in two: the part that goes INTO the object (along the
 //    normal) and the part that goes ALONG it. The part going in is replaced by
@@ -507,7 +516,7 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
     // A collision needs an impact of at least collision.minImpact; below it nothing triggers.
     const collides = goingIn < 0 && -goingIn >= DEFINITIONS.constants.collision.minImpact;
 
-    if (collides && isNewContact) {
+    if (collides && isNewContact && bodySlamHurts(actor, object)) {
       const hit = { impact: -goingIn };
       applyDamage(actor, damageOf(object, hit, actor, blueprint));
       if (damageObject(state, object, damageOf(actor, hit, object, blueprint))) continue; // the object broke: no collision
@@ -647,11 +656,13 @@ function moveDummy(state, dummy, player) {
 }
 
 // What happens when a Dummy touches one thing (an object, the avatar or another Dummy). If they overlap:
-// 1. If this is a NEW contact (the pair was not touching in the last frame) and the speed at which they close in on
-//    each other (the impact: the part of the difference of their velocities along the line between the centers) is at
-//    least collision.minImpact, it is a hit: the same body slam as the avatar's (damageOf), and BOTH sides hurt the
-//    other with their own weight. An object that breaks in the hit has no collision: nothing is pushed and the Dummy
-//    keeps its angle and goes on.
+// 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
+//    only against the avatar) and the speed at which they close in on each other (the impact: the part of the
+//    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
+//    the same body slam as the avatar's (damageOf), and BOTH sides hurt the other with their own weight. Against an
+//    object or another Dummy nobody is hurt, so a Dummy never breaks an object (an object that broke in a hit would
+//    have no collision: nothing pushed, the Dummy keeping its angle; that is written here for the day an actor other
+//    than the avatar hurts objects).
 // 2. The Dummy is pushed out along the line until they just touch (two Dummies are pushed half each; the avatar and
 //    the objects are not pushed).
 // 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
@@ -672,7 +683,7 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
   const normalX = distance === 0 ? 1 : dx / distance;
   const normalY = distance === 0 ? 0 : dy / distance;
 
-  if (isNewContact) {
+  if (isNewContact && bodySlamHurts(dummy, other)) {
     const otherVelocity = other.move ? other.move.velocity : { x: 0, y: 0 }; // an object does not move
     const closing = -((dummy.move.velocity.x - otherVelocity.x) * normalX + (dummy.move.velocity.y - otherVelocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
