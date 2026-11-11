@@ -1458,7 +1458,7 @@ test("77 a bounce above 1 (it would eject, like a spring), a health range that i
   assert.throws(() => loadGame((text) => text.replace(rockHealth, "healthRange: { min: 0, max: 20 }")), /healthRange of the object rock/);
   assert.throws(() => loadGame((text) => text.replace(rockHealth, "healthRange: { min: 10.5, max: 20 }")), /healthRange of the object rock/);
   assert.throws(() => loadGame((text) => text.replace(rockHealth, "healthRange: { min: 30, max: 20 }")), /healthRange of the object rock/);
-  assert.throws(() => loadGame((text) => text.replace('name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,', 'name: "Rock",\n      weightPerRadius: 100,')), /needs a size/);
+  assert.throws(() => loadGame((text) => text.replace('name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,', 'name: "Rock",\n      weightPerRadius: 100,')), /size of the object rock is missing/);
 });
 
 
@@ -1842,8 +1842,8 @@ test("91 a run with 100 Dummies is reproducible: the same inputs give the same s
 
 test("92 the speed of a Dummy comes from its recipe through finalSpeed (and a thing without a speed has 0); a speed that is not above 0 stops the game when it loads", () => {
   const patch = (speed) => (text) => text.replace("      speed: 2,\n", "      speed: " + speed + ",\n");
-  assert.throws(() => loadGame(patch(0)), /speed of the object dummy.*0/);
-  assert.throws(() => loadGame(patch(-1)), /speed of the object dummy/);
+  assert.throws(() => loadGame(patch(0)), /speed of the actor dummy.*0/);
+  assert.throws(() => loadGame(patch(-1)), /speed of the actor dummy/);
   const fast = loadGame(patch(3));
   const result = run(`
     const s = createChamber1State(1, 1);

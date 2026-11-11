@@ -109,9 +109,10 @@ function assertValidBlueprint(blueprint) {
 //   enough for its largest radius (see objectMargin): a layer where an object would not fit in its square cannot be
 //   made in the first place. Two layers cannot have the same square size, because the larger one wins an overlap.
 function assertValidDefinitions() {
+  // The things made by the seed from ranges: every object, and the Dummy (an actor made the same way).
   for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy })) {
-    const where = "the object " + id;
-    if (!object.size) throw new Error("The object " + id + " needs a size: { min, max }, the range of its radius");
+    const where = (DEFINITIONS.objects[id] ? "the object " : "the actor ") + id;
+    if (!object.size) throw new Error("The size of " + where + " is missing: { min, max }, the range of its radius");
     const { min, max } = object.size;
     if (!(Number.isInteger(object.weightPerRadius) && object.weightPerRadius >= 0)) {
       throw new Error("The weight of " + where + " (weightPerRadius) must be a whole number of kg, 0 or more, and it is " + object.weightPerRadius);
