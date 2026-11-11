@@ -1470,26 +1470,26 @@ test("78 the rock and the Shroom share nothing: changing the size of one in the 
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
 
-test("79 every final value is calculated again every frame and stored in the actor: the actor carries them all, and a blueprint that changes in the middle of a run reaches the speed, the weight, the defense, the maximum health and the dash in the next step", () => {
+test("79 every final value is stored in the actor; the static ones are calculated once, when the actor is made, and the dynamic ones (top speed, defense, dash speed) again every frame: a blueprint that changes in the middle of a run reaches only the dynamic ones", () => {
   const result = withBlueprints(`
     const s = createChamber1State(1, 1, full);
     const player = s.actors[0];
-    const carried = () => ({ radius: player.radius, weight: player.weight, bounce: player.bounce, defense: player.defense, speed: player.speed,
-      acceleration: player.acceleration, deceleration: player.deceleration, health: { ...player.health },
-      dash: { speed: player.dash.speed, rechargeFrames: player.dash.rechargeFrames, charges: { ...player.dash.charges } } });
+    const carried = () => ({ radius: player.radius, weight: player.weight, bounce: player.bounce, acceleration: player.acceleration, deceleration: player.deceleration,
+      health: { ...player.health }, rechargeFrames: player.dash.rechargeFrames, charges: { ...player.dash.charges },
+      speed: player.speed, defense: player.defense, dashSpeed: player.dash.speed });
     const atBirth = carried();
     step(s, { move: { x: 0, y: 0 } }, full);
     const afterStep = carried();
-    // The run goes on with another blueprint: no Legs (they gave speed 3.5, health 30, defense 1 and weighed 1300 kg) and no Booster.
+    // The run goes on with another blueprint: no Legs (they gave speed 3.5 and defense 1, and weighed 1300 kg) and no Booster.
     const light = { parts: full.parts.filter((id) => id !== "legs" && id !== "booster") };
     step(s, { move: { x: 0, y: 0 } }, light);
     return { atBirth, afterStep, changed: carried() };
   `);
-  const full = { radius: 16, weight: 5000, bounce: 0, defense: 3, speed: 3, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, dash: { speed: 12, rechargeFrames: 240, charges: { now: 1, max: 1 } } };
-  assert.deepStrictEqual(plain(result.atBirth), full);
-  assert.deepStrictEqual(plain(result.afterStep), full);
-  // Without the Legs and the Booster: 3500 kg, speed 0.5 - 3500 x 0.0002 = -0.2, so 0; defense 2; health 70 (and the 100 it had comes down to 70); no dash.
-  assert.deepStrictEqual(plain(result.changed), { radius: 16, weight: 3500, bounce: 0, defense: 2, speed: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 70, max: 70 }, dash: { speed: 0, rechargeFrames: 0, charges: { now: 0, max: 0 } } });
+  const staticValues = { radius: 16, weight: 5000, bounce: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, rechargeFrames: 240, charges: { now: 1, max: 1 } };
+  assert.deepStrictEqual(plain(result.atBirth), { ...staticValues, speed: 3, defense: 3, dashSpeed: 12 });
+  assert.deepStrictEqual(plain(result.afterStep), { ...staticValues, speed: 3, defense: 3, dashSpeed: 12 });
+  // The dynamic ones follow: speed 0.5 - 3500 x 0.0002 = -0.2, so 0; defense 2; no dash speed. The static ones stay as they were made.
+  assert.deepStrictEqual(plain(result.changed), { ...staticValues, speed: 0, defense: 2, dashSpeed: 0 });
 });
 
 // ---- The Dummies ----

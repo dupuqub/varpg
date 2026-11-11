@@ -38,37 +38,43 @@ function finalizeObject(type, rolls, blueprint, id) {
   return object;
 }
 
-// Calculates every final value of an actor and writes it into the actor (the user's rule, 2026-11-11: everything
-// that is calculated is stored in its actor; it is calculated again every frame, and the rest of the code reads the
-// actor, so the state is rich and a snap holds what was true in that frame). It runs when the actor is made and at
-// the start of every step, for every actor, so anything that changes what a value comes from (the blueprint today;
-// an effect later) reaches every rule that reads the value, in the same frame.
-// What an actor has "now" follows a maximum that went down: health and dash charges never stay above their maximum.
-function finalizeActor(actor, blueprint) {
+// The final values of an actor are calculated and written into the actor, and the rest of the code reads the actor
+// (the user's rule, 2026-11-11: everything that is calculated is stored in its actor). When each one is calculated
+// depends on what it is (his rule too):
+// - what is STATIC is calculated once, when the actor is made, at the start of the run (finalizeStatic);
+// - what is DYNAMIC is calculated again every frame (finalizeDynamic), at the start of step.
+// Which is which is a list, here. A value moves from one list to the other the day something makes it change during
+// a run.
+
+// The static values: radius, weight, bounce, acceleration, deceleration, the maximum health, and for an actor with a
+// dash its recharge time and its maximum of charges.
+function finalizeStatic(actor, blueprint) {
   actor.radius = finalRadius(actor, blueprint);
   actor.weight = finalWeight(actor, blueprint);
   actor.bounce = finalBounce(actor, blueprint);
-  actor.defense = finalDefense(actor, blueprint);
-  actor.speed = finalSpeed(actor, blueprint);
   actor.acceleration = finalAcceleration(actor, blueprint);
   actor.deceleration = finalDeceleration(actor, blueprint);
   actor.health.max = finalMaxHealth(actor, blueprint);
-  actor.health.now = Math.min(actor.health.now, actor.health.max);
   if (actor.dash) {
-    actor.dash.speed = finalDashSpeed(actor, blueprint);
     actor.dash.rechargeFrames = finalDashRechargeFrames(actor, blueprint);
     actor.dash.charges.max = finalDashMaxCharges(actor, blueprint);
-    actor.dash.charges.now = Math.min(actor.dash.charges.now, actor.dash.charges.max);
   }
 }
 
-// The avatar of a new run: the object of its type, with every value final (finalizeActor), and its health and
-// its dash charges full.
+// The dynamic values: the top speed, the defense, and for an actor with a dash its speed.
+function finalizeDynamic(actor, blueprint) {
+  actor.speed = finalSpeed(actor, blueprint);
+  actor.defense = finalDefense(actor, blueprint);
+  if (actor.dash) actor.dash.speed = finalDashSpeed(actor, blueprint);
+}
+
+// The avatar of a new run: the object of its type, with every value final, and its health and its dash charges full.
 function createAvatar(blueprint) {
   const avatar = finalizeObject("avatar", {}, blueprint, AVATAR_ID);
   avatar.health = { now: 0, max: 0 };
   avatar.dash.charges = { now: 0, max: 0 };
-  finalizeActor(avatar, blueprint); // writes the maximums
+  finalizeStatic(avatar, blueprint); // writes the maximums
+  finalizeDynamic(avatar, blueprint);
   avatar.health.now = avatar.health.max;
   avatar.dash.charges.now = avatar.dash.charges.max;
   return avatar;
@@ -691,7 +697,8 @@ function createDummies(state) {
     const health = rollInRange(state.seed, index, 0, 14, recipe.healthRange.min, recipe.healthRange.max);
     const angle = hashInts(state.seed, index, 0, 15) % 360;
     const dummy = finalizeObject("dummy", { position, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
-    finalizeActor(dummy);
+    finalizeStatic(dummy);
+    finalizeDynamic(dummy);
     setHeading(dummy);
     state.actors.push(dummy);
   }
@@ -950,8 +957,9 @@ function cellIndex(coordinate, cellSize) {
 function step(state, input, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
-  // 0. Final values: every actor calculates its final values again and carries them for this frame (finalizeActor).
-  for (const actor of state.actors) finalizeActor(actor, blueprint);
+  // 0. The dynamic values: every actor calculates them again and carries them for this frame (finalizeDynamic).
+  // The static ones were calculated when the actor was made.
+  for (const actor of state.actors) finalizeDynamic(actor, blueprint);
 
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
