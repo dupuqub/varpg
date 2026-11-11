@@ -1637,7 +1637,7 @@ test("84 every new angle is rolled from hash(seed, number, turns): the same sequ
   assert.ok(Math.abs(result.length - 1) < 1e-9);
 });
 
-test("85 only a NEW contact turns and hurts: a pair that was touching in the last frame still pushes the Dummy out, but the angle stays and nobody is hurt", () => {
+test("85 only a NEW contact turns and hurts: a pair that was touching in the last frame still pushes the two apart (by weight), but the angle stays and nobody is hurt", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0);
@@ -1652,9 +1652,10 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
     const kept = d.wander.turns;
     const healthKept = [d.health.now, avatar.health.now];
     const gap = Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius);
+    const avatarPushed = avatar.position.x; // the avatar's share of the 5 px overlap: the Dummy's weight over the sum
     overlap();
     touchDummy(s, [], d, avatar, key, blueprint); // new contact: a new angle, and a hit
-    return { kept, healthKept, health: [d.health.now, avatar.health.now], turned: d.wander.turns, gap, avatar: JSON.stringify(avatar.position), contacts: s.contacts };
+    return { kept, healthKept, health: [d.health.now, avatar.health.now], turned: d.wander.turns, gap, avatarPushed, expectedPush: -5 * d.weight / (d.weight + avatar.weight), contacts: s.contacts };
   `, EMPTY);
   assert.strictEqual(result.kept, 0);
   assert.deepStrictEqual(plain(result.healthKept), [100, 100]); // no hit while the pair was already touching
@@ -1662,12 +1663,12 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
   // The new contact is a hit at impact 2: the avatar (5000 kg) hits for 5000 x 0.001 x 2 / 6 = 1.667, the Dummy for less than the
   // avatar's defense (3), so the minimum of 1.
   assert.ok(Math.abs(result.health[0] - (100 - 5000 * 0.001 * 2 / 6)) < 1e-9 && result.health[1] === 99);
-  assert.ok(Math.abs(result.gap) < 1e-9, "the Dummy was not pushed to just touching: " + result.gap);
-  assert.strictEqual(result.avatar, '{"x":0,"y":0}'); // the avatar is never pushed by a Dummy
+  assert.ok(Math.abs(result.gap) < 1e-9, "the pair was not pushed to just touching: " + result.gap);
+  assert.ok(Math.abs(result.avatarPushed - result.expectedPush) < 1e-9, "the avatar moved " + result.avatarPushed + ", not its share " + result.expectedPush);
   assert.deepStrictEqual(plain(result.contacts), ["dummy_0|avatar_1", "dummy_0|avatar_1"]);
 });
 
-test("86 two Dummies that collide are pushed half way each and both pick a new angle, and neither is hurt", () => {
+test("86 two Dummies that collide are pushed apart by weight (the lighter moves more), both pick a new angle, and neither is hurt", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0, 1);
@@ -1675,12 +1676,15 @@ test("86 two Dummies that collide are pushed half way each and both pick a new a
     face(a, 0); face(b, 180); // toward each other
     a.position.x = 600; a.position.y = 0;
     b.position.x = 600 + a.radius + b.radius - 10; b.position.y = 0;
-    const middle = (a.position.x + b.position.x) / 2;
+    const before = { a: a.position.x, b: b.position.x };
     step(s, { move: { x: 0, y: 0 } });
+    // In the step each walked 2 px toward the other, then the push split the overlap (10 + 4) by weight.
+    const movedA = a.position.x - (before.a + 2);
+    const movedB = b.position.x - (before.b - 2);
     return {
       turns: [a.wander.turns, b.wander.turns],
       gap: Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) - (a.radius + b.radius),
-      middle: (a.position.x + b.position.x) / 2 - middle,
+      movedA, movedB, weights: [a.weight, b.weight],
       contacts: s.contacts,
       health: [a.health.now, b.health.now],
     };
@@ -1688,11 +1692,13 @@ test("86 two Dummies that collide are pushed half way each and both pick a new a
   assert.deepStrictEqual(plain(result.turns), [1, 1]);
   assert.deepStrictEqual(plain(result.health), [100, 100]); // they close in at 2 + 2 = 4, a collision, but two Dummies never hurt each other
   assert.ok(Math.abs(result.gap) < 1e-9, "not just touching: " + result.gap);
-  assert.ok(Math.abs(result.middle) < 1e-9, "the pair moved as a whole: " + result.middle); // each moved the same amount
+  const [wa, wb] = result.weights;
+  assert.ok(wa !== wb, "the two Dummies of seed 1 should weigh differently for this test to prove the split");
+  assert.ok(Math.abs(result.movedA / result.movedB + wb / wa) < 1e-9, "the push was not split by weight: " + result.movedA + " and " + result.movedB + " for weights " + wa + " and " + wb); // a moves back by wb/(wa+wb), b by wa/(wa+wb)
   assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1"]);
 });
 
-test("87 a Dummy that bumps into the avatar hurts it and is hurt by it, turns and is pushed out; the avatar is not pushed", () => {
+test("87 a Dummy that bumps into the avatar hurts it and is hurt by it, turns, and the two are pushed apart by weight: the heavy avatar barely moves", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0);
@@ -1700,12 +1706,14 @@ test("87 a Dummy that bumps into the avatar hurts it and is hurt by it, turns an
     face(d, 180);
     d.position.x = avatar.position.x + 16 + d.radius + 1; d.position.y = avatar.position.y;
     step(s, { move: { x: 0, y: 0 } });
-    return { turns: d.wander.turns, gap: Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius), avatar: JSON.stringify(avatar.position), health: avatar.health.now, dummyHealth: d.health.now };
+    // The Dummy walked 2 px into the avatar (1 px gap, so an overlap of 1): the avatar takes weight / (weight + 5000) of it, to the left.
+    return { turns: d.wander.turns, gap: Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius), avatarX: avatar.position.x, expectedX: -1 * d.weight / (d.weight + 5000), health: avatar.health.now, dummyHealth: d.health.now };
   `, EMPTY);
   assert.strictEqual(result.turns, 1);
   assert.ok(Math.abs(result.dummyHealth - (100 - 5000 * 0.001 * 2 / 6)) < 1e-9, "the Dummy health is " + result.dummyHealth); // the avatar hits for 1.667
   assert.ok(Math.abs(result.gap) < 1e-9);
-  assert.strictEqual(result.avatar, '{"x":0,"y":0}');
+  assert.ok(Math.abs(result.avatarX - result.expectedX) < 1e-9, "the avatar moved " + result.avatarX + " and its share is " + result.expectedX);
+  assert.ok(result.avatarX < 0 && result.avatarX > -0.25, "a Dummy of 800 to 1600 kg moves a 5000 kg mecha by less than a quarter of the overlap: " + result.avatarX);
   assert.strictEqual(result.health, 99); // the Dummy's attack is below the defense (3), so the minimum damage of 1
 });
 
@@ -2298,4 +2306,92 @@ test("108 a Dummy that crushes goes through a rock without turning, and the rock
   assert.deepStrictEqual(plain(result.meeting.turns), [1, 1]);
   assert.ok(Math.abs(result.meeting.gap) < 1e-9, "the two Dummies were not pushed to just touching: " + result.meeting.gap);
   assert.deepStrictEqual(plain(result.meeting.contacts), ["dummy_0|dummy_1"]);
+});
+
+// ---- The push between actors ----
+// The user's decision (2026-11-11): the push between two actors is split by weight, the avatar included. The heavy mecha
+// pushes light enemies, and heavy enemies push it.
+
+test("109 the push between actors is split by weight: a giant Dummy (25600 kg) moves the avatar (5000 kg) by 84% of the overlap; two of the same weight move half each; two of weight 0 also move half each", () => {
+  const result = run(`
+    ${ALONE}
+    const blueprint = createRun(1).blueprint;
+    const pushed = (s, a, b) => {
+      a.position.x = 1000; a.position.y = 0; b.position.x = 1000 + a.radius + b.radius - 10; b.position.y = 0; // overlap 10
+      touchDummy(s, ["x"], a, b, "x", blueprint); // an old contact: only the push (no hit, no turn)
+      return { a: a.position.x - 1000, b: b.position.x - (1000 + a.radius + b.radius - 10), gap: (b.position.x - a.position.x) - (a.radius + b.radius) };
+    };
+    const s = alone(0, 1);
+    const [avatar, d, e] = s.actors;
+    d.radius = 256; d.weight = finalWeight(d); // a giant: 100 x 256 = 25600 kg
+    const giant = pushed(s, d, avatar);
+    e.radius = d.radius; e.weight = d.weight; // the same weight as the giant
+    const equal = pushed(s, d, e);
+    return { giant: { ...giant, share: 5000 / (25600 + 5000), giantWeight: d.weight, avatarWeight: avatar.weight }, equal };
+  `, EMPTY);
+  assert.strictEqual(result.giant.giantWeight, 25600);
+  assert.strictEqual(result.giant.avatarWeight, 5000);
+  assert.ok(Math.abs(result.giant.a - (-10 * result.giant.share)) < 1e-9, "the giant moved " + result.giant.a); // the giant takes 5000 / 30600 = 16%
+  assert.ok(Math.abs(result.giant.b - 10 * (1 - result.giant.share)) < 1e-9, "the avatar moved " + result.giant.b); // the avatar takes 84%
+  assert.ok(Math.abs(result.giant.gap) < 1e-9);
+  assert.ok(Math.abs(result.equal.a + 5) < 1e-9 && Math.abs(result.equal.b - 5) < 1e-9, "equal weights are not half each: " + result.equal.a + ", " + result.equal.b);
+
+  // Weight 0 on both sides (a patched Dummy with weightPerRadius 0): half each, no division by zero.
+  const weightless = loadGame((text) => {
+    const patched = text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 2 }").replace("      weightPerRadius: 100,\n      healthRange: { min: 100, max: 100 },", "      weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 },");
+    assert.ok(patched.includes("weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 }"), "the patch of the Dummy weight should apply");
+    return patched;
+  });
+  const zero = run(`
+    const s = createChamber1State(1, 1);
+    const [, a, b] = s.actors;
+    a.position.x = 1000; a.position.y = 0; b.position.x = 1000 + a.radius + b.radius - 10; b.position.y = 0;
+    touchDummy(s, ["x"], a, b, "x", createRun(1).blueprint);
+    return { weights: [a.weight, b.weight], a: a.position.x - 1000, b: b.position.x - (1000 + a.radius + b.radius - 10) };
+  `, weightless);
+  assert.deepStrictEqual(plain(zero.weights), [0, 0]);
+  assert.ok(Math.abs(zero.a + 5) < 1e-9 && Math.abs(zero.b - 5) < 1e-9, "weightless pair: " + zero.a + ", " + zero.b);
+});
+
+test("110 the avatar pushed by a Dummy has its cells written again at once (pushed over a cell border, the stored cells follow), and the grid still gives the state of every pair (three heavy Dummies walking into the avatar, 200 frames)", () => {
+  const border = run(`
+    ${ALONE}
+    // A giant on the left overlaps the avatar by 10 px: the avatar (5000 kg) takes 84% of it and crosses the border at 16
+    // (an avatar at x < 16 reaches less than 32, cell 0; at 16 or more it reaches cell 1).
+    const s = alone(0);
+    const [avatar, d] = s.actors;
+    d.radius = 256; d.weight = finalWeight(d);
+    avatar.position.x = 15.9; avatar.position.y = 0;
+    d.position.x = 15.9 - (256 + 16) + 10; d.position.y = 0; face(d, 0); // walking right, into the avatar
+    for (const actor of s.actors) setCells(actor, s.grid);
+    const before = JSON.stringify(avatar.cells);
+    step(s, { move: { x: 0, y: 0 } });
+    const expected = { from: { x: cellIndex(avatar.position.x - 16, 64), y: cellIndex(avatar.position.y - 16, 64) }, to: { x: cellIndex(avatar.position.x + 16, 64), y: cellIndex(avatar.position.y + 16, 64) } };
+    return { before, after: JSON.stringify(avatar.cells), expected: JSON.stringify(expected), x: avatar.position.x };
+  `, EMPTY); // no objects: the giant touches nothing but the avatar
+
+  const result = run(`
+    ${EVERY_PAIR}
+    const make = () => {
+      const s = createChamber1State(1, 5);
+      const dummies = s.actors.filter((actor) => actor.wander);
+      const [a, b, c] = dummies; // three heavy Dummies walk straight at the avatar from three sides
+      for (const d of [a, b, c]) { d.radius = 64; d.weight = finalWeight(d); }
+      a.position.x = 300; a.position.y = 0; a.wander.angle = 180; setHeading(a);
+      b.position.x = -300; b.position.y = 50; b.wander.angle = 0; setHeading(b);
+      c.position.x = 20; c.position.y = -300; c.wander.angle = 90; setHeading(c);
+      for (const actor of s.actors) setCells(actor, s.grid);
+      return s;
+    };
+    const grid = playWith(make, 200, false); // they reach the avatar after about 110 frames
+    const every = playWith(make, 200, true);
+    const moved = Math.hypot(JSON.parse(grid).actors[0].position.x, JSON.parse(grid).actors[0].position.y);
+    return { same: grid === every, moved };
+  `, WITH_DUMMIES);
+  assert.strictEqual(border.before, JSON.stringify({ from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }));
+  assert.ok(border.x >= 16, "the avatar was not pushed over the border: " + border.x);
+  assert.strictEqual(border.after, border.expected);
+  assert.strictEqual(border.after, JSON.stringify({ from: { x: 0, y: 0 }, to: { x: 1, y: 0 } }));
+  assert.ok(result.same, "the grid and every pair disagree once the avatar is pushed");
+  assert.ok(result.moved > 1, "the avatar was not pushed at all: " + result.moved);
 });

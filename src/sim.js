@@ -670,6 +670,15 @@ function moveDummy(state, dummy, player) {
   wrapIntoWindow(dummy, player, state.grid);
 }
 
+// The part of the overlap that "a" takes when the actors a and b are pushed apart (the user's decision, 2026-11-11:
+// the push between actors is split by weight, so the heavy mecha pushes light enemies and heavy enemies push it):
+// the weight of b over the sum of the two, so the heavier one moves less, and b takes the rest. When both weigh 0
+// there is nothing to compare, and each takes half.
+function pushShare(a, b) {
+  const total = a.weight + b.weight;
+  return total === 0 ? 0.5 : b.weight / total;
+}
+
 // What happens when a Dummy touches one thing (an object, the avatar or another Dummy). If they overlap:
 // 0. A Dummy that crushes (crushObject) breaks an object and goes on: nothing below happens.
 // 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
@@ -679,8 +688,8 @@ function moveDummy(state, dummy, player) {
 //    object or another Dummy nobody is hurt, so a Dummy never breaks an object (an object that broke in a hit would
 //    have no collision: nothing pushed, the Dummy keeping its angle; that is written here for the day an actor other
 //    than the avatar hurts objects).
-// 2. The Dummy is pushed out along the line until they just touch (two Dummies are pushed half each; the avatar and
-//    the objects are not pushed).
+// 2. The two are pushed apart along the line until they just touch. An object stays where it is (the Dummy takes the
+//    whole push); two actors, the avatar included, split the push by weight (pushShare): the heavier moves less.
 // 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
 //    still pushes, but does not hurt and does not turn.
 // Returns true if something was pushed (so the cells of what moved must be written again).
@@ -716,12 +725,13 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
   }
 
   const overlap = touching - distance;
-  const share = otherIsDummy ? 0.5 : 1;
+  const otherMoves = other.move !== undefined; // an actor; an object stays where it is
+  const share = otherMoves ? pushShare(dummy, other) : 1;
   dummy.position.x += normalX * overlap * share;
   dummy.position.y += normalY * overlap * share;
-  if (otherIsDummy) {
-    other.position.x -= normalX * overlap * share;
-    other.position.y -= normalY * overlap * share;
+  if (otherMoves) {
+    other.position.x -= normalX * overlap * (1 - share);
+    other.position.y -= normalY * overlap * (1 - share);
   }
 
   if (isNewContact) {
@@ -794,6 +804,7 @@ function nextInCells(inCell, cells, after) {
 // the Dummies after it in the list (so each pair is looked at once). The result is exactly the one of testing every
 // pair in that order; the grid only skips the pairs that cannot touch:
 // - a Dummy is tested against the avatar only if they share a cell, and against the Dummies that share a cell with it;
+//   the avatar is pushed too, so its cells are written again after a push (it is not in the index, only read);
 // - the cells are read from the actors (actor.cells, written by step after the movement), and whenever a collision
 //   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
 //   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
@@ -822,7 +833,10 @@ function collideDummies(state, lastContacts, blueprint) {
     if (pushed) refreshCells(i);
 
     if (shareCell(dummy.cells, player.cells)) {
-      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint)) refreshCells(i);
+      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint)) {
+        refreshCells(i);
+        setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
+      }
     }
 
     let j = nextInCells(inCell, dummy.cells, i);
