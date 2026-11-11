@@ -50,7 +50,7 @@ node --test
 |---|---|---|
 | 10 | The state carries the grid settings (64 / 61 / 35) and the player, at the origin, covers only the cell (0, 0) (`cells` from 0,0 to 0,0: a radius of 16 inside a cell of 64). | The grid settings live in the state so a run is reproducible. |
 | 11 | Cell boundaries: a point (radius 0, which covers one cell) at 31.9 is still in cell 0, at 32 it is in the next. | Checks the rounding of `cellIndex`. An error of one pixel here would put actors in the wrong cell. |
-| 12 | When the player walks, another actor (a marker without a type, only a test fixture) keeps its cells and the player changes its own. | Cells are counted in the world, not around the player: an actor's cells change only when it moves, so pushing the avatar does not move everyone's cells. |
+| 12 | When the player walks, a still thing (a test fixture) keeps its cells and the player changes its own. | Cells are counted in the world, not around the player: an actor's cells change only when it moves, so pushing the avatar does not move everyone's cells. |
 | 13 | Two actors of radius 16 that touch (31 px apart) share a cell at the origin, at (10000, -10000) and at (-7777, 3333); 200 px apart they never do. | The grid works the same everywhere in the world. |
 | 14 | The default window reaches at least 1920 px and 1080 px from the player. | The user's requirement: the window covers at least twice the screen. |
 | 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field, a missing or broken screen size) are refused with an error. | The settings must fail loudly, not run with nonsense. |
@@ -148,7 +148,7 @@ Rule: a collision (a pair that was not touching in the last frame, with an impac
 | 76 | The Shroom's `bounce`, made by `finalizeObject`, grows in a straight line from 0.2 (radius 16) to 1 (radius 32): 0.6 at 24, +0.05 for each pixel of radius. The rock has 0. | The bounce rule the user chose, in numbers. |
 | 77 | A bounce above 1 or not a `{ min, max }`, a bounce minimum above the maximum, a `healthRange` with a 0, a half number or a minimum above the maximum, or an object without a size makes the game fail when it loads. | A bounce never ejects (the user's rule), the ranges are real, and a missing size is a clear error. |
 | 78 | Changing the size of the rock in the data leaves the size of the Shroom as it was. | Nothing is shared between objects (the user's rule). |
-| 79 | While the avatar steps, the definition of the avatar is never read (`definitionOf` is spied on; an object being made from the seed reads its own recipe, the avatar never does). | The avatar plays only with its own values (the user's rule). |
+| 79 | The avatar carries every final value: radius 16, weight 5000, bounce 0, defense 3, speed 3, acceleration 0.25, deceleration 0.125, health 100/100, dash speed 12, 240 frames, 1/1 charge, at birth and after a step. When the run goes on with a blueprint without the Legs and the Booster, the next step writes weight 3500, speed 0 (0.5 - 3500 x 0.0002 is below zero), defense 2, health 70/70 (the 100 it had comes down with the maximum) and no dash. | The user's rule: everything calculated is stored in its actor and calculated again every frame, so whatever changes reaches every rule that reads the value. |
 
 ### The kit of parts
 
@@ -162,7 +162,7 @@ The avatar's final values are the sum of the specs of the parts in its blueprint
 | 56 | Without the Torso health is 45 and defense 1; without the Head health is 85 and defense 3. | Each part adds exactly what it gives. |
 | 57 | Without the Booster there is no dash charge (`finalDashMaxCharges` is 0, `finalDashRechargeFrames` is 0 and with it 240, and a new avatar starts with `{ now: 0, max: 0 }`) and a dash does nothing; with it the maximum is 1 and a new avatar starts full. | A dash, and its charges, come from a part, not from nowhere. |
 | 58 | A blueprint of 7600 kg (capacity 6000) is refused with a clear message, and so is an unknown part. | The capacity is a hard limit, and a typo in a part id must not run. |
-| 59 | Another actor of the same type gets nothing from the parts. | Only the avatar has a blueprint. |
+| 59 | Another actor of the same type, with another id, gets nothing from the parts: speed 0, defense 0, and its maximum health is its own (7 here), not the blueprint's. | Only the avatar has a blueprint. |
 | 60 | The cross-check is clean with the blueprint the run was played with, and finds a difference with another. | The blueprint is an input of the replay, as the seed and the inputs are. |
 
 ### The Dummies

@@ -34,21 +34,43 @@ function finalizeObject(type, rolls, blueprint, id) {
   object.radius = finalRadius(object, blueprint);
   object.weight = finalWeight(object, blueprint);
   object.bounce = finalBounce(object, blueprint);
+  object.defense = finalDefense(object, blueprint);
   return object;
 }
 
-// The avatar of a new run: the object of its type, with every value final: the movement, the dash (its
-// recharge and its charges, full at the start) and the health (full at the start). All of them come from
-// final functions, so the blueprint decides them, and they can change during the run.
+// Calculates every final value of an actor and writes it into the actor (the user's rule, 2026-11-11: everything
+// that is calculated is stored in its actor; it is calculated again every frame, and the rest of the code reads the
+// actor, so the state is rich and a snap holds what was true in that frame). It runs when the actor is made and at
+// the start of every step, for every actor, so anything that changes what a value comes from (the blueprint today;
+// an effect later) reaches every rule that reads the value, in the same frame.
+// What an actor has "now" follows a maximum that went down: health and dash charges never stay above their maximum.
+function finalizeActor(actor, blueprint) {
+  actor.radius = finalRadius(actor, blueprint);
+  actor.weight = finalWeight(actor, blueprint);
+  actor.bounce = finalBounce(actor, blueprint);
+  actor.defense = finalDefense(actor, blueprint);
+  actor.speed = finalSpeed(actor, blueprint);
+  actor.acceleration = finalAcceleration(actor, blueprint);
+  actor.deceleration = finalDeceleration(actor, blueprint);
+  actor.health.max = finalMaxHealth(actor, blueprint);
+  actor.health.now = Math.min(actor.health.now, actor.health.max);
+  if (actor.dash) {
+    actor.dash.speed = finalDashSpeed(actor, blueprint);
+    actor.dash.rechargeFrames = finalDashRechargeFrames(actor, blueprint);
+    actor.dash.charges.max = finalDashMaxCharges(actor, blueprint);
+    actor.dash.charges.now = Math.min(actor.dash.charges.now, actor.dash.charges.max);
+  }
+}
+
+// The avatar of a new run: the object of its type, with every value final (finalizeActor), and its health and
+// its dash charges full.
 function createAvatar(blueprint) {
   const avatar = finalizeObject("avatar", {}, blueprint, AVATAR_ID);
-  avatar.acceleration = finalAcceleration(avatar, blueprint);
-  avatar.deceleration = finalDeceleration(avatar, blueprint);
-  avatar.dash.rechargeFrames = finalDashRechargeFrames(avatar, blueprint);
-  const maxCharges = finalDashMaxCharges(avatar, blueprint);
-  avatar.dash.charges = { now: maxCharges, max: maxCharges };
-  const maxHealth = finalMaxHealth(avatar, blueprint);
-  avatar.health = { now: maxHealth, max: maxHealth };
+  avatar.health = { now: 0, max: 0 };
+  avatar.dash.charges = { now: 0, max: 0 };
+  finalizeActor(avatar, blueprint); // writes the maximums
+  avatar.health.now = avatar.health.max;
+  avatar.dash.charges.now = avatar.dash.charges.max;
   return avatar;
 }
 
@@ -186,8 +208,9 @@ function finalDashMaxCharges(actor, blueprint) {
 
 // The maximum health of the avatar: the sum of the health of its parts (nothing else gives it health).
 // (The player shows it as "armor", but the code calls it health.)
+// Any other actor: the maximum the seed rolled for it when it was made.
 function finalMaxHealth(actor, blueprint) {
-  return fromParts(actor, blueprint, "health");
+  return isAvatar(actor) ? fromParts(actor, blueprint, "health") : actor.health.max;
 }
 
 // The radius of an object, in pixels: what the seed rolled for it, or the base radius of its recipe (the
@@ -198,12 +221,12 @@ function finalRadius(object, blueprint) {
 
 // How fast the avatar speeds up toward its wanted speed, in pixels per frame, every frame. Base from the recipe.
 function finalAcceleration(actor, blueprint) {
-  return definitionOf(actor).acceleration;
+  return definitionOf(actor).acceleration ?? 0;
 }
 
 // How fast the avatar slows down toward a stop, in pixels per frame, every frame. Base from the recipe.
 function finalDeceleration(actor, blueprint) {
-  return definitionOf(actor).deceleration;
+  return definitionOf(actor).deceleration ?? 0;
 }
 
 // The frames a dash charge takes to come back: the sum of the rechargeFrames of the parts (the Booster is
@@ -252,13 +275,13 @@ function finalDefense(actor, blueprint) {
   return fromParts(actor, blueprint, "defense");
 }
 
-// The damage of a hit on a target: finalAttack - finalDefense, but never below minDamage
+// The damage of a hit on a target: finalAttack - the defense the target carries, but never below minDamage
 // (a hit always costs something). No attack (a weight of 0) means no damage at all.
 // The shield is not here yet.
-function damageOf(attacker, hit, target, blueprint) {
+function damageOf(attacker, hit, target) {
   const attack = finalAttack(attacker, hit);
   if (attack <= 0) return 0;
-  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - finalDefense(target, blueprint));
+  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - target.defense);
 }
 
 // Whether a collision between two things is a hit at all (the user's rule, 2026-11-10): the body slam hurts only where
@@ -284,7 +307,7 @@ const OVERSPEED_TOLERANCE = 1e-9;
 //    becomes the direction (always at full length) times the dash speed, and a charge is spent.
 //    Without a direction (or without a dash strength) nothing happens and the charge is kept.
 // Returns true if the actor dashed in this frame.
-function updateDash(actor, wantsDash, blueprint) {
+function updateDash(actor, wantsDash) {
   const dash = actor.dash;
 
   if (dash.charges.now < dash.charges.max) {
@@ -301,7 +324,7 @@ function updateDash(actor, wantsDash, blueprint) {
   const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
   if (length === 0) return false;
 
-  const strength = finalDashSpeed(actor, blueprint);
+  const strength = dash.speed;
   if (strength <= 0) return false; // no part gives a dash
   velocity.x = (direction.x / length) * strength;
   velocity.y = (direction.y / length) * strength;
@@ -524,7 +547,7 @@ function objectsNear(state, actor) {
 //    bounce, the part going in is just removed. The part along the
 //    object is not changed, so with bounce 0 the actor slides (it is not friction).
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
-function collideWithObjects(state, actor, blueprint, lastContacts) {
+function collideWithObjects(state, actor, lastContacts) {
   for (const object of objectsNear(state, actor)) {
     const contact = contactBetween(actor, object);
     if (contact === null) continue;
@@ -546,8 +569,8 @@ function collideWithObjects(state, actor, blueprint, lastContacts) {
 
     if (collides && isNewContact && bodySlamHurts(actor, object)) {
       const hit = { impact: -goingIn };
-      applyDamage(actor, damageOf(object, hit, actor, blueprint));
-      if (damageObject(state, object, damageOf(actor, hit, object, blueprint))) continue; // the object broke: no collision
+      applyDamage(actor, damageOf(object, hit, actor));
+      if (damageObject(state, object, damageOf(actor, hit, object))) continue; // the object broke: no collision
     }
 
     actor.position.x += normalX * overlap;
@@ -665,7 +688,7 @@ function createDummies(state) {
     const health = rollInRange(state.seed, index, 0, 14, recipe.healthRange.min, recipe.healthRange.max);
     const angle = hashInts(state.seed, index, 0, 15) % 360;
     const dummy = finalizeObject("dummy", { position, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
-    dummy.speed = finalSpeed(dummy);
+    finalizeActor(dummy);
     setHeading(dummy);
     state.actors.push(dummy);
   }
@@ -701,7 +724,7 @@ function pushShare(a, b) {
 // 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not. A pair that was already touching
 //    still pushes, but does not hurt and does not turn.
 // Returns true if something was pushed (so the cells of what moved must be written again).
-function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
+function touchDummy(state, lastContacts, dummy, other, key) {
   const contact = contactBetween(dummy, other);
   if (contact === null) return false;
   if (other.square !== undefined && crushObject(state, dummy, other)) return false;
@@ -716,8 +739,8 @@ function touchDummy(state, lastContacts, dummy, other, key, blueprint) {
     const closing = -((dummy.move.velocity.x - otherVelocity.x) * normalX + (dummy.move.velocity.y - otherVelocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
       const hit = { impact: closing };
-      applyDamage(dummy, damageOf(other, hit, dummy, blueprint));
-      const damage = damageOf(dummy, hit, other, blueprint);
+      applyDamage(dummy, damageOf(other, hit, dummy));
+      const damage = damageOf(dummy, hit, other);
       if (other.square !== undefined) {
         if (damageObject(state, other, damage)) return false; // the object broke: no collision, nothing moved
       } else {
@@ -810,7 +833,7 @@ function nextInCells(inCell, cells, after) {
 //   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
 //   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
 //   list made before.
-function collideDummies(state, lastContacts, blueprint) {
+function collideDummies(state, lastContacts) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.wander);
 
@@ -829,12 +852,12 @@ function collideDummies(state, lastContacts, blueprint) {
 
     let pushed = false;
     for (const object of objectsNear(state, dummy)) {
-      if (touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object), blueprint)) pushed = true;
+      if (touchDummy(state, lastContacts, dummy, object, dummy.id + "|" + object.type + " " + objectKey(object))) pushed = true;
     }
     if (pushed) refreshCells(i);
 
     if (shareCell(dummy.cells, player.cells)) {
-      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint)) {
+      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID)) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
@@ -842,7 +865,7 @@ function collideDummies(state, lastContacts, blueprint) {
 
     let j = nextInCells(inCell, dummy.cells, i);
     while (j !== -1) {
-      if (touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint)) {
+      if (touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id)) {
         refreshCells(i);
         refreshCells(j);
       }
@@ -951,6 +974,9 @@ function cellIndex(coordinate, cellSize) {
 function step(state, input, blueprint) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
+  // 0. Final values: every actor calculates its final values again and carries them for this frame (finalizeActor).
+  for (const actor of state.actors) finalizeActor(actor, blueprint);
+
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
   player.move.direction.y = input.move.y;
@@ -959,7 +985,7 @@ function step(state, input, blueprint) {
   // The velocity does not jump to the wanted value: it speeds up toward it
   // while the actor wants to move, and slows down toward zero when it does not.
   // Above the top speed (after a dash) it slows down by the fixed overspeedDecay instead.
-  // The top speed is asked every frame, because it can change from one frame to the next.
+  // The top speed was calculated for this frame (step 0), because it can change from one frame to the next.
   // The contacts of the last frame are kept to tell a new collision from friction (see collideWithObjects).
   const lastContacts = state.contacts;
   state.contacts = [];
@@ -970,14 +996,14 @@ function step(state, input, blueprint) {
       continue;
     }
     const { direction, velocity } = actor.move;
-    const speed = finalSpeed(actor, blueprint);
+    const speed = actor.speed;
 
     // In the frame of a dash the actor moves at the full dash speed, and the
     // slowing down starts in the next frame.
     let dashed = false;
     if (actor.dash) {
       const wantsDash = isAvatar(actor) && input.dash === true;
-      dashed = updateDash(actor, wantsDash, blueprint);
+      dashed = updateDash(actor, wantsDash);
     }
 
     const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
@@ -995,7 +1021,7 @@ function step(state, input, blueprint) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithObjects(state, actor, blueprint, lastContacts);
+    collideWithObjects(state, actor, lastContacts);
   }
 
   // 3. Cells: the cells every actor covers now (see "The cells of an actor").
@@ -1004,7 +1030,7 @@ function step(state, input, blueprint) {
 
   // 4. The Dummies collide (with objects, the avatar and each other) and turn. The collision reads the cells from
   // the actors, and writes them again for every Dummy it pushes, so at the end of the step they are still right.
-  collideDummies(state, lastContacts, blueprint);
+  collideDummies(state, lastContacts);
 
   state.frame += 1;
 }

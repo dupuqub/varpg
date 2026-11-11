@@ -199,11 +199,10 @@ test("10 the state has the grid settings, and the player at the origin covers on
 
 test("11 cell boundaries: cell 0 covers [-32, +32) around the origin of the world (a point, radius 0, covers one cell)", () => {
   const cells = run(`
+    const grid = createChamber1State().grid;
     return [31.9, 32, -32, -32.1, 100, 0].map((dx) => {
-      const s = createChamber1State();
-      s.actors.push({ id: "marker", radius: 0, position: { x: dx, y: -70 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } });
-      step(s, { move: { x: 0, y: 0 } });
-      const marker = s.actors.find((actor) => actor.id === "marker");
+      const marker = { radius: 0, position: { x: dx, y: -70 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } };
+      setCells(marker, grid);
       if (JSON.stringify(marker.cells.from) !== JSON.stringify(marker.cells.to)) throw new Error("a point must cover one cell");
       return [marker.cells.from.x, marker.cells.from.y];
     });
@@ -221,15 +220,16 @@ test("11 cell boundaries: cell 0 covers [-32, +32) around the origin of the worl
 test("12 cells are counted in the world, not around the player: when the player walks, a still actor keeps its cells and the player changes its own", () => {
   const cells = run(`
     const s = createChamber1State();
-    s.actors.push({ id: "marker", radius: 0, position: { x: 100, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } });
+    const marker = { radius: 0, position: { x: 100, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } }; // a still thing, only a test fixture
     step(s, { move: { x: 0, y: 0 } });
-    const marker = s.actors.find((actor) => actor.id === "marker");
+    setCells(marker, s.grid);
     const before = [marker.cells.from.x, s.actors[0].cells.from.x];
     const original = finalSpeed;
     finalSpeed = () => 64;
     s.actors[0].move.velocity.x = 64; // already moving at 64 px per frame
     step(s, { move: { x: 1, y: 0 } });
     finalSpeed = original;
+    setCells(marker, s.grid);
     return [before, [marker.cells.from.x, s.actors[0].cells.from.x]];
   `);
   assert.deepStrictEqual(plain(cells), [[2, 0], [2, 1]]);
@@ -751,8 +751,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0 });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, defense: 0 });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, defense: 0 });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -1179,12 +1179,12 @@ test("58 a blueprint over the capacity of the Torso is refused, and so is an unk
   assert.strictEqual(result.unknown, "Unknown part: wings");
 });
 
-test("59 only the avatar has a blueprint: another actor of the same type gets nothing from the parts", () => {
+test("59 only the avatar has a blueprint: another actor of the same type gets nothing from the parts (its maximum health is its own)", () => {
   const result = withBlueprints(`
-    const other = finalizeObject("avatar", {}, undefined, "other_1");
+    const other = finalizeObject("avatar", { health: { now: 7, max: 7 } }, undefined, "other_1");
     return { speed: finalSpeed(other, full), health: finalMaxHealth(other, full), defense: finalDefense(other, full) };
   `);
-  assert.deepStrictEqual(plain(result), { speed: 0, health: 0, defense: 0 });
+  assert.deepStrictEqual(plain(result), { speed: 0, health: 7, defense: 0 });
 });
 
 test("60 the blueprint is an input of the replay: the cross-check is clean with the right blueprint and finds a difference with another", () => {
@@ -1428,9 +1428,9 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   `);
   assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0 });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, defense: 0 });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2 }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, defense: 0 }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
@@ -1470,18 +1470,26 @@ test("78 the rock and the Shroom share nothing: changing the size of one in the 
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
 
-test("79 the avatar plays only with its own values: while stepping, the definition of the avatar is never read", () => {
-  const result = run(`
-    const s = createChamber1State();
-    const reads = [];
-    const original = definitionOf;
-    definitionOf = (thing) => { reads.push(thing.type); return original(thing); };
-    for (let i = 0; i < 60; i++) step(s, { move: { x: 1, y: 0 }, dash: i === 10 });
-    definitionOf = original;
-    return { reads, x: s.actors[0].position.x };
+test("79 every final value is calculated again every frame and stored in the actor: the actor carries them all, and a blueprint that changes in the middle of a run reaches the speed, the weight, the defense, the maximum health and the dash in the next step", () => {
+  const result = withBlueprints(`
+    const s = createChamber1State(1, 1, full);
+    const player = s.actors[0];
+    const carried = () => ({ radius: player.radius, weight: player.weight, bounce: player.bounce, defense: player.defense, speed: player.speed,
+      acceleration: player.acceleration, deceleration: player.deceleration, health: { ...player.health },
+      dash: { speed: player.dash.speed, rechargeFrames: player.dash.rechargeFrames, charges: { ...player.dash.charges } } });
+    const atBirth = carried();
+    step(s, { move: { x: 0, y: 0 } }, full);
+    const afterStep = carried();
+    // The run goes on with another blueprint: no Legs (they gave speed 3.5, health 30, defense 1 and weighed 1300 kg) and no Booster.
+    const light = { parts: full.parts.filter((id) => id !== "legs" && id !== "booster") };
+    step(s, { move: { x: 0, y: 0 } }, light);
+    return { atBirth, afterStep, changed: carried() };
   `);
-  assert.ok(!result.reads.includes("avatar"), "the avatar's definition was read while stepping"); // an object being made from the seed reads its own recipe, the avatar never does
-  assert.ok(result.x > 100);
+  const full = { radius: 16, weight: 5000, bounce: 0, defense: 3, speed: 3, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, dash: { speed: 12, rechargeFrames: 240, charges: { now: 1, max: 1 } } };
+  assert.deepStrictEqual(plain(result.atBirth), full);
+  assert.deepStrictEqual(plain(result.afterStep), full);
+  // Without the Legs and the Booster: 3500 kg, speed 0.5 - 3500 x 0.0002 = -0.2, so 0; defense 2; health 70 (and the 100 it had comes down to 70); no dash.
+  assert.deepStrictEqual(plain(result.changed), { radius: 16, weight: 3500, bounce: 0, defense: 2, speed: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 70, max: 70 }, dash: { speed: 0, rechargeFrames: 0, charges: { now: 0, max: 0 } } });
 });
 
 // ---- The Dummies ----
