@@ -330,9 +330,11 @@ They only become decisions when the user approves.
 - Running the cross-check automatically.
 - The user's second monitor is stuck near 60 Hz (parked; not a problem of the game).
 
-## Handoff (2026-11-10, written by one agent for the next)
+## Handoff (2026-11-10 and the night of the 11th, written by one agent for the next)
 
 What changed last, and what to keep in mind when picking the work up. Remove or rewrite this section when it is stale.
+
+**Where the work stopped (the night of 2026-11-11, the user's credits ran out; he resumes at 4:40).** Everything below under "Decided by the user on the night" is done and pushed (commits f733747 to the last one on `main`). The hygiene pass was in progress: done so far are the test patch guard (test 111), the drifted comments, `contactBetween`, and the wording of the definitions check. **Still owed to the user, promised and not delivered:** (1) a deep report of the relations in the code, including fragile ones, the invariants no test guards, and strategy considerations about where the game is going (library, stages, weapons, shield, death, the damage audit, machine learning), as a file in the repository pointed to from here; (2) guidelines and patterns for the next agent in "How to work on this project". The next agent should write both before new rules, or tell the user plainly that they are not written.
 
 **What was done**
 
