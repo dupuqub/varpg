@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 25;
+const DEFINITIONS_VERSION = 26;
 
 const DEFINITIONS = {
   actors: {
@@ -204,13 +204,11 @@ const DEFINITIONS = {
       },
     },
 
-    // The Dummies of Chamber 1: where the seed puts them is the real area of the game, the window of the
-    // collision grid around the avatar (state.grid), and they wrap around its edges (see wrapIntoWindow).
+    // The Dummies of Chamber 1: the seed makes them, and they are born like any actor (see birthOffset in src/sim.js):
+    // anywhere off the screen and inside the window of the collision grid around the avatar (state.grid), with no
+    // search for a free place, and they wrap around the edges of the window (see wrapIntoWindow).
     // count: the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot").
-    // safeRadius: guess, the same reason as the objects' (the first dash cannot hit one): no Dummy starts closer than this to the avatar.
-    // placementTries: rule, how many places the seed tries for one Dummy before giving up (the game fails loudly instead
-    //   of placing it on top of something). A guess for the number.
-    dummies: { count: 1000, safeRadius: 200, placementTries: 50 },
+    dummies: { count: 1000 },
   },
 };
 

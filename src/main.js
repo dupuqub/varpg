@@ -48,6 +48,11 @@ function startChamber1() {
   stopChamber1();
   run = createRun(1);
   state = createChamber1State(run.id, 1, run.blueprint);
+  // The rules know the size of the screen (state.grid); the canvas must be that size, or what the rules call "off the
+  // screen" would be visible. Fail loudly instead of playing a wrong game.
+  if (canvas.width !== state.grid.screenWidth || canvas.height !== state.grid.screenHeight) {
+    throw new Error("The canvas is " + canvas.width + " x " + canvas.height + " and the rules expect " + state.grid.screenWidth + " x " + state.grid.screenHeight);
+  }
   runHistory = createHistory(state, run.blueprint);
   lastTimestamp = null;
   accumulatedMs = 0;

@@ -594,57 +594,53 @@ function wrapIntoWindow(actor, player, grid) {
   else if (dy >= height / 2) actor.position.y -= height;
 }
 
-// True if a circle at (x, y) with this radius overlaps the avatar, another Dummy already placed, or an object.
-function isPlaceTaken(state, x, y, radius) {
-  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-  const safe = DEFINITIONS.terrain.dummies.safeRadius + radius;
-  const fromAvatarX = x - player.position.x;
-  const fromAvatarY = y - player.position.y;
-  if (fromAvatarX * fromAvatarX + fromAvatarY * fromAvatarY < safe * safe) return true;
+// Where an actor is born (the user's rule, 2026-11-10): anywhere off the screen and inside the window of the grid, with
+// no search for a free place. The ring between the screen and the edge of the window is the birth ground: the whole
+// body of the actor is off the screen (its center at least its radius beyond the edge of the screen), and its center
+// is inside the window (the same rule as the wrap: the body may stick out, the center may not). Every point of the
+// ring is equally likely: the ring is four strips (left, right, above, below the screen), one is picked with a chance
+// equal to its area, then a point in it. If it lands on something, the push of the collision separates them in the
+// next steps (like an actor that wraps onto another). The numbers come from the seed, so a run is reproducible.
+// Returns the offset from the avatar, in whole pixels. Fails loudly if the ring has no room (it cannot, see test 101).
+function birthOffset(seed, index, radius, grid) {
+  const halfWidth = (grid.windowWidth * grid.cellSize) / 2;
+  const halfHeight = (grid.windowHeight * grid.cellSize) / 2;
+  const innerX = grid.screenWidth / 2 + radius; // the first offset at which the body is off the screen
+  const innerY = grid.screenHeight / 2 + radius;
+  const sideWidth = Math.max(0, Math.floor(halfWidth - innerX)); // the strips on the left and on the right: full height
+  const capHeight = Math.max(0, Math.floor(halfHeight - innerY)); // the strips above and below: between the side strips
+  const sideArea = sideWidth * Math.floor(2 * halfHeight);
+  const capArea = Math.floor(2 * innerX) * capHeight;
+  const total = 2 * sideArea + 2 * capArea;
+  if (total === 0) throw new Error("No room off the screen and inside the window for an actor of radius " + radius);
 
-  for (const other of state.actors) {
-    if (!other.wander) continue;
-    const reach = radius + other.radius;
-    const dx = x - other.position.x;
-    const dy = y - other.position.y;
-    if (dx * dx + dy * dy < reach * reach) return true;
-  }
-
-  return objectsReaching(state.seed, x - radius, y - radius, x + radius, y + radius).some((object) => {
-    const reach = radius + object.radius;
-    const dx = x - object.position.x;
-    const dy = y - object.position.y;
-    return dx * dx + dy * dy < reach * reach;
-  });
+  let pick = hashInts(seed, index, 0, 17) % total;
+  const along = hashInts(seed, index, 0, 18);
+  if (pick < sideArea) return { x: -halfWidth + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // left
+  pick -= sideArea;
+  if (pick < sideArea) return { x: innerX + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // right
+  pick -= sideArea;
+  if (pick < capArea) return { x: -innerX + (pick % Math.floor(2 * innerX)), y: -halfHeight + (along % capHeight) }; // above
+  pick -= capArea;
+  return { x: -innerX + (pick % Math.floor(2 * innerX)), y: innerY + (along % capHeight) }; // below
 }
 
-// Makes the Dummies of a new state, by the seed, inside the window of the grid around the avatar. For each one the
-// seed rolls (salts 11 to 15, with the number of the Dummy and the try): radius, position, health and first angle.
-// A place is refused when it is taken (isPlaceTaken); the seed then tries another, up to placementTries times.
+// Makes the Dummies of a new state, by the seed. For each one the seed rolls (salts 11, 14 and 15, with the number of
+// the Dummy) radius, health and first angle, and birthOffset says where it is born.
 function createDummies(state) {
-  const rules = DEFINITIONS.terrain.dummies;
   const recipe = DEFINITIONS.actors.dummy;
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-  const width = state.grid.windowWidth * state.grid.cellSize;
-  const height = state.grid.windowHeight * state.grid.cellSize;
 
-  for (let index = 0; index < rules.count; index++) {
-    let placed = false;
-    for (let attempt = 0; attempt < rules.placementTries && !placed; attempt++) {
-      const radius = rollInRange(state.seed, index, attempt, 11, recipe.size.min, recipe.size.max);
-      const x = player.position.x - width / 2 + radius + (hashInts(state.seed, index, attempt, 12) % (width - 2 * radius));
-      const y = player.position.y - height / 2 + radius + (hashInts(state.seed, index, attempt, 13) % (height - 2 * radius));
-      if (isPlaceTaken(state, x, y, radius)) continue;
-
-      const health = rollInRange(state.seed, index, attempt, 14, recipe.healthRange.min, recipe.healthRange.max);
-      const angle = hashInts(state.seed, index, attempt, 15) % 360;
-      const dummy = finalizeObject("dummy", { position: { x, y }, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
-      dummy.speed = finalSpeed(dummy);
-      setHeading(dummy);
-      state.actors.push(dummy);
-      placed = true;
-    }
-    if (!placed) throw new Error("No free place for the Dummy " + index + " after " + rules.placementTries + " tries");
+  for (let index = 0; index < DEFINITIONS.terrain.dummies.count; index++) {
+    const radius = rollInRange(state.seed, index, 0, 11, recipe.size.min, recipe.size.max);
+    const offset = birthOffset(state.seed, index, radius, state.grid);
+    const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
+    const health = rollInRange(state.seed, index, 0, 14, recipe.healthRange.min, recipe.healthRange.max);
+    const angle = hashInts(state.seed, index, 0, 15) % 360;
+    const dummy = finalizeObject("dummy", { position, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
+    dummy.speed = finalSpeed(dummy);
+    setHeading(dummy);
+    state.actors.push(dummy);
   }
 }
 
@@ -860,6 +856,9 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 
     // Collision grid. These are dev settings. They live in the state so a run
     // can be reproduced exactly, and so they can be changed in one place.
+    // - screenWidth, screenHeight: what the player sees, in pixels: the size of the canvas (index.html; src/main.js
+    //   checks that the two agree). The rules need it to know what is off the screen (birthOffset) and the window is
+    //   counted from it. rule: the canvas is 1920 x 1080 (the user's requirement).
     // - cellSize: side of a cell, in pixels. It does not limit the size of an actor: an actor covers every cell
     //   its circle reaches (actor.cells), so two actors that touch always share a cell. It only decides how much
     //   work the grid saves: a cell much smaller than the actors makes each one cover many cells, a cell much larger
@@ -877,7 +876,7 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     // cellSize 64: guess, "an imaginary number that looks reasonable" (the user's words). The benchmark found the cost
     //   about the same from 60 to 100 with the Dummies of today; it is to be measured again when the actors change.
     // windowWidth x windowHeight = rule: twice the screen (see above).
-    grid: { cellSize: 64, windowWidth: 61, windowHeight: 35 },
+    grid: { screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
     actors: [avatar],
   };
@@ -892,6 +891,9 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
 function assertValidGrid(grid) {
   if (!(grid.cellSize > 0)) {
     throw new Error("grid.cellSize must be greater than 0");
+  }
+  for (const name of ["screenWidth", "screenHeight"]) {
+    if (!(Number.isInteger(grid[name]) && grid[name] > 0)) throw new Error("grid." + name + " must be a whole number of pixels above 0");
   }
   for (const name of ["windowWidth", "windowHeight"]) {
     const cells = grid[name];

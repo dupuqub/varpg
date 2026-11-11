@@ -35,9 +35,9 @@ function loadGame(patchData = (text) => text) {
 // loudly, so a change in the data cannot silently bring back the full count and make every test slow.
 function withDummies(count) {
   return loadGame((text) => {
-    const original = /dummies: \{ count: \d+,/;
+    const original = /dummies: \{ count: \d+ \}/;
     if (!original.test(text)) throw new Error("the count of Dummies was not found in src/data.js");
-    return text.replace(original, "dummies: { count: " + count + ",");
+    return text.replace(original, "dummies: { count: " + count + " }");
   });
 }
 
@@ -266,23 +266,27 @@ test("14 the default window is at least twice the 1920 x 1080 screen", () => {
 
 test("15 bad grid settings fail loudly (each axis is checked on its own)", () => {
   const rejected = run(`
+    const screen = { screenWidth: 1920, screenHeight: 1080 };
     const bad = [
-      { cellSize: 64, windowWidth: 4, windowHeight: 3 },
-      { cellSize: 64, windowWidth: 3, windowHeight: 4 },
-      { cellSize: 64, windowWidth: 2, windowHeight: 3 },
-      { cellSize: 64, windowWidth: 3, windowHeight: 3.5 },
-      { cellSize: 0, windowWidth: 3, windowHeight: 3 },
-      { cellSize: -1, windowWidth: 3, windowHeight: 3 },
-      { cellSize: NaN, windowWidth: 3, windowHeight: 3 },
-      { cellSize: 64, windowWidth: 3 },
-      { cellSize: 64, windowSize: 3 },
+      { ...screen, cellSize: 64, windowWidth: 4, windowHeight: 3 },
+      { ...screen, cellSize: 64, windowWidth: 3, windowHeight: 4 },
+      { ...screen, cellSize: 64, windowWidth: 2, windowHeight: 3 },
+      { ...screen, cellSize: 64, windowWidth: 3, windowHeight: 3.5 },
+      { ...screen, cellSize: 0, windowWidth: 3, windowHeight: 3 },
+      { ...screen, cellSize: -1, windowWidth: 3, windowHeight: 3 },
+      { ...screen, cellSize: NaN, windowWidth: 3, windowHeight: 3 },
+      { ...screen, cellSize: 64, windowWidth: 3 },
+      { ...screen, cellSize: 64, windowSize: 3 },
+      { screenWidth: 1920, cellSize: 64, windowWidth: 3, windowHeight: 3 },
+      { screenWidth: 1920, screenHeight: 0, cellSize: 64, windowWidth: 3, windowHeight: 3 },
+      { screenWidth: 1920.5, screenHeight: 1080, cellSize: 64, windowWidth: 3, windowHeight: 3 },
     ];
     return bad.map((grid) => {
       try { assertValidGrid(grid); return false; } catch (error) { return true; }
     });
   `);
   assert.ok(plain(rejected).every((value) => value === true));
-  assert.doesNotThrow(() => run("assertValidGrid({ cellSize: 64, windowWidth: 61, windowHeight: 35 });"));
+  assert.doesNotThrow(() => run("assertValidGrid({ screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 });"));
 });
 
 // ---- Definitions and actors ----
@@ -1499,7 +1503,7 @@ const ALONE = `
   function face(dummy, angle) { dummy.wander.angle = angle; setHeading(dummy); }
 `;
 
-test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8 to 16, health 100, speed from the recipe), inside the window of the grid, the same every time", () => {
+test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8 to 16, health 100, speed from the recipe), born off the screen with the center inside the window, the same every time", () => {
   const result = run(`
     const s = createChamber1State(1, 7);
     const again = createChamber1State(1, 7);
@@ -1517,7 +1521,10 @@ test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8
       if (!Number.isInteger(d.wander.angle) || d.wander.angle < 0 || d.wander.angle > 359 || d.wander.turns !== 0) bad++;
       if (d.speed !== 2) bad++;
       if (Math.abs(Math.hypot(d.move.velocity.x, d.move.velocity.y) - 2) > 1e-9) bad++;
-      if (Math.abs(d.position.x - avatar.x) > width / 2 - d.radius || Math.abs(d.position.y - avatar.y) > height / 2 - d.radius) bad++;
+      const dx = Math.abs(d.position.x - avatar.x);
+      const dy = Math.abs(d.position.y - avatar.y);
+      if (dx >= width / 2 || dy >= height / 2) bad++; // the center inside the window (the wrap rule)
+      if (dx < s.grid.screenWidth / 2 + d.radius && dy < s.grid.screenHeight / 2 + d.radius) bad++; // the whole body off the screen
       angles.add(d.wander.angle);
       radii.add(d.radius);
     }
@@ -1541,29 +1548,37 @@ test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8
   assert.ok(result.differs, "another seed must give other Dummies");
 });
 
-test("81 no Dummy starts on top of another Dummy, an object, or near the avatar", () => {
+test("81 birth: every point of the ring between the screen and the edge of the window is used (all four strips, over 20 seeds), nothing is born on the screen, no free place is searched (overlaps at birth happen) and the push separates them", () => {
   const result = run(`
-    let overlaps = 0;
-    let tooClose = 0;
-    for (let seed = 1; seed <= 5; seed++) {
+    const strips = { left: 0, right: 0, above: 0, below: 0 };
+    let onScreen = 0;
+    let bornOverlapping = 0;
+    let stillOverlapping = 0;
+    const overlapping = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) < a.radius + b.radius - 1e-9;
+    for (let seed = 1; seed <= 20; seed++) {
       const s = createChamber1State(1, seed);
       const dummies = s.actors.filter((actor) => actor.wander);
-      const objects = objectsInArea(seed, -2200, -1300, 2200, 1300);
-      for (let i = 0; i < dummies.length; i++) {
-        const a = dummies[i];
-        const fromAvatar = Math.hypot(a.position.x - s.actors[0].position.x, a.position.y - s.actors[0].position.y);
-        if (fromAvatar < DEFINITIONS.terrain.dummies.safeRadius + a.radius) tooClose++;
-        for (let j = i + 1; j < dummies.length; j++) {
-          if (Math.hypot(a.position.x - dummies[j].position.x, a.position.y - dummies[j].position.y) < a.radius + dummies[j].radius) overlaps++;
-        }
-        for (const object of objects) {
-          if (Math.hypot(a.position.x - object.position.x, a.position.y - object.position.y) < a.radius + object.radius) overlaps++;
-        }
+      for (const d of dummies) {
+        const dx = d.position.x - s.actors[0].position.x;
+        const dy = d.position.y - s.actors[0].position.y;
+        if (Math.abs(dx) < s.grid.screenWidth / 2 + d.radius && Math.abs(dy) < s.grid.screenHeight / 2 + d.radius) onScreen++;
+        else if (dx <= -s.grid.screenWidth / 2 - d.radius) strips.left++;
+        else if (dx >= s.grid.screenWidth / 2 + d.radius) strips.right++;
+        else if (dy < 0) strips.above++;
+        else strips.below++;
       }
+      const pairs = [];
+      for (let i = 0; i < dummies.length; i++) for (let j = i + 1; j < dummies.length; j++) if (overlapping(dummies[i], dummies[j])) pairs.push([dummies[i], dummies[j]]);
+      bornOverlapping += pairs.length;
+      for (let frame = 0; frame < 30; frame++) step(s, { move: { x: 0, y: 0 } });
+      stillOverlapping += pairs.filter(([a, b]) => overlapping(a, b)).length;
     }
-    return { overlaps, tooClose };
+    return { strips, onScreen, bornOverlapping, stillOverlapping };
   `, WITH_DUMMIES);
-  assert.deepStrictEqual(plain(result), { overlaps: 0, tooClose: 0 });
+  assert.strictEqual(result.onScreen, 0);
+  for (const strip of ["left", "right", "above", "below"]) assert.ok(result.strips[strip] > 0, "nobody was born " + strip + ": " + JSON.stringify(result.strips));
+  assert.ok(result.bornOverlapping > 0, "no pair was born overlapping, so the rule (no search for a free place) was not exercised");
+  assert.strictEqual(result.stillOverlapping, 0); // the push of the collision separated every pair born on top of each other
 });
 
 test("82 without a collision a Dummy walks in a straight line at its own speed, and keeps its angle", () => {
@@ -2060,7 +2075,8 @@ test("100 the cells stored in the actors are right at the start and after every 
 // The user's rule: an actor wraps when its center leaves the window of the grid, and that jump must never be seen. So
 // no recipe may allow an actor with a radius above the smallest space between the screen and the edge of the window.
 
-// The size of the screen is the size of the canvas, written in index.html.
+// The size of the screen as the page has it: the canvas written in index.html. The rules carry their own copy in
+// state.grid (screenWidth, screenHeight); test 101 checks that the two agree.
 function screenSize() {
   const html = fs.readFileSync(path.join(SRC, "..", "index.html"), "utf8");
   const canvas = html.match(/<canvas id="canvas" width="(\d+)" height="(\d+)"/);
@@ -2070,10 +2086,9 @@ function screenSize() {
 
 // The actor recipes of a game that allow a radius above the margin, as text ("dummy: 600 > 580"). Empty if none.
 function actorsTooLarge(game) {
-  const screen = screenSize();
   return run(`
     const grid = createChamber1State().grid;
-    const margin = Math.min((grid.windowWidth * grid.cellSize - ${screen.width}) / 2, (grid.windowHeight * grid.cellSize - ${screen.height}) / 2);
+    const margin = Math.min((grid.windowWidth * grid.cellSize - grid.screenWidth) / 2, (grid.windowHeight * grid.cellSize - grid.screenHeight) / 2);
     const tooLarge = [];
     for (const [id, recipe] of Object.entries(DEFINITIONS.actors)) {
       const largest = recipe.size ? recipe.size.max : recipe.radius;
@@ -2084,6 +2099,9 @@ function actorsTooLarge(game) {
 }
 
 test("101 no recipe in the definitions allows an actor larger than the space between the screen and the edge of the window (580), so a wrap is never seen", () => {
+  const page = screenSize();
+  const rules = run("const grid = createChamber1State().grid; return { width: grid.screenWidth, height: grid.screenHeight };");
+  assert.deepStrictEqual(plain(rules), page); // the rules and the page agree on the size of the screen
   const real = actorsTooLarge(context);
   assert.strictEqual(real.margin, 580); // (35 x 64 - 1080) / 2 up and down; across it is (61 x 64 - 1920) / 2 = 992
   assert.ok(real.actors >= 2, "the avatar and the Dummy must both be looked at");
@@ -2091,7 +2109,7 @@ test("101 no recipe in the definitions allows an actor larger than the space bet
 
   // The check can fail: a Dummy recipe that goes up to 581 is caught, and one that goes up to exactly 580 is not.
   const withSize = (max) => loadGame((text) => {
-    const patched = text.replace(/dummies: \{ count: \d+,/, "dummies: { count: 0,").replace("size: { min: 8, max: 16 },", "size: { min: 8, max: " + max + " },");
+    const patched = text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }").replace("size: { min: 8, max: 16 },", "size: { min: 8, max: " + max + " },");
     assert.ok(patched.includes("max: " + max + " }"), "the patch of the Dummy size should apply");
     return patched;
   });
@@ -2118,7 +2136,7 @@ function withHugeLayer(square = 2048) {
   return loadGame((text) => {
     let patched = patchOnce(text, "    rock: {", GIANT);
     patched = patchOnce(patched, AFTER_SMALL, HUGE_LAYER(square));
-    return patchOnce(patched, "dummies: { count: 1000,", "dummies: { count: 0,");
+    return patchOnce(patched, "dummies: { count: 1000 }", "dummies: { count: 0 }");
   });
 }
 

@@ -53,7 +53,7 @@ node --test
 | 12 | When the player walks, another actor (a marker without a type, only a test fixture) changes cells. | Cells are relative to the player, not fixed to the world. |
 | 13 | `isInWindow` for a 3x3, an 11x11 and the 61 x 35 rectangle. | Checks the edges of the window, on each axis separately. |
 | 14 | The default window reaches at least 1920 px and 1080 px from the player. | The user's requirement: the window covers at least twice the screen. |
-| 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field) are refused with an error. | The settings must fail loudly, not run with nonsense. |
+| 15 | Bad grid settings (even size, zero, negative, `NaN`, missing field, a missing or broken screen size) are refused with an error. | The settings must fail loudly, not run with nonsense. |
 
 ### Definitions and actors
 
@@ -171,8 +171,8 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 
 | # | What it checks | Why it matters |
 |---|---|---|
-| 80 | The seed makes the Dummies (100 in the test game; the real game has more, for the stress test), `dummy_0` onward, each with a radius of 8 to 16, health 100 (`now` and `max`), speed 2, a first angle from 0 to 359, inside the window of the grid, and the same every time for the same seed (another seed gives others). | The Dummies come from the seed and their ranges, and nothing is placed by hand. |
-| 81 | In five seeds, no Dummy starts on top of another Dummy, on top of an object, or closer to the avatar than the safe distance. | The 100 do not all start already in collision. |
+| 80 | The seed makes the Dummies (100 in the test game; the real game has more, for the stress test), `dummy_0` onward, each with a radius of 8 to 16, health 100, speed 2 from its recipe, a whole angle from 0 to 359, born with its whole body off the screen and its center inside the window of the grid; radii and angles are varied; the same seed gives the same Dummies and another seed gives others. | Every value of a Dummy comes from its ranges and the seed, like an object's, and the birth follows the rule of every actor. |
+| 81 | Birth: over 20 seeds the Dummies use all four strips of the ring between the screen and the edge of the window (left, right, above, below), none is born on the screen, some pairs are born overlapping (no free place is searched), and after 30 steps every one of those pairs is apart. | The user's rule: an actor is born anywhere off the screen, inside the window, and the push of the collision resolves what it lands on. |
 | 82 | A Dummy with no collision walks 60 frames in a straight line at speed 2, and keeps its angle (37) and its turns (0). | The walk is a straight line. |
 | 83 | A Dummy that walks into the rock of seed 1 is pushed out to just touching, turns (its new angle is `hashInts(seed, number, turns, 16) % 360`), and nobody is hurt: the rock keeps its health and the Dummy its 100, although the impact (2) is enough for a collision. | The user's rule (2026-11-10): the body slam hurts only where the avatar is one of the two sides. A Dummy against an object is a collision without a hit. |
 | 84 | The angles of 40 turns are exactly `hash(seed, 3, turns, 16) % 360`, whole degrees from 0 to 359, at least 20 different, and the direction always has length 1. | The `rand(360)` is reproducible and varied. |
