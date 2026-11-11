@@ -588,9 +588,9 @@ function collideWithObjects(state, actor, lastContacts) {
 // ---- Dummies ----
 // A Dummy is an actor made by the seed (like an object, from the ranges of its entry), but it lives in the
 // state, because it moves. It has `wander: { index, angle, turns }`: its number among the Dummies, the angle it
-// walks at (whole degrees, 0 to 359) and how many times it has turned. It walks in a straight line at its own
-// speed, and at every new collision it picks another angle: hash(seed, index, turns), so the same run always
-// turns the same way (nothing here is Math.random).
+// wants to walk at (whole degrees, 0 to 359) and how many times it has turned. It moves like any actor (its
+// velocity goes to its wanted direction times its speed, by its acceleration), and at every new collision it picks
+// another angle: hash(seed, index, turns), so the same run always turns the same way (nothing here is Math.random).
 
 // The sine of a whole number of degrees, from additions and multiplications only (a series), so it is the same in
 // every browser (Math.sin is allowed to differ in the last digits). The error is below 1e-11.
@@ -614,14 +614,11 @@ function cosDegrees(degrees) {
   return sinDegrees(90 - degrees);
 }
 
-// Points the Dummy at its angle: the direction is the unit vector of the angle, and the velocity is the
-// direction times its own speed (a Dummy always walks at its speed, there is no speeding up).
+// Points the Dummy at its angle: the direction it wants is the unit vector of the angle. Its velocity goes there
+// by its acceleration, like any actor's (step), so a Dummy that turns makes a curve instead of jumping.
 function setHeading(dummy) {
-  const { direction, velocity } = dummy.move;
-  direction.x = cosDegrees(dummy.wander.angle);
-  direction.y = sinDegrees(dummy.wander.angle);
-  velocity.x = direction.x * dummy.speed;
-  velocity.y = direction.y * dummy.speed;
+  dummy.move.direction.x = cosDegrees(dummy.wander.angle);
+  dummy.move.direction.y = sinDegrees(dummy.wander.angle);
 }
 
 // A new random angle, from 0 to 359, for the next stretch of the walk.
@@ -692,13 +689,6 @@ function createDummies(state) {
     setHeading(dummy);
     state.actors.push(dummy);
   }
-}
-
-// Moves a Dummy (it is already pointing at its angle) and wraps it around the window.
-function moveDummy(state, dummy, player) {
-  dummy.position.x += dummy.move.velocity.x;
-  dummy.position.y += dummy.move.velocity.y;
-  wrapIntoWindow(dummy, player, state.grid);
 }
 
 // The part of the overlap that "a" takes when the actors a and b are pushed apart (the user's decision, 2026-11-11:
@@ -991,10 +981,6 @@ function step(state, input, blueprint) {
   state.contacts = [];
   for (const actor of state.actors) {
     if (!actor.move) continue;
-    if (actor.wander) {
-      moveDummy(state, actor, player);
-      continue;
-    }
     const { direction, velocity } = actor.move;
     const speed = actor.speed;
 
@@ -1021,7 +1007,11 @@ function step(state, input, blueprint) {
     actor.position.x += velocity.x;
     actor.position.y += velocity.y;
 
-    collideWithObjects(state, actor, lastContacts);
+    // The window around the avatar is the real area of the game: any other actor that leaves it comes back on the
+    // opposite side. (The avatar is first in the list, so it has already moved.)
+    if (!isAvatar(actor)) wrapIntoWindow(actor, player, state.grid);
+
+    if (!actor.wander) collideWithObjects(state, actor, lastContacts); // the Dummies meet the objects in step 4
   }
 
   // 3. Cells: the cells every actor covers now (see "The cells of an actor").

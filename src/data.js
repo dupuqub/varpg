@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 27;
+const DEFINITIONS_VERSION = 28;
 
 const DEFINITIONS = {
   actors: {
@@ -52,7 +52,7 @@ const DEFINITIONS = {
       },
     },
 
-    // The Dummy (the user's idea, a test actor): it does not attack, it only walks in a straight line and, at every
+    // The Dummy (the user's idea, a test actor): it does not attack, it only walks toward an angle and, at every
     // collision, picks a new random angle (see createDummies and collideDummies in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
     // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
@@ -61,19 +61,25 @@ const DEFINITIONS = {
     // healthRange: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
     // speed: guess, 2 px/frame (120 px per second), slower than the avatar (3), so the avatar can catch one.
     //   Like the others, it goes through a final function (finalSpeed) into the Dummy, which carries it.
+    // acceleration, deceleration (the user's decision, 2026-11-11: every actor that moves has them in its recipe, and
+    //   its speed is calculated like anyone's): guess, written here on their own. 0.125: the top speed in 2 / 0.125 =
+    //   16 frames (0.27 s). 0.0625: a stop in 32 frames (0.53 s), twice the time of speeding up, so it slides. Powers
+    //   of two, like the avatar's. A Dummy always wants to walk, so its deceleration waits for the day one stops.
     dummy: {
       name: "Dummy",
       size: { min: 8, max: 16 },
       weightPerRadius: 100,
       healthRange: { min: 100, max: 100 },
       speed: 2,
+      acceleration: 0.125,
+      deceleration: 0.0625,
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the user's decision: the same potential behavior as every actor's (see the avatar), off; the Dummy does not crush
         move: {
-          direction: { x: 0, y: 0 }, // the unit vector of the angle it is walking at
-          velocity: { x: 0, y: 0 }, // direction x speed, in pixels per frame
+          direction: { x: 0, y: 0 }, // what it wants: the unit vector of the angle it is walking at
+          velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame: it is born still and speeds up
         },
       },
     },

@@ -1504,7 +1504,8 @@ const ALONE = `
     s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "dummy_" + n))];
     return s;
   }
-  function face(dummy, angle) { dummy.wander.angle = angle; setHeading(dummy); }
+  // Points a Dummy at an angle, already walking at its full speed (a Dummy is born still and speeds up; most tests want it cruising).
+  function face(dummy, angle) { dummy.wander.angle = angle; setHeading(dummy); dummy.move.velocity.x = dummy.move.direction.x * dummy.speed; dummy.move.velocity.y = dummy.move.direction.y * dummy.speed; }
 `;
 
 test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8 to 16, health 100, speed from the recipe), born off the screen with the center inside the window, the same every time", () => {
@@ -1524,7 +1525,9 @@ test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8
       if (d.health.now !== 100 || d.health.max !== 100) bad++;
       if (!Number.isInteger(d.wander.angle) || d.wander.angle < 0 || d.wander.angle > 359 || d.wander.turns !== 0) bad++;
       if (d.speed !== 2) bad++;
-      if (Math.abs(Math.hypot(d.move.velocity.x, d.move.velocity.y) - 2) > 1e-9) bad++;
+      if (d.move.velocity.x !== 0 || d.move.velocity.y !== 0) bad++; // born still
+      if (Math.abs(Math.hypot(d.move.direction.x, d.move.direction.y) - 1) > 1e-9) bad++; // and wanting to walk at its angle
+      if (d.acceleration !== 0.125 || d.deceleration !== 0.0625) bad++;
       const dx = Math.abs(d.position.x - avatar.x);
       const dy = Math.abs(d.position.y - avatar.y);
       if (dx >= width / 2 || dy >= height / 2) bad++; // the center inside the window (the wrap rule)
@@ -1856,6 +1859,8 @@ test("92 the speed of a Dummy comes from its recipe through finalSpeed (and a th
   const result = run(`
     const s = createChamber1State(1, 1);
     const d = s.actors[1];
+    s.actors = [s.actors[0], d];
+    for (let frame = 0; frame < 24; frame++) step(s, { move: { x: 0, y: 0 } }); // 3 / 0.125 = 24 frames to its top speed
     return { speed: d.speed, length: Math.hypot(d.move.velocity.x, d.move.velocity.y), final: finalSpeed(d), none: finalSpeed({ id: "x_1", type: "rock" }) };
   `, fast);
   assert.strictEqual(result.speed, 3);
@@ -2434,4 +2439,28 @@ test("113 the rules use nothing that can differ between machines or runs: no Mat
     assert.deepStrictEqual(found, []);
   }
   assert.ok(forbidden.test("x = Math.sin(1)") && forbidden.test("Date.now()") && forbidden.test("a ** 2") && !forbidden.test("Math.sqrt(2) + Math.imul(3, 4) + Math.floor(1.5)"));
+});
+
+test("114 a Dummy moves like any actor: born still, it reaches its speed of 2 in 16 frames (2 / 0.125) in a straight line toward its angle, and a turn is a curve, not a jump: turned around, it slows to a stop in 16 frames and is at full speed the other way after 32", () => {
+  const result = run(`
+    ${ALONE}
+    const s = alone(0);
+    const d = s.actors[1];
+    d.wander.angle = 0; setHeading(d); // to the right, from rest
+    d.position.x = 1000; d.position.y = 0;
+    const speeds = [];
+    for (let frame = 0; frame < 20; frame++) { step(s, { move: { x: 0, y: 0 } }); speeds.push(d.move.velocity.x); }
+    const sideways = d.move.velocity.y;
+    d.wander.angle = 180; setHeading(d); // turn around
+    const turning = [];
+    for (let frame = 0; frame < 36; frame++) { step(s, { move: { x: 0, y: 0 } }); turning.push(d.move.velocity.x); }
+    return { speeds, sideways, turning, carried: [d.speed, d.acceleration, d.deceleration] };
+  `, EMPTY);
+  assert.deepStrictEqual(plain(result.carried), [2, 0.125, 0.0625]);
+  assert.ok(Math.abs(result.speeds[0] - 0.125) < 1e-9 && Math.abs(result.speeds[7] - 1) < 1e-9, "it does not speed up by 0.125 per frame: " + result.speeds.slice(0, 8));
+  assert.ok(Math.abs(result.speeds[15] - 2) < 1e-9 && Math.abs(result.speeds[19] - 2) < 1e-9, "it is not at 2 after 16 frames: " + result.speeds[15]);
+  assert.ok(Math.abs(result.sideways) < 1e-9);
+  assert.ok(Math.abs(result.turning[0] - 1.875) < 1e-9, "the turn jumped: " + result.turning[0]); // one frame after turning it has only lost 0.125
+  assert.ok(Math.abs(result.turning[15]) < 1e-9, "not stopped after 16 frames: " + result.turning[15]);
+  assert.ok(Math.abs(result.turning[31] + 2) < 1e-9 && Math.abs(result.turning[35] + 2) < 1e-9, "not at full speed the other way after 32 frames: " + result.turning[31]);
 });
