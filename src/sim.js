@@ -389,13 +389,15 @@ function packetOf(parts, weight) {
 // The attacks of a thing, by name, each { base, now, ...what is its own }. The BASE is calculated once, when the thing is
 // made (the user's rule: static values at the start); NOW is the base plus whatever other things add, calculated again
 // every frame (finalAttackNow); a hit takes the NOW of the moment. Every thing has the body slam, whose base is the
-// weight times bodySlam.attackPerKg (the hit itself scales it by the impact, see finalAttack); a recipe can have more
+// weight times bodySlam.attack.damage (the hit itself scales it by the impact, see finalAttack); a recipe can have more
 // (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, windupFrames, freezeFrames, the hitbox) is copied as it is.
+function attackRecipes(thing) {
+  return { bodySlam: DEFINITIONS.constants.bodySlam.attack, ...definitionOf(thing).attacks };
+}
+
 function finalAttacks(thing) {
   const attacks = {};
-  const bodySlam = packetOf({ blunt: { flat: 0, perWeight: DEFINITIONS.constants.bodySlam.attackPerKg } }, thing.weight);
-  attacks.bodySlam = { base: bodySlam, now: { ...bodySlam } };
-  for (const [name, recipe] of Object.entries(definitionOf(thing).attacks ?? {})) {
+  for (const [name, recipe] of Object.entries(attackRecipes(thing))) {
     const base = packetOf(recipe.damage, thing.weight);
     const { damage, ...own } = recipe;
     attacks[name] = { base, now: { ...base }, ...JSON.parse(JSON.stringify(own)) };
@@ -405,13 +407,12 @@ function finalAttacks(thing) {
 
 // What an attack is now for one type. The BASE was made once, at the weight the actor had then; NOW is calculated again every
 // frame from the weight the actor has now (the user's rule, 2026-11-11: the body slam follows the weight, so a mecha that
-// fires its ammunition hits lighter). The terms are the same as when the base was made: the body slam is weight x
-// attackPerKg, an attack of a recipe is flat + perWeight x weight, and an attack with no weight term (the bullet of a weapon)
-// is its base. For an actor whose weight never changes, now is the base, bit for bit. The day an aura gives its neighbors more
+// fires its ammunition hits lighter). The terms are the same as when the base was made, and one rule for every attack, the body
+// slam included (the user's rule: no special cases): flat + perWeight x weight; an attack with no weight term (the bullet of
+// a weapon) is its base. For an actor whose weight never changes, now is the base, bit for bit. The day an aura gives its neighbors more
 // attack, its term goes here too (the base stays as it was made, so the bonus can leave without losing it).
 function finalAttackNow(actor, name, attack, type) {
-  if (name === "bodySlam") return DEFINITIONS.constants.bodySlam.attackPerKg * actor.weight;
-  const term = definitionOf(actor).attacks?.[name]?.damage?.[type];
+  const term = attackRecipes(actor)[name]?.damage?.[type];
   return term === undefined ? attack.base[type] : term.flat + term.perWeight * actor.weight;
 }
 

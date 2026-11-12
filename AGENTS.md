@@ -42,7 +42,7 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 | The avatar (radius, acceleration, deceleration, dash recharge) | `DEFINITIONS.actors` in `src/data.js` |
 | Dash charges and recharge time (sums of `dashCharges` and `rechargeFrames` of the parts; the Booster is the primary source) | `DEFINITIONS.parts` in `src/data.js`, computed by `finalDashMaxCharges` |
 | Mecha parts (weight and specs) and the starter blueprint | `DEFINITIONS.parts`, `DEFINITIONS.starterBlueprint` |
-| Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attackPerKg`, `bodySlam.referenceImpact`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
+| Values equal for everyone (`overspeedDecay`, `collision.minImpact`, `bodySlam.attack`, `bodySlam.referenceImpact`, `weightSpeedPenalty`) | `DEFINITIONS.constants` |
 | Damage rules (`damage.resistanceScale`, `damage.minDamage`) and the types of damage (the order is the order of calculation) | `DEFINITIONS.constants.damage` and `DEFINITIONS.damageTypes` |
 | The resistance of the avatar, by type | the `resistance` spec of each part in `DEFINITIONS.parts` |
 | The Biter (`size`, `healthRange`, `weightPerRadius`, `speed`, `acceleration`, `deceleration`, its `attacks.bite`: damage, reach, freeze frames, hitbox) and how many (`count`) | `DEFINITIONS.actors.biter` and `DEFINITIONS.terrain.biters` in `src/data.js` |

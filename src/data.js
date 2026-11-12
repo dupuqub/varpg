@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 31;
+const DEFINITIONS_VERSION = 33;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -198,12 +198,12 @@ const DEFINITIONS = {
 
     // The body slam: what a collision does, and the first attack of every thing (the user's decision, 2026-11-11: it is a
     // packet like any other attack, of blunt damage). Every collision is a hit; the blunt damage is the weight of whoever hits
-    // (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the speed going into the other thing,
+    // (kg) x perWeight x impact / referenceImpact, where the impact is the part of the speed going into the other thing,
     // in px/frame. Provisional formula (agent's proposal, to be discussed):
-    //   attackPerKg 0.001: the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
-    //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
+    //   attack.damage.blunt.perWeight 0.001 (flat 0): the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
+    //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly flat + perWeight x weight, the same form as every other attack (the body slam is written like the bite of a Biter).
     //     Walking (3) hits for half of it, a dash (12) for double.
-    bodySlam: { attackPerKg: 0.001, referenceImpact: 6 },
+    bodySlam: { attack: { damage: { blunt: { flat: 0, perWeight: 0.001 } } }, referenceImpact: 6 },
 
     // How a packet of damage hurts (see resolveDamage in src/sim.js), the same for every hit and every type.
     //   resistanceScale 100: the user's wish (2026-11-11): nobody is immortal, and there is always something to gain by adding
