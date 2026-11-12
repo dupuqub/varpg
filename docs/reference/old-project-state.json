@@ -1,0 +1,138 @@
+{
+    "Name": "State.json",
+    "Map": {
+        "Time": 0,
+        "World": "",
+        "Name": "",
+        "Spawns": []
+    },
+	"Avatar": {
+        "Resources": {
+            "Resin": 0
+        },
+        "Final": {
+            "Weight": 0,
+            "Speed": 0,
+            "Magnet": 0,
+            "Radar": 0,
+            "Armor": {
+                "Now": 0,
+                "Max": 0
+            },
+            "Halo": {
+                "Now": 0,
+                "Max": 0,
+                "Recharge": {"Now": 0, "Max": 0, "Rate": 0}
+            },
+            "Booster": {
+                "Speed": 0,
+                "Charges": {"Now": 0, "Max": 0},
+                "Recharge": {"Now": 0, "Max": 0}
+            }
+        },
+        "Parts": {
+            "ShoulderR": {
+                "Type": "Shoulder",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.2]
+                ]
+            },
+            "ShoulderL": {
+                "Type": "Shoulder",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.2]
+                ]
+            },
+            "ArmR": {
+                "Type": "Arm",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.3]
+                ]
+            },
+            "ArmL": {
+                "Type": "Arm",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.3]
+                ],
+                "Weapon": {
+                    "Base": {
+                        "Type": "Repeater",
+                        "Target": "Closer",
+                        "Storage": 1000,
+                        "Magazine": 20,
+                        "Interval": 0.3,
+                        "Reload": 4,
+                        "Damage": {"Min": 1, "Max": 2}
+                    }
+                }
+            },
+            "Head": {
+                "Type": "Head",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.1],
+                    ["Armor.Max", 20],
+                    ["Radar", 200]
+                ],
+                "Mods": [
+                    ["Assault", 0.5]
+                ]
+            },
+            "Torso": {
+                "Type": "Torso",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.4],
+                    ["Armor.Max", 80],
+                    ["Magnet", 20]
+                ],
+                "Mods": [
+                    ["Fortress", 0.1]
+                ]
+            },
+            "Legs": {
+                "Type": "Legs",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.6],
+                    ["Armor.Max", 40],
+                    ["Speed", 8]
+                ]
+            },
+            "Generator": {
+                "Type": "Generator",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.1],
+                    ["Halo.Max", 40],
+                    ["Halo.Recharge.Max", 4],
+                    ["Halo.Recharge.Rate", 1],
+                    ["Magnet", 10]
+                ]
+            },
+            "Booster": {
+                "Type": "Booster",
+                "Model": "C0L-1BR1",
+                "Maker": "Ornithon",
+                "Specs": [
+                    ["Weight", 0.1],
+                    ["Booster.Speed", 6],
+                    ["Booster.Charges.Max", 1],
+                    ["Booster.Recharge.Max", 4]                
+                ]
+            }
+        }
+    }
+}

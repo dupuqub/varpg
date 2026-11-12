@@ -1,0 +1,75 @@
+# Weapons and equipment: the user's vision, kept so it is not lost
+
+Written 2026-11-11 from the conversation with the user, after several summaries of earlier conversations had lost parts of it. It records what he said and decided, what the old project did, and what the agent proposed. It has **no numbers of the new game** (those live in `src/data.js`, each with its reason). When a point here is decided in code, move it to `AGENTS.md` and leave a short pointer.
+
+Reference material from the old project, kept as it was:
+
+- `docs/reference/old-project-state.json`: the state file of the old project (parts, specs, mods, one weapon, the final values).
+- `docs/reference/old-project-hud.jpg`: a screenshot of the old project. Weapon status is shown at each slot (`ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`): type, magazine, storage, interval, reload. The booster and the halo (shield) have their own boxes. Resin (a resource) is at the top left. The worms are the enemies, and the small orange dash near one of them is a bullet in flight.
+
+## Why it matters (the user's business reasoning)
+
+The game has to pay the bills, and weapons are the flagship of what is sold: **the more modular the weapons are, and the more they accept behaviors that recombine, the more different blueprints and mechas can be sold, unique to each player.** So the design goal is not a list of weapons. It is a small set of pieces that combine into many weapons, defined as data.
+
+## What the user decided
+
+- **Four weapon slots: `ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`.** All weapons aim by themselves (auto-aim); the player only moves and dashes.
+- **One item per slot (the user's decision, minimalist).** A slot holds one part. There are parts that are **only armor** (no weapon) and cannot take a weapon. A weapon comes as the arm or the shoulder itself (a weapon arm) and **replaces** the armor-only part that was there. There is no second item in a slot. Shoulders and arms need not be weapons: a shoulder part may be wings (mobility at the cost of damage), a shield, and so on; they are the same system of parts and specs the kit already has.
+- **Ammunition costs weight (the user, emphatic).** As the mecha fights and spends ammunition, it gets lighter and faster. So the weight of the avatar is **dynamic**, not static.
+- The first weapon is the simplest of all: a repeater of hitboxes, like a machine gun, slow at first, with limited ammunition, a reload time and a cadence. "All the basics."
+- **The style is crowds** (Diablo and Path of Exile in feel, close to Musou): many enemies, and seeing each attack is not a priority.
+
+## The old project's model (see the JSON and the screenshot)
+
+- A **part** has `Type`, `Model`, `Maker`, `Specs` (a list of `[name, value]`, summed into the final values), optional `Mods` and an optional `Weapon`.
+- A **weapon** (`Weapon.Base`) has: `Type` (the name of the recipe, `Repeater`), `Target` (the rule of auto-aim, `Closer`), `Storage` (the reserve of ammunition), `Magazine` (the clip), `Interval` (the time between shots), `Reload` (the time to reload) and `Damage` as a range `{ Min, Max }`.
+- The screen shows the live counters per slot (magazine now/capacity, interval now/base, reload now/base), so a weapon has **state** that changes every frame.
+- **Mods** (`Assault`, `Fortress`) sit on parts and change final values: they are what the new project calls the dynamic part (`now`) of a value.
+- **Halo** is the shield (a health that regenerates, from the Generator). **Armor** in the old project is what the new one calls health. Resin, Magnet and Radar are drops and collection, to come later.
+- Times were in seconds; the new simulation counts whole frames, so they become frames (the seconds can stay on the screen).
+
+## The natures of weapons the user wants to allow
+
+He listed them as examples of how far "weapon" must stretch, not as a list to build now:
+
+- A common shot: the projectile is only **a hitbox that moves**.
+- A **grenade**: an object (not a hitbox) that explodes at the target.
+- A **mine**: an object triggered by contact or by proximity.
+- A **rocket** that, when it explodes, makes **mini-grenades** in a radius around it.
+
+## The agent's decomposition (proposal, sound)
+
+Every weapon above is a combination of the same five pieces, so each weapon is a recipe in data and a new variant needs no new code:
+
+1. **Trigger:** when and against whom the weapon acts (auto-aim rule, cadence, ammunition, reload).
+2. **What is born:** a hitbox, a projectile, or an object.
+3. **How what was born behaves:** still, attached to its owner, traveling, arcing to a target, or waiting on the ground.
+4. **Its own trigger:** contact, proximity, time, end of life.
+5. **Effect:** the damage packet by type (the same packets and resistance as everything else), in an area or on one target; at the end of its life it can **emit** other things (the cluster rocket).
+
+Today's hitbox of the Biter is the simplest case of this: no velocity, immediate trigger, a short life, a packet. The plan is to generalize `state.hitboxes` (velocity, life, trigger, a list of emissions) rather than make grenades and mines actors.
+
+## Risks to watch
+
+- **Explosion of counts:** a rocket that emits grenades that emit grenades grows exponentially. Needs limits of depth and of quantity, **checked when the data loads** and also enforced while running.
+- **Cost per frame:** every projectile against every enemy, every frame, is expensive in a crowd. The hits must use the collision grid. Measure with hundreds of projectiles before trusting it.
+- **Determinism:** the auto-aim needs a tie rule (the closest; on a tie the lowest id). Any roll (a damage range, a spread) uses `hashInts` with a named salt in `SALTS`.
+- **Data from outside:** if blueprints and weapons are sold, the loader that validates them is the protection: it refuses absurd combinations and fixes the cost limits.
+- **Weight that changes in the fight touches more than speed.** The weight of the avatar is also the base of its body slam, of how it is pushed by other actors, and of what it can carry. A lighter mecha hits softer and is pushed more. That follows from the user's rule that weight is the center of contact damage, but it must be a conscious choice, and it contradicts "the base is calculated once" for the avatar's body slam: the body slam would have to follow the current weight.
+
+## Order the agent proposes (not yet agreed in full)
+
+1. Store the record of a hit (`resolveDamage` already makes it; nothing keeps it). Weapons will be the third source of damage.
+2. Wire the avatar's side of hitboxes: `hitboxHurts` says the avatar's hitboxes hurt everyone else, but the code only checks the avatar as a target.
+3. A **bench of weapons**: one weapon against N targets for T seconds, returning damage and kills. The deterministic engine makes it possible; it is how combinations are balanced and how the ML side will get its data.
+4. First weapon: the repeater (targeting, a traveling hitbox, damage on actors, destruction, ammunition and its weight).
+5. Then grenade (object with an arc or a timer), mine (proximity trigger), and last the emission at the end of life.
+
+## Open items
+
+- **Does the repeater's bullet travel (a hitbox that moves toward the target) or appear at the target at once?** Asked on 2026-11-11, not answered yet.
+- **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered. A range needs a salt per shot and makes the record of a hit store the rolled value.
+- Can a slot be truly **empty**? The user said an empty arm "is really empty", then chose one item per slot with armor-only parts; the two are not settled together.
+- Two-handed weapons, a bonus for the same sword in both arms, and set bonuses were discussed and **left out on purpose** for now. They can come later as part variants or as mods with a condition.
+- Where the weight of a unit of ammunition lives (in the weapon recipe) and whether the reserve and the magazine weigh the same.
+- What the avatar's death does (still open; the weapons close the loop of the game).
