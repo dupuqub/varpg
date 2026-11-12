@@ -2560,6 +2560,7 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 3, perWeight: 0.002 } }")), /attack bite of the actor biter has fire/);
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.002 } }")), /attack bite of the actor biter needs flat and perWeight/);
   assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the actor biter/);
+  assert.throws(() => loadGame((text) => text.replace("windupFrames: 15,", "windupFrames: -1,")), /windupFrames of the attack bite of the actor biter/);
   assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 4 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the actor biter/);
   assert.throws(() => loadGame((text) => text.replace("attacks: {\n        bite: {", "attacks: {\n        bodySlam: {")), /name bodySlam of the attack bodySlam/);
 });
@@ -2597,7 +2598,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
   assert.ok(Math.abs(result.made.bite.base.puncture - (3 + 0.002 * weight)) < 1e-9);
   assert.ok(Math.abs(result.made.bodySlam.base.blunt - weight * 0.001) < 1e-9);
   assert.deepStrictEqual(plain(result.made.bite.now), plain(result.made.bite.base)); // a new actor: now is the base
-  assert.deepStrictEqual([result.made.bite.reach, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 10, { radius: 20, frames: 4 }]); // what is not damage is copied as it is
+  assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 4 }]); // what is not damage is copied as it is
   assert.deepStrictEqual(plain(result.now), plain(result.base)); // the 99 is gone: now is calculated again every frame from the base
   assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
   assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 } } }); // the avatar has only the body slam: 5000 kg x 0.001
@@ -2633,34 +2634,36 @@ test("120 a Biter walks straight at the avatar: its wanted direction is the unit
   assert.strictEqual(result.top, 2.5);
 });
 
-test("121 within its reach the Biter strikes: one hitbox is born one body ahead of it with the damage the bite has now, and it stays still for 10 frames and then chases again (and bites again at once if the avatar is still there)", () => {
+test("121 within its reach the Biter holds still for 15 frames (the windup), then strikes: one hitbox is born one body ahead of it with the damage the bite has now, and it stays still for 10 frames more (the freeze) and then chases again", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0; // 5 px of space between the bodies: within the reach of 8
-    step(s, { move: { x: 0, y: 0 } });
-    const born = { hitboxes: JSON.parse(JSON.stringify(s.hitboxes)), ai: { ...b.ai }, direction: { ...b.move.direction }, radius: b.radius, bite: b.attacks.bite.now.puncture };
-    avatar.position.x = -1000; // the avatar goes away: the Biter has nothing to bite when the freeze ends
-    const phases = [];
-    for (let i = 2; i <= 12; i++) {
+    const rows = [];
+    let born = null;
+    for (let i = 1; i <= 27; i++) {
+      if (i === 17) avatar.position.x = -1000; // after the strike the avatar goes away: the Biter has nothing to bite when the freeze ends
       step(s, { move: { x: 0, y: 0 } });
-      phases.push([i, b.ai.phase, b.ai.frames, b.move.direction.x === 0 && b.move.direction.y === 0]);
+      rows.push([i, b.ai.phase, b.ai.frames, b.move.direction.x === 0 && b.move.direction.y === 0, s.hitboxes.length]);
+      if (i === 16) born = { hitboxes: JSON.parse(JSON.stringify(s.hitboxes)), radius: b.radius, bite: b.attacks.bite.now.puncture, direction: { ...b.move.direction } };
     }
-    return { born, phases, hitboxes: s.hitboxes.length };
+    return { rows, born };
   `, QUIET);
-  const { born } = result;
+  const { born, rows } = result;
+  // Step 1 it enters the windup with 15 frames; at steps 2 to 15 it counts down 14 to 1 and no hitbox exists yet.
+  assert.deepStrictEqual(plain(rows[0].slice(1)), ["windup", 15, true, 0]);
+  for (const [step, phase, frames, still, hitboxes] of plain(rows.slice(1, 15))) assert.deepStrictEqual([phase, frames, still, hitboxes], ["windup", 16 - step, true, 0], "step " + step);
+  // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now) and the freeze begins.
   assert.strictEqual(born.hitboxes.length, 1);
   assert.deepStrictEqual(plain(born.hitboxes[0]), { owner: "biter_0", attack: "bite", position: { x: 21, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: born.bite }, landed: true });
-  assert.strictEqual(born.hitboxes[0].position.x, 16 + born.radius + 5 - born.radius); // one body (its radius) toward the avatar
-  assert.deepStrictEqual([born.ai.phase, born.ai.frames, plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
-  // Steps 2 to 10 it is frozen (frames 9 down to 1) and wants no movement; at step 11 the freeze is over and it chases.
-  for (const [step, phase, frames, still] of result.phases) {
-    if (step <= 10) assert.deepStrictEqual([phase, frames, still], ["freeze", 11 - step, true], "step " + step);
+  assert.deepStrictEqual([rows[15][1], rows[15][2], plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
+  // Steps 17 to 25 it is frozen (frames 9 down to 1) and wants no movement; at step 26 the freeze is over and it chases.
+  for (const [step, phase, frames, still] of plain(rows.slice(16))) {
+    if (step <= 25) assert.deepStrictEqual([phase, frames, still], ["freeze", 26 - step, true], "step " + step);
     else assert.deepStrictEqual([phase, still], ["chase", false], "step " + step);
   }
-  assert.strictEqual(result.hitboxes, 0); // nothing was bitten again: the avatar was far
 });
 
 test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture), lives 4 frames and goes; changing the bite later does not change a hitbox that exists", () => {
@@ -2670,6 +2673,7 @@ test("122 a hitbox hurts the avatar once, with the packet as it was born (resist
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    b.attacks.bite.windupFrames = 0; // this test is about the hitbox, not the windup
     const bite = b.attacks.bite.base.puncture;
     const health = [];
     const alive = [];
@@ -2819,7 +2823,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 29, hash: "0ac3af852c27f800" };
+const DATA_FINGERPRINT = { version: 30, hash: "1fbb5fd90a877d26" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2868,4 +2872,26 @@ test("131 every screen that is played (the table CHAMBERS of src/main.js) is als
   const listed = [...input.match(/const GAME_SCREENS = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
   assert.ok(played.length >= 2, "the chambers were not found in main.js");
   assert.deepStrictEqual(listed.slice().sort(), played.slice().sort());
+});
+
+test("132 with no windup (windupFrames 0) the Biter strikes in the same step it gets within reach, and if the avatar leaves during the windup the hitbox is born anyway and lands on nothing", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    b.attacks.bite.windupFrames = 0;
+    step(s, { move: { x: 0, y: 0 } });
+    const immediately = { hitboxes: s.hitboxes.length, phase: b.ai.phase };
+
+    const t = aloneBiters(0);
+    const c = t.actors[1];
+    c.position.x = 16 + c.radius + 5; c.position.y = 0;
+    step(t, { move: { x: 0, y: 0 } }); // windup begins
+    t.actors[0].position.x = -1000; // the avatar leaves
+    for (let i = 0; i < 15; i++) step(t, { move: { x: 0, y: 0 } }); // the windup lasts 15 steps after the one that began it
+    return { immediately, afterWindup: { hitboxes: t.hitboxes.length, landed: t.hitboxes[0] && t.hitboxes[0].landed, health: t.actors[0].health.now, phase: c.ai.phase } };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.immediately), { hitboxes: 1, phase: "freeze" });
+  assert.deepStrictEqual(plain(result.afterWindup), { hitboxes: 1, landed: false, health: 100, phase: "freeze" });
 });

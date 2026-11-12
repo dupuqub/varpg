@@ -207,7 +207,7 @@ function assertValidDefinitions() {
         if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of " + where + " has " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
         if (!(part.flat >= 0 && part.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(part));
       }
-      for (const field of ["reach", "freezeFrames"]) {
+      for (const field of ["reach", "windupFrames", "freezeFrames"]) {
         if (!Number.isInteger(attack[field]) || attack[field] < 0) throw new Error("The " + field + " of " + where + " must be a whole number, 0 or more, and it is " + attack[field]);
       }
       const hitbox = attack.hitbox;
@@ -344,7 +344,7 @@ function packetOf(parts, weight) {
 // made (the user's rule: static values at the start); NOW is the base plus whatever other things add, calculated again
 // every frame (finalAttackNow); a hit takes the NOW of the moment. Every thing has the body slam, whose base is the
 // weight times bodySlam.attackPerKg (the hit itself scales it by the impact, see finalAttack); a recipe can have more
-// (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, freezeFrames, the hitbox) is copied as it is.
+// (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, windupFrames, freezeFrames, the hitbox) is copied as it is.
 function finalAttacks(thing) {
   const attacks = {};
   const bodySlam = packetOf({ blunt: { flat: 0, perWeight: DEFINITIONS.constants.bodySlam.attackPerKg } }, thing.weight);
@@ -1016,17 +1016,45 @@ function collideActors(state, lastContacts) {
 
 // ---- The Biter: chase, then strike ----
 // The first actor that decides what to do (the user's start of the AI, 2026-11-11). Its mind is data that lives in the
-// actor, small: actor.ai = { attack, phase, frames }: which of its attacks it uses, "chase" or "freeze", and the frames
-// left of the freeze. The numbers of the attack (how close it must be, how long it stays still, the hitbox) are in
-// actor.attacks[ai.attack], copied from the recipe when the actor was made.
+// actor, small: actor.ai = { attack, phase, frames }: which of its attacks it uses, "chase", "windup" or "freeze", and the
+// frames left of the windup or of the freeze. The numbers of the attack (how close it must be, how long it stays still
+// before and after, the hitbox) are in actor.attacks[ai.attack], copied from the recipe when the actor was made.
 // Chase: it wants to walk straight at the avatar. When the space between the two bodies is within the reach of the
-// attack, it strikes: a hitbox is born (createHitbox) and the actor stays still for freezeFrames frames (its wanted
-// direction is zero, so it slows down by its deceleration), and then chases again.
+// attack, it holds still for windupFrames frames (the windup: the avatar can leave), then strikes: a hitbox is born
+// (createHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
+// deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
 function think(state, actor, player) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
+
+  const dx = player.position.x - actor.position.x;
+  const dy = player.position.y - actor.position.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  // Toward the avatar (if the centers are the same there is no direction: it faces right, so the result is the same everywhere).
+  const towardX = distance === 0 ? 1 : dx / distance;
+  const towardY = distance === 0 ? 0 : dy / distance;
+
+  // The strike: the hitbox is born toward where the avatar is now, and the freeze after it begins.
+  const strike = () => {
+    createHitbox(state, actor, ai.attack, towardX, towardY);
+    ai.phase = "freeze";
+    ai.frames = attack.freezeFrames;
+    direction.x = 0;
+    direction.y = 0;
+  };
+
+  if (ai.phase === "windup") {
+    ai.frames -= 1;
+    if (ai.frames > 0) {
+      direction.x = 0;
+      direction.y = 0;
+      return;
+    }
+    strike(); // the windup is over: it strikes even if the avatar left (the hitbox then lands on nothing)
+    return;
+  }
 
   if (ai.phase === "freeze") {
     ai.frames -= 1;
@@ -1038,19 +1066,15 @@ function think(state, actor, player) {
     ai.phase = "chase"; // the freeze is over: this frame it already chases
   }
 
-  const dx = player.position.x - actor.position.x;
-  const dy = player.position.y - actor.position.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  // Toward the avatar (if the centers are the same there is no direction: it faces right, so the result is the same everywhere).
-  const towardX = distance === 0 ? 1 : dx / distance;
-  const towardY = distance === 0 ? 0 : dy / distance;
-
   if (distance - actor.radius - player.radius <= attack.reach) {
-    createHitbox(state, actor, ai.attack, towardX, towardY);
-    ai.phase = "freeze";
-    ai.frames = attack.freezeFrames;
-    direction.x = 0;
-    direction.y = 0;
+    if (attack.windupFrames > 0) {
+      ai.phase = "windup";
+      ai.frames = attack.windupFrames;
+      direction.x = 0;
+      direction.y = 0;
+      return;
+    }
+    strike();
     return;
   }
   direction.x = towardX;

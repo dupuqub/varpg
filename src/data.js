@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 29;
+const DEFINITIONS_VERSION = 30;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -102,12 +102,15 @@ const DEFINITIONS = {
     // acceleration, deceleration: guess, written here on their own. 0.125: the top speed in 2.5 / 0.125 = 20 frames.
     //   0.25: a stop in 2.5 / 0.25 = 10 frames, the length of the freeze after a bite (target), so it is still when it ends.
     //   Powers of two, so the sums are exact.
-    // attacks.bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames):
+    // attacks.bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames; later also a pause before):
     //   damage: puncture = flat + perWeight x weight (the user's idea: bigger Biters bite harder, and the weight counts for
     //     this attack, not for every attack). guess: flat 3, perWeight 0.002, so 3 + 0.002 x 1200 = 5.4 for the smallest
     //     and 3 + 0.002 x 2000 = 7 for the largest. The avatar has 100 health, so about 15 bites.
     //   reach: guess, 8 px of space between the two bodies, about a quarter of the avatar's width, "close enough to bite".
-    //   freezeFrames: the user's number, "about 10 frames".
+    //   windupFrames: the user's idea (2026-11-11): a short pause before the bite and one after it, to prove that both can
+    //     exist (the style is crowds, so seeing the attack is not a priority). guess 15 (a quarter of a second): enough to
+    //     see it and to dash out, short enough for a crowd to stay a threat. 0 would bite at once.
+    //   freezeFrames: the user's number, "about 10 frames", now the pause after the bite.
     //   hitbox: radius guess 20 (a little more than the avatar's radius, so a bite at the reach always lands: the hitbox is
     //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames guess 4 (0.07 s: a bite is
     //     a snap, not a zone). A hitbox hurts once.
@@ -123,6 +126,7 @@ const DEFINITIONS = {
         bite: {
           damage: { puncture: { flat: 3, perWeight: 0.002 } },
           reach: 8,
+          windupFrames: 15,
           freezeFrames: 10,
           hitbox: { radius: 20, frames: 4 },
         },
@@ -131,7 +135,7 @@ const DEFINITIONS = {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the same potential behavior as every actor's, off
-        ai: { attack: "bite", phase: "chase", frames: 0 }, // which attack it uses, what it is doing, and the frames left of the freeze
+        ai: { attack: "bite", phase: "chase", frames: 0 }, // which attack it uses, what it is doing (chase, windup, freeze), and the frames left of the windup or the freeze
         move: {
           direction: { x: 0, y: 0 }, // what it wants: toward the avatar, or still while it holds the freeze
           velocity: { x: 0, y: 0 }, // how it is really moving: it is born still and speeds up
