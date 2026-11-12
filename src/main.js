@@ -177,6 +177,27 @@ function updateControls() {
   part("status").textContent = (paused ? "PAUSED \u00B7 " : "") + "FRAME " + state.frame + " \u00B7 HISTORY " + (viewIndex + 1) + "/" + runHistory.snaps.length;
 }
 
+// Fullscreen (the user, 2026-11-12): a button in the top bar, hidden where the browser cannot do it (an iPhone, for one). On a
+// phone, going into fullscreen also asks for the landscape orientation, which the game needs; where that is refused (most
+// desktops) nothing happens.
+const fullscreenButtons = document.querySelectorAll('[data-control="fullscreen"]');
+for (const button of fullscreenButtons) {
+  button.hidden = !document.fullscreenEnabled;
+  button.addEventListener("click", async () => {
+    button.blur();
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape");
+      }
+    } catch (error) {
+      // refused by the browser (for example no landscape lock on a desktop): the game goes on as it was
+    }
+  });
+}
+
 // A button that keeps the focus would be pressed again by the Space key, which is the dash: so each click gives the focus back.
 for (const button of document.querySelectorAll('[data-control="back"]')) {
   button.addEventListener("click", () => { stepBack(); button.blur(); });

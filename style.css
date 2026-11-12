@@ -62,6 +62,7 @@ button:hover:not(:disabled) {
   width: 44px;
   padding: 4px 0;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 button:disabled {
