@@ -72,6 +72,8 @@ A part `repeater-arm` in the combat blueprint (Chamber 2): auto-aim at the close
 - The bullet **travels**; the other kind (hits the chosen target at once, more precise and a little weaker) is wanted too and not built.
 - **Pierce is the number of crossings** (0 = none), a variable of the projectile inherited from the weapon or the skill tree.
 
+Preparation for swords, spears and hammers (an experiment, not decisions): `docs/weapon-families.md`.
+
 ## Open items
 
 - **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered; the repeater has a fixed value for now. A range needs a salt per shot and makes the record of a hit store the rolled value.

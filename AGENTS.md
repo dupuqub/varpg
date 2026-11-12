@@ -322,6 +322,7 @@ Read `docs/weapons.md` before touching anything about weapons: it keeps the user
 - The numbers (range, cadence, reload, rounds, damage) are guesses that err **upward on purpose** (the user: "better to look overpowered than a rubber duck"); the capacity of the Torso was raised to 8 t to leave room for ammunition and parts.
 - Two kinds of weapon are wanted: a bullet that travels (crowd control, hits what is in the way, maybe stronger) and one that hits a chosen target at once (more precise, a little weaker). Only the first exists.
 - Not built yet: grenades, mines, emissions at the end of a life, the damage range per shot, objects that block a bullet.
+- Swords (an arc), spears (a thrust with pierce) and hammers (area damage) were discussed; the preparation, an experiment and not decisions, is in `docs/weapon-families.md` (including a checklist of what to build first and open questions for the user).
 
 ## Code layout
 
