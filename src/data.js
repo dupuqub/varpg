@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 33;
+const DEFINITIONS_VERSION = 34;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -50,6 +50,9 @@ const DEFINITIONS = {
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the user's decision: a potential behavior of every actor (see crushObject in src/sim.js), off until a buff switches it on
         resistance: {}, // points per type of damage, written from the parts every frame (see "parts" below); an actor without it has none
+        // The shield (the user's decision, 2026-11-12): a health that regenerates, from the Generator (see "parts" below). now/max is the
+        // user's mold; quiet counts the frames since the avatar last took damage; the rest is written at the start of the run from the parts.
+        shield: { now: 0, max: 0, quiet: 0, delayFrames: 0, regenPerFrame: 0, resistance: {} },
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
@@ -216,6 +219,13 @@ const DEFINITIONS = {
     //     makes the target immune); an empty packet (a weight of 0) costs nothing.
     damage: { resistanceScale: 100, minDamage: 1 },
 
+    // The ring of the shield (the user's idea, 2026-11-12): the avatar's body for collision and for being hit is a circle that goes
+    // from the body (shield empty) to the ring (shield full) in a straight line with the share of the shield that is left, so
+    // nothing jumps when it fills or drains gradually, and the avatar does not hurt anyone because the ring grew (a hit needs an impact).
+    // ringScale 1.3: anchor, the ring of the old project's screenshot (docs/reference, a relic) is about 57 px across around a mecha
+    //   about 45 px wide, so a little bigger than the body; this is the user's "bigger than the avatar, as in the image".
+    shield: { ringScale: 1.3 },
+
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that
     // takes 0.1 px/frame is a 500 kg arm (500 x 0.0002 = 0.1). Direct and easy to see in the audit.
@@ -286,7 +296,14 @@ const DEFINITIONS = {
       },
     },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },
-    generator: { name: "Generator", weight: 200, specs: {} },
+    // The Generator is the primary source of the shield (the user's decision). The shield absorbs first, and what is left goes to health.
+    //   shieldMax 40: anchor, the screenshot of the old project (a relic) shows 40 next to 154 of health; here with 100 of health it is
+    //     a bit under half of it, about six to eight bites of a Biter, so it is felt and does not replace the health. A guess to tune by playing.
+    //   shieldDelayFrames 180 (3 s): guess, long enough that a crowd on top of the avatar keeps it down, short enough that stepping out of the fight pays.
+    //   shieldRegenPerFrame 0.25 (15 per second): target, a full shield in 40 / 0.25 = 160 frames (2.7 s) once it starts. A power of two, so the sums are exact.
+    //   shieldResistance 11 points per type: the user's example "10% while active", and 11 points are 11 / 111 = 9.9% by the curve of
+    //     constants.damage. Counted only while the shield has something left.
+    generator: { name: "Generator", weight: 200, specs: { shieldMax: 40, shieldDelayFrames: 180, shieldRegenPerFrame: 0.25, shieldResistance: { blunt: 11, puncture: 11 } } },
     booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1, rechargeFrames: 240 } },
   },
 

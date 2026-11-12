@@ -23,12 +23,19 @@ function draw(context, state, blueprint, fps) {
   drawObjects(context, state, player);
   drawActors(context, state, player);
 
-  const radius = player.radius;
-
+  // The body is always the same circle; the ring of the shield is the radius the avatar collides with (player.radius), so
+  // what is drawn is what is hit. It is drawn only while the shield has something left, a little fainter as it drains.
   context.fillStyle = AVATAR_COLOR;
   context.beginPath();
-  context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
+  context.arc(width / 2, height / 2, player.bodyRadius, 0, Math.PI * 2);
   context.fill();
+  if (player.shield.now > 0) {
+    context.strokeStyle = `rgba(61, 169, 255, ${0.35 + 0.65 * (player.shield.now / player.shield.max)})`;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(width / 2, height / 2, player.radius, 0, Math.PI * 2);
+    context.stroke();
+  }
 
   drawHitboxes(context, state, player);
 
@@ -55,6 +62,7 @@ function drawHealth(context, player) {
   context.textBaseline = "bottom";
   context.fillStyle = AVATAR_COLOR;
   context.fillText(`HEALTH ${player.health.now.toFixed(1)}/${player.health.max}`, 24, context.canvas.height - 56);
+  if (player.shield.max > 0) context.fillText(`SHIELD ${player.shield.now.toFixed(1)}/${player.shield.max}`, 24, context.canvas.height - 88);
 }
 
 // The weapons as plain text in the bottom-left corner, above the health: the name, the rounds in the magazine and in the
@@ -63,7 +71,7 @@ function drawWeapons(context, player) {
   context.font = "24px monospace";
   context.textBaseline = "bottom";
   context.fillStyle = AVATAR_COLOR;
-  let y = context.canvas.height - 88;
+  let y = context.canvas.height - 120; // above the shield, which is above the health
   context.fillText(`WEIGHT ${player.weight} KG`, 24, y);
   for (const weapon of player.weapons) {
     y -= 32;

@@ -22,10 +22,20 @@ function readSource(name) {
 // with other numbers). A patch that changes nothing fails loudly: the text it looked for is no longer in the data, and
 // the test would silently play the real game instead of the one it meant (it happened once, and every test played with
 // the full count of Dummies).
-function loadGame(patchData = null) {
+// The games of the tests play without a shield unless they ask for it (shield: true): the tests written before the shield count
+// every point of damage the avatar takes and use its radius of 16, and the shield would absorb the first hits and widen the
+// avatar. The Generator keeps its weight, so nothing else changes. The tests of the shield (and test 129, which reads the real
+// file) use the real Generator.
+const GENERATOR_WITH_SHIELD = /generator: \{ name: "Generator", weight: 200, specs: \{[^\n]*\} \},/;
+function loadGame(patchData = null, { shield = false } = {}) {
   const context = vm.createContext({});
   for (const name of FILES) {
     let text = readSource(name);
+    if (name === "data.js" && !shield) {
+      const without = text.replace(GENERATOR_WITH_SHIELD, 'generator: { name: "Generator", weight: 200, specs: {} },');
+      if (without === text) throw new Error("The Generator with a shield is no longer in src/data.js: the tests cannot play without it");
+      text = without;
+    }
     if (name === "data.js" && patchData !== null) {
       const patched = patchData(text);
       if (patched === text) throw new Error("A patch of src/data.js changed nothing: the text it looks for is no longer there");
@@ -2823,7 +2833,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 33, hash: "7757c685d620a388" };
+const DATA_FINGERPRINT = { version: 34, hash: "41706ec8305f3a88" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3176,4 +3186,162 @@ test("143 the weight of the avatar comes from the parts of the blueprint and the
   assert.strictEqual(result.madeArmedSteppedPlain, 5000 + 6 * 400); // the plain parts, and the 400 rounds it holds
   assert.strictEqual(result.madePlainSteppedArmed, 5150); // the armed parts, and no rounds: it has no weapon state
   assert.deepStrictEqual(plain(result.weapons), [1, 0]);
+});
+
+// ---- The shield (the user, 2026-11-12) ----
+// The real Generator (shield: true), the world as QUIET (no objects, six Biters). The shield: a health that regenerates, from the
+// Generator; it absorbs first; it adds resistance while it has something left; the ring (the radius of the avatar for collision
+// and for being hit) goes from the body to 1.3 times the body in a straight line with the shield that is left.
+const SHIELDED = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }"), { shield: true });
+const IDLE = "const idle = { move: { x: 0, y: 0 }, dash: false };";
+
+test("144 the Generator gives the avatar its shield: 40, a wait of 180 frames, 0.25 back per frame, and 11 points of resistance to each type while it lasts; it is born full and not waiting, and its radius is the ring, 16 x 1.3", () => {
+  const result = run(`
+    const avatar = createAvatar(createRun(1).blueprint);
+    const without = createAvatar({ parts: createRun(1).blueprint.parts.filter((id) => id !== "generator") });
+    return { shield: avatar.shield, radius: avatar.radius, bodyRadius: avatar.bodyRadius, without: { shield: without.shield, radius: without.radius } };
+  `, SHIELDED);
+  assert.deepStrictEqual(plain(result.shield), { now: 40, max: 40, quiet: 180, delayFrames: 180, regenPerFrame: 0.25, resistance: { blunt: 11, puncture: 11 } });
+  assert.strictEqual(result.bodyRadius, 16);
+  assert.ok(Math.abs(result.radius - 16 * 1.3) < 1e-12);
+  assert.strictEqual(result.without.shield.max, 0); // no Generator, no shield: and the radius is the body
+  assert.strictEqual(result.without.radius, 16);
+});
+
+test("145 the shield absorbs first and what is left goes to health: a hit of 20 blunt costs 20 x 100 / 141 from the shield (30 points of the parts and 11 of the shield), and a bigger one empties the shield and the rest hurts the health", () => {
+  const result = run(`
+    const avatar = createAvatar(createRun(1).blueprint);
+    const first = resolveDamage({ blunt: 20 }, avatar).total;
+    applyDamage(avatar, first);
+    const afterFirst = { shield: avatar.shield.now, health: avatar.health.now };
+    const second = resolveDamage({ blunt: 100 }, avatar).total;
+    applyDamage(avatar, second);
+    return { first, afterFirst, second, shield: avatar.shield.now, health: avatar.health.now };
+  `, SHIELDED);
+  const first = 20 * (1 - 41 / 141);
+  const second = 100 * (1 - 41 / 141);
+  assert.ok(Math.abs(result.first - first) < 1e-12);
+  assert.ok(Math.abs(result.afterFirst.shield - (40 - first)) < 1e-12 && result.afterFirst.health === 100); // health untouched while the shield lasts
+  assert.ok(Math.abs(result.second - second) < 1e-12);
+  assert.strictEqual(result.shield, 0);
+  assert.ok(Math.abs(result.health - (100 - (second - (40 - first)))) < 1e-9); // what the shield could not take
+});
+
+test("146 the resistance of the shield counts only while it has something left: 41 points of blunt with it (30 + 11) and 30 without, and the record of the hit says how many came from the shield", () => {
+  const result = run(`
+    const avatar = createAvatar(createRun(1).blueprint);
+    const alive = resolveDamage({ blunt: 50, puncture: 50 }, avatar);
+    avatar.shield.now = 0;
+    const dead = resolveDamage({ blunt: 50, puncture: 50 }, avatar);
+    return { alive, dead };
+  `, SHIELDED);
+  assert.deepStrictEqual(plain(result.alive.parts.map((part) => [part.type, part.points, part.fromShield])), [["blunt", 41, 11], ["puncture", 21, 11]]);
+  assert.deepStrictEqual(plain(result.dead.parts.map((part) => [part.type, part.points, part.fromShield])), [["blunt", 30, 0], ["puncture", 10, 0]]);
+  assert.ok(result.alive.total < result.dead.total);
+});
+
+test("147 the shield waits 180 quiet frames after any damage and then gives back 0.25 per frame up to its maximum; damage during the regeneration starts the wait again", () => {
+  const result = run(`
+    ${IDLE}
+    const s = createChamber2State(1, 1);
+    s.actors = [s.actors[0]];
+    const avatar = s.actors[0];
+    applyDamage(avatar, 10); // 30 left, the wait starts
+    const at = {};
+    for (let i = 1; i <= 219; i++) {
+      step(s, idle);
+      if (i === 179 || i === 180 || i === 181 || i === 219) at[i] = avatar.shield.now;
+    }
+    applyDamage(avatar, 1); // damage again, when it is full: the wait starts again
+    const hit = avatar.shield.now;
+    for (let i = 1; i <= 179; i++) step(s, idle);
+    const stillWaiting = avatar.shield.now;
+    step(s, idle);
+    return { at, hit, stillWaiting, back: avatar.shield.now };
+  `, SHIELDED);
+  assert.deepStrictEqual(plain(result.at), { 179: 30, 180: 30.25, 181: 30.5, 219: 40 }); // 39.75 at frame 218 and the maximum at 219: 30 + 40 x 0.25 = 40, and it stops there
+  assert.strictEqual(result.hit, 39);
+  assert.strictEqual(result.stillWaiting, 39); // 179 quiet frames: nothing yet
+  assert.strictEqual(result.back, 39.25);
+});
+
+test("148 the radius of the avatar follows the shield in a straight line, from the body (16, empty) to the ring (20.8, full): half a shield is 18.4, and it is calculated again every frame and stored in the avatar", () => {
+  const result = run(`
+    ${IDLE}
+    const s = createChamber2State(1, 1);
+    s.actors = [s.actors[0]];
+    const avatar = s.actors[0];
+    const radii = [];
+    for (const now of [40, 20, 0]) {
+      avatar.shield.now = now; avatar.shield.quiet = 0; // quiet 0: nothing regenerates in this frame
+      step(s, idle);
+      radii.push(avatar.radius);
+    }
+    return { radii, body: avatar.bodyRadius };
+  `, SHIELDED);
+  assert.ok(Math.abs(result.radii[0] - 20.8) < 1e-12);
+  assert.ok(Math.abs(result.radii[1] - 18.4) < 1e-12);
+  assert.strictEqual(result.radii[2], 16);
+  assert.strictEqual(result.body, 16); // the body itself never changes
+});
+
+test("149 the ring growing over a Biter hurts nobody (a hit needs an impact, and growing is not one): the Biter is only pushed out and nothing is absorbed; but walking into it with the shield up is a real hit that the shield takes", () => {
+  const result = run(`
+    ${IDLE}
+    function scene(biterX) {
+      const s = createChamber2State(1, 1);
+      const biter = s.actors.find((actor) => actor.id === "biter_0");
+      s.actors = [s.actors[0], biter];
+      biter.ai.phase = "freeze"; biter.ai.frames = 1000000; // it stays where it is put and does not bite
+      biter.position.x = biterX; biter.position.y = 0;
+      return { s, avatar: s.actors[0], biter };
+    }
+    // growing: the shield is empty and the Biter is 2 px off the body; then the shield comes back all at once
+    const grow = scene(0);
+    grow.biter.position.x = 16 + grow.biter.radius + 2;
+    grow.avatar.shield.now = 0; grow.avatar.shield.quiet = 0;
+    step(grow.s, idle);
+    const gap = grow.biter.position.x - grow.avatar.position.x - 16 - grow.biter.radius;
+    grow.avatar.shield.now = 40;
+    step(grow.s, idle);
+    const grown = { shield: grow.avatar.shield.now, health: grow.avatar.health.now, biter: grow.biter.health.now, biterMax: grow.biter.health.max, apart: grow.biter.position.x - grow.avatar.position.x - grow.avatar.radius - grow.biter.radius };
+    // walking: the same, but the avatar walks into the Biter
+    const walk = scene(100);
+    for (let i = 0; i < 60; i++) step(walk.s, { move: { x: 1, y: 0 }, dash: false });
+    return { gap, grown, walked: { shield: walk.avatar.shield.now, health: walk.avatar.health.now, healthMax: walk.avatar.health.max, biter: walk.biter.health.now, biterMax: walk.biter.health.max } };
+  `, SHIELDED);
+  assert.ok(Math.abs(result.gap - 2) < 1e-9); // before: not touching
+  assert.strictEqual(result.grown.shield, 40); // nothing was absorbed (the shield is full)
+  assert.strictEqual(result.grown.health, 100);
+  assert.strictEqual(result.grown.biter, result.grown.biterMax); // the Biter was not hurt either
+  assert.ok(result.grown.apart > -1e-9); // and the ring pushed it out until it just touches
+  assert.ok(result.walked.shield < 40 && result.walked.health === result.walked.healthMax); // a real hit: the shield takes it
+  assert.ok(result.walked.biter < result.walked.biterMax);
+});
+
+test("150 the cross-check stays clean in a shielded run where Biters hit the avatar and the shield drains and comes back, and the state is plain numbers", () => {
+  const result = run(`
+    const s = createChamber2State(1, 1);
+    const avatar = s.actors[0];
+    const h = createHistory(s, createRun(1).blueprint);
+    let lowest = avatar.shield.now;
+    let lowestHealth = avatar.health.now;
+    for (let i = 0; i < 900; i++) {
+      const input = { move: { x: i % 120 < 80 ? 0.6 : -0.6, y: i % 200 < 100 ? 0.3 : -0.3 }, dash: i % 150 === 10 };
+      step(s, input);
+      recordFrame(h, s, input);
+      lowest = Math.min(lowest, avatar.shield.now);
+      lowestHealth = Math.min(lowestHealth, avatar.health.now);
+    }
+    return { check: crossCheck(h), lowest, lowestHealth, shield: avatar.shield, finite: JSON.stringify(avatar.shield).includes("null") === false };
+  `, SHIELDED);
+  assert.strictEqual(result.check, null);
+  assert.ok(result.lowest < 40, "the Biters took some of the shield: " + result.lowest);
+  assert.ok(result.finite);
+});
+
+test("151 the shield specs are checked when the data loads: resistance only to known types of damage, and the wait a whole number of frames, 1 or more", () => {
+  assert.throws(() => loadGame((text) => text.replace("shieldResistance: { blunt: 11, puncture: 11 }", "shieldResistance: { fire: 11 }"), { shield: true }), /not a type of damage/);
+  assert.throws(() => loadGame((text) => text.replace("shieldDelayFrames: 180", "shieldDelayFrames: 1.5"), { shield: true }), /whole number of frames/);
+  assert.throws(() => loadGame((text) => text.replace("shieldMax: 40", "shieldMax: -1"), { shield: true }), /0 or more/);
 });

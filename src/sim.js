@@ -58,18 +58,20 @@ function finalizeStatic(actor, blueprint) {
   actor.acceleration = finalAcceleration(actor, blueprint);
   actor.deceleration = finalDeceleration(actor, blueprint);
   actor.health.max = finalMaxHealth(actor, blueprint);
+  if (actor.shield) writeShield(actor, blueprint);
   if (actor.dash) {
     actor.dash.rechargeFrames = finalDashRechargeFrames(actor, blueprint);
     actor.dash.charges.max = finalDashMaxCharges(actor, blueprint);
   }
 }
 
-// The dynamic values: the top speed, the resistance, what every attack is now (its base plus whatever other things
-// add: nothing yet), and for an actor with a dash its speed.
+// The dynamic values: the top speed, the resistance, the radius of an actor with a shield (it follows the shield that is left),
+// what every attack is now (its base plus whatever other things add: nothing yet), and for an actor with a dash its speed.
 function finalizeDynamic(actor, blueprint) {
   if (isAvatar(actor)) actor.weight = finalWeight(actor, blueprint); // the ammunition it still carries (before the speed, which depends on it)
   actor.speed = finalSpeed(actor, blueprint);
   if (actor.resistance) writeResistance(actor, blueprint);
+  if (actor.shield) actor.radius = finalShieldRadius(actor);
   for (const name in actor.attacks) {
     const attack = actor.attacks[name];
     for (const type of Object.keys(attack.base)) attack.now[type] = finalAttackNow(actor, name, attack, type);
@@ -86,6 +88,9 @@ function createAvatar(blueprint) {
   finalizeStatic(avatar, blueprint); // writes the maximums
   finalizeDynamic(avatar, blueprint);
   avatar.health.now = avatar.health.max;
+  avatar.shield.now = avatar.shield.max; // born with the shield full and not waiting to regenerate
+  avatar.shield.quiet = avatar.shield.delayFrames;
+  finalizeDynamic(avatar, blueprint); // the radius follows the shield
   avatar.dash.charges.now = avatar.dash.charges.max;
   return avatar;
 }
@@ -133,6 +138,46 @@ function carriedWeight(actor, blueprint) {
   return weight;
 }
 
+// ---- The shield ----
+
+// The shield (the user's decision, 2026-11-12): a health that regenerates, from the Generator. The maximum, the wait and the
+// rate are the sum of the parts; the resistance it adds is a table by type, counted only while the shield is alive. All of it is
+// static and written at the start of the run; the shield that is left (now) and the frames of quiet are the state.
+function writeShield(actor, blueprint) {
+  const shield = actor.shield;
+  shield.max = fromParts(actor, blueprint, "shieldMax");
+  shield.delayFrames = fromParts(actor, blueprint, "shieldDelayFrames");
+  shield.regenPerFrame = fromParts(actor, blueprint, "shieldRegenPerFrame");
+  for (const type of DEFINITIONS.damageTypes) {
+    shield.resistance[type] = isAvatar(actor) ? partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0) : 0;
+  }
+  actor.bodyRadius = actor.radius; // the radius of the body itself; actor.radius is the one that collides, and follows the shield
+}
+
+// Whether the shield still has something left (and so is felt: it adds resistance and the ring is out).
+function shieldAlive(actor) {
+  return actor.shield !== undefined && actor.shield.now > 0;
+}
+
+// The radius of an actor with a shield, for collision and for being hit: from the body (shield empty) to the ring
+// (body x constants.shield.ringScale, shield full), in a straight line with the share of the shield that is left. An actor
+// whose shield has a maximum of 0 is its body. Dynamic: calculated again every frame.
+function finalShieldRadius(actor) {
+  if (!(actor.shield.max > 0)) return actor.bodyRadius;
+  const ring = actor.bodyRadius * DEFINITIONS.constants.shield.ringScale;
+  return actor.bodyRadius + ((ring - actor.bodyRadius) * actor.shield.now) / actor.shield.max;
+}
+
+// One frame of the shield: count a quiet frame (never past the wait), and once the wait is over give back the rate per frame
+// up to the maximum. Damage sets the count to 0 (applyDamage).
+function regenerateShield(actor) {
+  const shield = actor.shield;
+  shield.quiet = Math.min(shield.quiet + 1, shield.delayFrames);
+  if (shield.quiet >= shield.delayFrames && shield.now < shield.max) {
+    shield.now = Math.min(shield.max, shield.now + shield.regenPerFrame);
+  }
+}
+
 // The sum of one spec over all the parts (a part without it adds 0).
 function sumSpec(blueprint, name) {
   return partsOf(blueprint).reduce((sum, part) => sum + (part.specs[name] || 0), 0);
@@ -160,7 +205,7 @@ function assertValidBlueprint(blueprint) {
 
 // The specs a part can have: the ones the rules read (see "parts" in src/data.js). Anything else is refused when the
 // definitions load.
-const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges", "rechargeFrames", "capacity"];
+const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges", "rechargeFrames", "capacity", "shieldMax", "shieldDelayFrames", "shieldRegenPerFrame", "shieldResistance"];
 
 // Fails loudly if a definition breaks a rule of the library. It runs once, when this file is loaded, so a
 // bad definition stops the game before the first frame.
@@ -208,11 +253,13 @@ function assertValidDefinitions() {
     // so a part can only have the specs listed in PART_SPECS.
     for (const [name, value] of Object.entries(part.specs)) {
       if (!PART_SPECS.includes(name)) throw new Error("The part " + id + " has the spec " + name + ", which no rule reads. The specs are: " + PART_SPECS.join(", "));
-      if (name === "resistance") {
+      if (name === "resistance" || name === "shieldResistance") {
         for (const [type, points] of Object.entries(value)) {
-          if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The resistance of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
-          if (!(points >= 0)) throw new Error("The resistance of the part " + id + " to " + type + " must be 0 or more, and it is " + points);
+          if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The " + name + " of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
+          if (!(points >= 0)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be 0 or more, and it is " + points);
         }
+      } else if (name === "shieldDelayFrames" && !(Number.isInteger(value) && value >= 1)) {
+        throw new Error("The spec shieldDelayFrames of the part " + id + " must be a whole number of frames, 1 or more, and it is " + value);
       } else if (!(typeof value === "number" && value >= 0)) {
         throw new Error("The spec " + name + " of the part " + id + " must be a number, 0 or more, and it is " + value);
       }
@@ -447,10 +494,11 @@ function resolveDamage(packet, target) {
   for (const type of DEFINITIONS.damageTypes) {
     const amount = packet[type];
     if (!(amount > 0)) continue;
-    const points = target.resistance?.[type] ?? 0;
+    const fromShield = shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
+    const points = (target.resistance?.[type] ?? 0) + fromShield;
     const reduction = points / (points + scale);
     const after = amount * (1 - reduction);
-    parts.push({ type, amount, points, reduction, after });
+    parts.push({ type, amount, points, fromShield, reduction, after });
     sum += after;
   }
   if (parts.length === 0) return { parts, total: 0, minimumApplied: false };
@@ -471,9 +519,17 @@ function bodySlamHurts(a, b) {
   return isAvatar(a) || isAvatar(b);
 }
 
-// Takes damage off the health. Health stops at 0 (there is no death yet).
+// Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).
+// Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate.
 function applyDamage(actor, damage) {
-  actor.health.now = Math.max(0, actor.health.now - damage);
+  let left = damage;
+  if (actor.shield) {
+    const absorbed = Math.min(actor.shield.now, left);
+    actor.shield.now -= absorbed;
+    left -= absorbed;
+    if (damage > 0) actor.shield.quiet = 0;
+  }
+  actor.health.now = Math.max(0, actor.health.now - left);
 }
 
 // An actor counts as faster than its top speed only above this margin, so the
@@ -1483,6 +1539,9 @@ function step(state, input, blueprint) {
 
   // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor).
   removeDestroyed(state);
+
+  // 7. The shield counts the quiet frames and regenerates once the wait is over (regenerateShield).
+  for (const actor of state.actors) if (actor.shield) regenerateShield(actor);
 
   state.frame += 1;
 }

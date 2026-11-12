@@ -103,6 +103,7 @@ function blueprintText(blueprint) {
     `top speed: ${sumSpec(blueprint, "speed")} - ${weight} x ${penalty} = ${finalSpeed(avatar, blueprint)}`,
     `maximum health: ${sumSpec(blueprint, "health")} = ${finalMaxHealth(avatar, blueprint)}`,
     ...DEFINITIONS.damageTypes.map((type) => `resistance to ${type}: ${sumResistance(blueprint, type)} points = ${finalResistance(avatar, blueprint, type)}`),
+    `shield: maximum ${avatar.shield.max}, wait ${avatar.shield.delayFrames} frames, back ${avatar.shield.regenPerFrame} per frame, resistance while it lasts ${JSON.stringify(avatar.shield.resistance)}; the ring is ${avatar.bodyRadius} x ${DEFINITIONS.constants.shield.ringScale} = ${avatar.radius} when full`,
     `dash speed: ${sumSpec(blueprint, "dashSpeed")} = ${finalDashSpeed(avatar, blueprint)}`,
     `dash charges (maximum): ${sumSpec(blueprint, "dashCharges")} = ${finalDashMaxCharges(avatar, blueprint)}`,
     `radius: ${finalRadius(avatar, blueprint)}, acceleration: ${finalAcceleration(avatar, blueprint)}, deceleration: ${finalDeceleration(avatar, blueprint)} (from the recipe of the avatar)`,
