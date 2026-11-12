@@ -70,8 +70,9 @@ function finalizeDynamic(actor, blueprint) {
   if (isAvatar(actor)) actor.weight = finalWeight(actor, blueprint); // the ammunition it still carries (before the speed, which depends on it)
   actor.speed = finalSpeed(actor, blueprint);
   if (actor.resistance) writeResistance(actor, blueprint);
-  for (const attack of Object.values(actor.attacks)) {
-    for (const type of Object.keys(attack.base)) attack.now[type] = finalAttackNow(actor, attack, type);
+  for (const name in actor.attacks) {
+    const attack = actor.attacks[name];
+    for (const type of Object.keys(attack.base)) attack.now[type] = finalAttackNow(actor, name, attack, type);
   }
   if (actor.dash) actor.dash.speed = finalDashSpeed(actor, blueprint);
 }
@@ -119,15 +120,15 @@ function loadedAmmoWeight(part) {
   return part.weapon ? part.weapon.rounds.weight * (part.weapon.rounds.magazine + part.weapon.rounds.reserve) : 0;
 }
 
-// What the avatar weighs now: the loaded weight minus the rounds it has fired (the user's rule, 2026-11-11: the ammunition
-// costs weight, so the mecha gets lighter and faster as it fights). Reloading only moves rounds from the reserve to the
-// magazine, so it changes nothing. Dynamic: calculated again every frame (finalizeDynamic).
+// What the avatar weighs now (the user's rule, 2026-11-11: the ammunition costs weight, so the mecha gets lighter and
+// faster as it fights): the parts of the blueprint plus the rounds it still holds, magazine and reserve, which are read
+// from the avatar's own weapon state (so the weight and the weapons never disagree, whatever blueprint step is given).
+// Reloading only moves rounds from the reserve to the magazine, so it changes nothing. Dynamic: calculated again every
+// frame (finalizeDynamic).
 function carriedWeight(actor, blueprint) {
-  let weight = totalWeight(blueprint);
+  let weight = partsOf(blueprint).reduce((sum, part) => sum + part.weight, 0);
   for (const weapon of actor.weapons ?? []) {
-    const recipe = DEFINITIONS.parts[weapon.part].weapon.rounds;
-    const fired = recipe.magazine + recipe.reserve - (weapon.magazine + weapon.reserve);
-    weight -= fired * recipe.weight;
+    weight += DEFINITIONS.parts[weapon.part].weapon.rounds.weight * (weapon.magazine + weapon.reserve);
   }
   return weight;
 }
@@ -402,10 +403,16 @@ function finalAttacks(thing) {
   return attacks;
 }
 
-// What an attack is now for one type: its base. The day an aura gives its neighbors more attack, the term goes here
-// (the base stays as it was made, so the bonus can leave without losing it).
-function finalAttackNow(actor, attack, type) {
-  return attack.base[type];
+// What an attack is now for one type. The BASE was made once, at the weight the actor had then; NOW is calculated again every
+// frame from the weight the actor has now (the user's rule, 2026-11-11: the body slam follows the weight, so a mecha that
+// fires its ammunition hits lighter). The terms are the same as when the base was made: the body slam is weight x
+// attackPerKg, an attack of a recipe is flat + perWeight x weight, and an attack with no weight term (the bullet of a weapon)
+// is its base. For an actor whose weight never changes, now is the base, bit for bit. The day an aura gives its neighbors more
+// attack, its term goes here too (the base stays as it was made, so the bonus can leave without losing it).
+function finalAttackNow(actor, name, attack, type) {
+  if (name === "bodySlam") return DEFINITIONS.constants.bodySlam.attackPerKg * actor.weight;
+  const term = definitionOf(actor).attacks?.[name]?.damage?.[type];
+  return term === undefined ? attack.base[type] : term.flat + term.perWeight * actor.weight;
 }
 
 // The packet of a hit by body slam. "hit" says what happened: for a collision it is { impact }, the part of the velocity
@@ -1066,7 +1073,7 @@ function collideActors(state, lastContacts) {
 // before and after, the hitbox) are in actor.attacks[ai.attack], copied from the recipe when the actor was made.
 // Chase: it wants to walk straight at the avatar. When the space between the two bodies is within the reach of the
 // attack, it holds still for windupFrames frames (the windup: the avatar can leave), then strikes: a hitbox is born
-// (createHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
+// (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
 // deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
 function think(state, actor, player) {
@@ -1083,7 +1090,7 @@ function think(state, actor, player) {
 
   // The strike: the hitbox is born toward where the avatar is now, and the freeze after it begins.
   const strike = () => {
-    createHitbox(state, actor, ai.attack, towardX, towardY);
+    spawnHitbox(state, actor, ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null });
     ai.phase = "freeze";
     ai.frames = attack.freezeFrames;
     direction.x = 0;
@@ -1201,17 +1208,7 @@ function fireWeapons(state, player) {
     const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     const towardY = distance === 0 ? 0 : dy / distance;
     const attack = player.attacks[weapon.part];
-    state.hitboxes.push({
-      owner: player.id,
-      attack: weapon.part,
-      position: { x: player.position.x + towardX * player.radius, y: player.position.y + towardY * player.radius },
-      radius: attack.projectile.radius,
-      framesLeft: attack.projectile.lifeFrames,
-      damage: { ...attack.now },
-      velocity: { x: towardX * attack.projectile.speed, y: towardY * attack.projectile.speed },
-      struck: [],
-      pierceLeft: attack.projectile.pierce,
-    });
+    spawnHitbox(state, player, weapon.part, towardX, towardY, { radius: attack.projectile.radius, frames: attack.projectile.lifeFrames, speed: attack.projectile.speed, pierce: attack.projectile.pierce });
     weapon.magazine -= 1;
     weapon.interval = recipe.intervalFrames;
   }
@@ -1228,19 +1225,22 @@ function fireWeapons(state, player) {
 // A projectile is a hitbox with a velocity and a pierceLeft (the user's decision: a bullet is just a hitbox that moves).
 // pierce 0 crosses nothing: it ends at the first thing it hits; pierce 1 crosses one thing and ends at the second.
 
-// Born one body ahead of the owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now.
-function createHitbox(state, owner, attackName, towardX, towardY) {
+// The one function that makes a hitbox, for every attack (a bite, a bullet, later a slash). Born one body ahead of the
+// owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now. `shape` says what it is:
+// { radius, frames (how long it lives), speed (0 stays where it was born), pierce (how many things it crosses, or null for a
+// hitbox that does not end when it hits) }.
+function spawnHitbox(state, owner, attackName, towardX, towardY, shape) {
   const attack = owner.attacks[attackName];
   state.hitboxes.push({
     owner: owner.id,
     attack: attackName,
     position: { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius },
-    radius: attack.hitbox.radius,
-    framesLeft: attack.hitbox.frames,
+    radius: shape.radius,
+    framesLeft: shape.frames,
     damage: { ...attack.now },
-    velocity: { x: 0, y: 0 },
+    velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
-    pierceLeft: null,
+    pierceLeft: shape.pierce,
   });
 }
 

@@ -53,7 +53,7 @@ Today's hitbox of the Biter is the simplest case of this: no velocity, immediate
 - **Cost per frame:** every projectile against every enemy, every frame, is expensive in a crowd. The hits must use the collision grid. Measure with hundreds of projectiles before trusting it.
 - **Determinism:** the auto-aim needs a tie rule (the closest; on a tie the lowest id). Any roll (a damage range, a spread) uses `hashInts` with a named salt in `SALTS`.
 - **Data from outside:** if blueprints and weapons are sold, the loader that validates them is the protection: it refuses absurd combinations and fixes the cost limits.
-- **Weight that changes in the fight touches more than speed.** The weight of the avatar is also the base of its body slam, of how it is pushed by other actors, and of what it can carry. A lighter mecha hits softer and is pushed more. That follows from the user's rule that weight is the center of contact damage, but it must be a conscious choice, and it contradicts "the base is calculated once" for the avatar's body slam: the body slam would have to follow the current weight.
+- **Weight that changes in the fight touches more than speed (decided: the body slam follows the current weight).** The weight of the avatar is also the base of its body slam, of how it is pushed by other actors, and of what it can carry. A lighter mecha hits softer and is pushed more. That follows from the user's rule that weight is the center of contact damage, but it must be a conscious choice, and it contradicts "the base is calculated once" for the avatar's body slam: the body slam would have to follow the current weight.
 
 ## Order the agent proposes (not yet agreed in full)
 
@@ -77,7 +77,6 @@ Preparation for swords, spears and hammers (an experiment, not decisions): `docs
 ## Open items
 
 - **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered; the repeater has a fixed value for now. A range needs a salt per shot and makes the record of a hit store the rolled value.
-- **The avatar's body slam does not follow its current weight** (its base is made once). A lighter mecha is pushed more but hits the same. Wanted?
 - Can a slot be truly **empty**? The user said an empty arm "is really empty", then chose one item per slot with armor-only parts; the two are not settled together.
 - Two-handed weapons, a bonus for the same sword in both arms, and set bonuses were discussed and **left out on purpose** for now. They can come later as part variants or as mods with a condition.
 - Does a bullet stop at a rock or a Shroom? Today it passes over objects.

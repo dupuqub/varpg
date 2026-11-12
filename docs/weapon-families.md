@@ -16,7 +16,7 @@ Written 2026-11-12 at the user's request ("create information that helps you bui
 - **Weapon of the avatar** (`fireWeapons`): interval, magazine, reserve, reload, auto-aim at the closest actor in range, one bullet per shot. Damage is an attack `{ base, now, projectile }`; `now` is recalculated every frame (the place where mods and the skill tree enter).
 - **Packets and resistance** (`resolveDamage`): damage by type, resisted by points per type, a minimum of 1. Every weapon below should only produce packets.
 - **Weight** matters: the avatar's weight is dynamic (ammunition), speed depends on it, and the user's rule is that weight is the center of contact damage.
-- **Two copies of "make a hitbox"** exist today: `createHitbox` (Biter) and the push inside `fireWeapons`. Merge them into one function before the second family (see "Before the first melee weapon").
+- **One function makes every hitbox now:** `spawnHitbox` (Biter bite and bullet both use it; the two copies were merged).
 
 ## The idea that makes the three families cheap: an attack is a timeline
 

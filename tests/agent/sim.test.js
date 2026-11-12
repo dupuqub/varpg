@@ -2580,7 +2580,7 @@ const ALONE_BITERS = `
   }
 `;
 
-test("119 an attack is { base, now }: the base is calculated once, when the actor is made (flat + perWeight x weight, 5.4 for the smallest Biter and 7 for the largest, and weight x 0.001 for the body slam of everyone), and now follows it every frame", () => {
+test("119 an attack is { base, now }: the base is calculated once, when the actor is made (flat + perWeight x weight, 5.4 for the smallest Biter and 7 for the largest, and weight x 0.001 for the body slam of everyone), and now is calculated every frame from the weight the actor has then (the same as the base while the weight does not change)", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -2589,7 +2589,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
     const small = finalizeObject("biter", { radius: 12, health: { now: 30, max: 30 } }, undefined, "x");
     const large = finalizeObject("biter", { radius: 20, health: { now: 30, max: 30 } }, undefined, "y");
     b.attacks.bite.now.puncture = 99; // something changed it for a moment
-    b.weight = 1; // and the weight changed in the middle of the run: the base is static, it was made once
+    b.weight = 1; // and the weight changed in the middle of the run: the base is static, it was made once, and now follows the weight
     step(s, { move: { x: 0, y: 0 } });
     return { made: JSON.parse(made), radius: b.radius, small: small.attacks.bite.base, large: large.attacks.bite.base, now: b.attacks.bite.now, base: b.attacks.bite.base, avatar: s.actors[0].attacks };
   `, QUIET);
@@ -2599,7 +2599,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
   assert.ok(Math.abs(result.made.bodySlam.base.blunt - weight * 0.001) < 1e-9);
   assert.deepStrictEqual(plain(result.made.bite.now), plain(result.made.bite.base)); // a new actor: now is the base
   assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 4 }]); // what is not damage is copied as it is
-  assert.deepStrictEqual(plain(result.now), plain(result.base)); // the 99 is gone: now is calculated again every frame from the base
+  assert.ok(Math.abs(result.now.puncture - (3 + 0.002 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
   assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
   assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 } } }); // the avatar has only the body slam: 5000 kg x 0.001
 });
@@ -3142,4 +3142,38 @@ test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with 
   // The weight is calculated at the start of the step, so it can be one round behind the shots of the last step.
   assert.ok(result.rounds > 0 && [7550 - 6 * result.rounds, 7550 - 6 * (result.rounds - 1)].includes(result.weight), "rounds " + result.rounds + ", weight " + result.weight);
   assert.ok(result.left < 40, "no Biter died in 15 seconds of firing");
+});
+
+test("142 the body slam follows the weight the avatar has now: it is made once at the loaded weight (7.55 with the repeater full) and every round fired makes it 0.006 lighter; a hit by body slam takes that value", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0);
+    const avatar = t.s.actors[0];
+    const w = avatar.weapons[0];
+    const atBirth = { base: avatar.attacks.bodySlam.base.blunt, now: avatar.attacks.bodySlam.now.blunt, weight: avatar.weight };
+    t.s.actors[1].position.x = 5000; // nothing to shoot: the rounds are spent by hand
+    w.magazine = 10; w.reserve = 0;
+    step(t.s, idle, t.bp);
+    const spent = { base: avatar.attacks.bodySlam.base.blunt, now: avatar.attacks.bodySlam.now.blunt, weight: avatar.weight, wouldBe: avatar.weight * 0.001 };
+    const packet = finalAttack(avatar, { impact: 6 });
+    return { atBirth, spent, packet };
+  `, QUIET);
+  assert.ok(Math.abs(result.atBirth.base - 7.55) < 1e-12 && result.atBirth.now === result.atBirth.base);
+  assert.strictEqual(result.spent.weight, 5150 + 6 * 10); // 10 rounds left, 6 kg each, on top of the parts
+  assert.strictEqual(result.spent.base, result.atBirth.base); // the base stays as it was made
+  assert.ok(Math.abs(result.spent.now - result.spent.wouldBe) < 1e-12 && result.spent.now < result.atBirth.now);
+  assert.ok(Math.abs(result.packet.blunt - result.spent.now) < 1e-12); // at the reference impact the hit is exactly now
+});
+
+test("143 the weight of the avatar comes from the parts of the blueprint and the rounds in its own weapon state, so the two cannot disagree: an avatar made armed and stepped with a plain blueprint still carries its ammunition, and one made plain carries none", () => {
+  const result = run(`
+    const armed = createRun(1, DEFINITIONS.combatBlueprint).blueprint;
+    const plain = createRun(1).blueprint;
+    const a = createChamber2State(1, 1, armed); step(a, { move: { x: 0, y: 0 } }, plain);
+    const b = createChamber2State(1, 1, plain); step(b, { move: { x: 0, y: 0 } }, armed);
+    return { madeArmedSteppedPlain: a.actors[0].weight, madePlainSteppedArmed: b.actors[0].weight, weapons: [a.actors[0].weapons.length, b.actors[0].weapons.length] };
+  `, QUIET);
+  assert.strictEqual(result.madeArmedSteppedPlain, 5000 + 6 * 400); // the plain parts, and the 400 rounds it holds
+  assert.strictEqual(result.madePlainSteppedArmed, 5150); // the armed parts, and no rounds: it has no weapon state
+  assert.deepStrictEqual(plain(result.weapons), [1, 0]);
 });
