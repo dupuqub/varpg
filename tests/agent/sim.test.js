@@ -62,6 +62,11 @@ function plain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+// What is left of an amount of damage after a resistance of "points" to its type (constants.damage.resistanceScale is 100):
+// the share taken off is points / (points + 100). The avatar of the starter blueprint has 30 points of blunt resistance
+// and 10 of puncture (Torso 20 + Legs 10, and Torso 10).
+const resisted = (amount, points) => amount * (1 - points / (points + 100));
+
 // ---- State ----
 
 test("01 the initial state is plain JSON (writing it and reading it back changes nothing)", () => {
@@ -339,8 +344,8 @@ test("17 unknown types fail loudly, and a type without 'move' is static", () => 
   // of data.js that adds a "trap" type without "move".
   const withTrap = loadGame((text) => {
     const patched = text.replace(
-      "const DEFINITIONS = {\n  actors: {",
-      'const DEFINITIONS = {\n  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, attack: 5, defense: 0, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },'
+      "  actors: {\n    avatar: {",
+      '  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },\n    avatar: {'
     );
     assert.notStrictEqual(patched, text, "the patch of data.js should apply");
     return patched;
@@ -751,8 +756,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, defense: 0 });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, defense: 0 });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 } } } });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 } } } });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -968,9 +973,10 @@ test("46 the cross-check stays clean in a run that hits rocks", () => {
 });
 
 // ---- Body slam: damage from collisions ----
-// The rule (src/sim.js): every collision is a hit. The attack is
+// The rule (src/sim.js): every collision is a hit. Its packet is blunt damage of
 // weight x 0.001 x impact / 6 (impact = the speed going into the other thing; provisional formula).
-// damage = max(1, attack - defense) when there is an attack. Avatar: 5000 kg, defense 3, health 100.
+// The target resists each type: the share taken off is points / (points + 100), and a hit costs at least 1.
+// Avatar: 5000 kg, 30 points of blunt resistance (23% off), health 100.
 // The rock of seed 1 used here (ROCK): 2800 kg, health 10.
 
 // Dashes right from (x, y) into the rock, and tells the health of the avatar and of the rock after the hit.
@@ -984,7 +990,7 @@ function slamInto(x, y) {
   `);
 }
 
-test("47 walking into a rock at 3 px/frame is a weak hit: the rock loses 2.5, the avatar the minimum damage 1 (1.4 - 3 is below 1)", () => {
+test("47 walking into a rock at 3 px/frame is a weak hit: the rock loses 2.5, the avatar loses the rock's 1.4 less the 23% its blunt resistance takes off (1.08)", () => {
   const result = run(`
     const s = createChamber1State();
     const p = s.actors[0];
@@ -993,20 +999,20 @@ test("47 walking into a rock at 3 px/frame is a weak hit: the rock loses 2.5, th
     step(s, { move: { x: 1, y: 0 } });
     return { avatar: p.health.now, damagedObjects: s.damagedObjects, vx: p.move.velocity.x };
   `);
-  assert.strictEqual(result.avatar, 99); // 2800 x 0.001 x 3 / 6 = 1.4, minus 3 is below the minimum damage, 1
+  assert.ok(Math.abs(result.avatar - (100 - resisted(1.4, 30))) < 1e-9, "avatar: " + result.avatar); // 2800 x 0.001 x 3 / 6 = 1.4, times 100 / 130 = 1.077
   assert.deepStrictEqual(plain(result.damagedObjects), { "small:0,1": 7.5 }); // 10 - 5000 x 0.001 x 3 / 6
   assert.strictEqual(result.vx, 0); // it still stopped (the bounce is a separate rule)
 });
 
-test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that minus the defense 3, and at least 1", () => {
-  const rock = slamInto(53, ROCK.y); // 2800 kg: attack 5.6, so 5.6 - 3 = 2.6 to the avatar; the avatar (5000 kg) hits for 10
-  assert.ok(Math.abs(rock.avatar - 97.4) < 1e-9, "rock: " + rock.avatar);
+test("48 a dash (impact 12) hurts both: each hits with weight x 0.001 x 12 / 6; the avatar loses that times 100 / 130 (its blunt resistance), and at least 1", () => {
+  const rock = slamInto(53, ROCK.y); // 2800 kg: attack 5.6, so 5.6 x 100 / 130 = 4.31 to the avatar; the avatar (5000 kg) hits for 10
+  assert.ok(Math.abs(rock.avatar - (100 - resisted(5.6, 30))) < 1e-9, "rock: " + rock.avatar);
   assert.strictEqual(rock.rock, 0); // 10 - 10: it breaks
-  const small = hitShroom(16, { dash: true, gap: 2 }); // 1600 kg: attack 3.2, 3.2 - 3 = 0.2 is below 1, so 1
-  assert.ok(Math.abs(small.avatar - 99) < 1e-9, "small shroom: " + small.avatar);
+  const small = hitShroom(16, { dash: true, gap: 2 }); // 1600 kg: attack 3.2, so 3.2 x 100 / 130 = 2.46
+  assert.ok(Math.abs(small.avatar - (100 - resisted(3.2, 30))) < 1e-9, "small shroom: " + small.avatar);
   assert.strictEqual(small.shroomLoss, 10); // the avatar hits for 10
-  const large = hitShroom(32, { dash: true, gap: 2 }); // 3200 kg: attack 6.4, so 6.4 - 3 = 3.4
-  assert.ok(Math.abs(large.avatar - 96.6) < 1e-9, "large shroom: " + large.avatar);
+  const large = hitShroom(32, { dash: true, gap: 2 }); // 3200 kg: attack 6.4, so 6.4 x 100 / 130 = 4.92
+  assert.ok(Math.abs(large.avatar - (100 - resisted(6.4, 30))) < 1e-9, "large shroom: " + large.avatar);
   assert.strictEqual(large.shroomLoss, 10);
 });
 
@@ -1019,19 +1025,19 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
     step(s, { move: { x: 1, y: 0 } });
     return { avatar: p.health.now, damagedObjects: s.damagedObjects };
   `);
-  assert.strictEqual(result.avatar, 99); // the attack is below the defense, so the minimum damage 1
+  assert.strictEqual(result.avatar, 99); // the graze, after the resistance, is below the minimum damage, so 1
   const loss = 10 - result.damagedObjects["small:0,1"];
   assert.ok(loss > 0 && loss < 2.5, "a graze should hurt the rock less than the head-on walk of test 47 (2.5), it lost " + loss);
 });
 
-test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage never goes below 0", () => {
+test("50 the attack of a hit is a packet of blunt damage: weight x 0.001 x impact / 6, empty without impact; the damage never goes below 0", () => {
   const result = withBlueprints(`
     const rock = finalizeObject("rock", { radius: 28 });
     const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
     const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
     const lighterAvatar = createAvatar(without("arm-r")); // 4350 kg
     return {
-      defense: finalDefense(avatar, full),
+      resistance: { blunt: finalResistance(avatar, full, "blunt"), puncture: finalResistance(avatar, full, "puncture") },
       rockWeight: rock.weight,
       rock: finalAttack(rock, { impact: 12 }),
       atReference: finalAttack(rock, { impact: 6 }),
@@ -1043,16 +1049,17 @@ test("50 the attack: weight x 0.001 x impact / 6, 0 without impact; the damage n
       largeDamage: damageOf(large, { impact: 12 }, avatar, full),
     };
   `);
-  assert.strictEqual(result.defense, 3);
+  assert.deepStrictEqual(plain(result.resistance), { blunt: 30, puncture: 10 });
   assert.strictEqual(result.rockWeight, 2800); // 100 x radius 28
-  assert.ok(Math.abs(result.rock - 5.6) < 1e-9); // 2800 x 0.001 x 12 / 6
-  assert.ok(Math.abs(result.atReference - 2.8) < 1e-9); // at the reference impact the attack is weight x 0.001
-  assert.ok(Math.abs(result.walking - 1.4) < 1e-9);
-  assert.strictEqual(result.noImpact, 0);
-  assert.strictEqual(result.avatar, 10); // the avatar hits with its own weight, 5000 kg
-  assert.ok(Math.abs(result.lighterAvatar - 8.7) < 1e-9); // a lighter mecha hits softer: 4350 x 0.001 x 2
-  assert.strictEqual(result.smallDamage, 1); // attack 3.2 - 3 is below the minimum damage 1
-  assert.ok(Math.abs(result.largeDamage - 3.4) < 1e-9); // 6.4 - 3
+  assert.deepStrictEqual(Object.keys(result.rock), ["blunt"]); // the body slam is only blunt
+  assert.ok(Math.abs(result.rock.blunt - 5.6) < 1e-9); // 2800 x 0.001 x 12 / 6
+  assert.ok(Math.abs(result.atReference.blunt - 2.8) < 1e-9); // at the reference impact the attack is weight x 0.001
+  assert.ok(Math.abs(result.walking.blunt - 1.4) < 1e-9);
+  assert.deepStrictEqual(plain(result.noImpact), {}); // no impact, no packet
+  assert.strictEqual(result.avatar.blunt, 10); // the avatar hits with its own weight, 5000 kg
+  assert.ok(Math.abs(result.lighterAvatar.blunt - 8.7) < 1e-9); // a lighter mecha hits softer: 4350 x 0.001 x 2
+  assert.ok(Math.abs(result.smallDamage - resisted(3.2, 30)) < 1e-9); // 3.2 x 100 / 130 = 2.46, above the minimum damage 1
+  assert.ok(Math.abs(result.largeDamage - resisted(6.4, 30)) < 1e-9); // 4.92
 });
 
 test("51 health stops at 0 (there is no death yet)", () => {
@@ -1088,7 +1095,7 @@ test("52 the cross-check stays clean in a run where both sides are hurt, and the
 // ---- The kit of parts ----
 // The final values of the avatar are the SUM of the specs of the parts in its blueprint.
 // Starter blueprint: 9 parts, 5000 kg. Top speed 3.5 + 0.5 - 5000 x 0.0002 = 3; health 15 + 55 + 30 = 100;
-// defense 2 + 1 = 3; dash 12; capacity 6000.
+// resistance: blunt 20 + 10 = 30, puncture 10; dash 12; capacity 6000.
 
 // Runs code with "avatar", "full" (the starter blueprint) and "without(id)" (the starter blueprint minus one part).
 function withBlueprints(code) {
@@ -1100,17 +1107,17 @@ function withBlueprints(code) {
   `);
 }
 
-test("53 the starter blueprint adds up to the values the avatar had before parts: speed 3, health 100, defense 3, dash 12, 5000 kg", () => {
+test("53 the starter blueprint adds up to the values the avatar had before parts (speed 3, health 100, dash 12, 5000 kg) and to a resistance of 30 blunt and 10 puncture", () => {
   const result = withBlueprints(`
     return {
       weight: totalWeight(full), capacity: sumSpec(full, "capacity"),
       speed: finalSpeed(avatar, full), health: finalMaxHealth(avatar, full),
-      defense: finalDefense(avatar, full), dash: finalDashSpeed(avatar, full),
+      resistance: { blunt: finalResistance(avatar, full, "blunt"), puncture: finalResistance(avatar, full, "puncture") }, dash: finalDashSpeed(avatar, full),
       startsFull: createChamber1State(1, 1, full).actors[0].health.now,
       startsFullWithoutHead: createChamber1State(1, 1, without("head")).actors[0].health.now,
     };
   `);
-  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, defense: 3, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
+  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, resistance: { blunt: 30, puncture: 10 }, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
 });
 
 test("54 weight takes speed away directly: taking off a 650 kg arm gives back 650 x 0.0002 = 0.13 px/frame", () => {
@@ -1129,14 +1136,15 @@ test("55 without the legs the speed is the Torso's 0.5 minus the weight, and it 
   assert.strictEqual(speed, 0);
 });
 
-test("56 taking a part off changes health and defense by exactly what it gave", () => {
+test("56 taking a part off changes health and resistance by exactly what it gave", () => {
   const result = withBlueprints(`
+    const resistance = (blueprint) => ({ blunt: finalResistance(avatar, blueprint, "blunt"), puncture: finalResistance(avatar, blueprint, "puncture") });
     return {
-      noTorso: { health: finalMaxHealth(avatar, without("torso")), defense: finalDefense(avatar, without("torso")) },
-      noHead: { health: finalMaxHealth(avatar, without("head")), defense: finalDefense(avatar, without("head")) },
+      noTorso: { health: finalMaxHealth(avatar, without("torso")), resistance: resistance(without("torso")) },
+      noHead: { health: finalMaxHealth(avatar, without("head")), resistance: resistance(without("head")) },
     };
   `);
-  assert.deepStrictEqual(plain(result), { noTorso: { health: 45, defense: 1 }, noHead: { health: 85, defense: 3 } });
+  assert.deepStrictEqual(plain(result), { noTorso: { health: 45, resistance: { blunt: 10, puncture: 0 } }, noHead: { health: 85, resistance: { blunt: 30, puncture: 10 } } });
 });
 
 test("57 without the Booster there is no dash charge and no dash: the maximum comes from the parts (finalDashMaxCharges)", () => {
@@ -1182,9 +1190,9 @@ test("58 a blueprint over the capacity of the Torso is refused, and so is an unk
 test("59 only the avatar has a blueprint: another actor of the same type gets nothing from the parts (its maximum health is its own)", () => {
   const result = withBlueprints(`
     const other = finalizeObject("avatar", { health: { now: 7, max: 7 } }, undefined, "other_1");
-    return { speed: finalSpeed(other, full), health: finalMaxHealth(other, full), defense: finalDefense(other, full) };
+    return { speed: finalSpeed(other, full), health: finalMaxHealth(other, full), resistance: finalResistance(other, full, "blunt") };
   `);
-  assert.deepStrictEqual(plain(result), { speed: 0, health: 7, defense: 0 });
+  assert.deepStrictEqual(plain(result), { speed: 0, health: 7, resistance: 0 });
 });
 
 test("60 the blueprint is an input of the replay: the cross-check is clean with the right blueprint and finds a difference with another", () => {
@@ -1237,9 +1245,9 @@ test("62 a rock that reaches 0 breaks: nothing collides with it and the avatar g
   assert.strictEqual(result.afterHit.broken, 0);
   assert.strictEqual(result.afterHit.vx, 12); // no bounce and no stop
   assert.strictEqual(result.afterHit.x, 65); // not pushed out
-  assert.ok(Math.abs(result.afterHit.health - 97.4) < 1e-9); // the breaking hit still hurt the avatar (5.6 - 3)
+  assert.ok(Math.abs(result.afterHit.health - (100 - resisted(5.6, 30))) < 1e-9); // the breaking hit still hurt the avatar (5.6 x 100 / 130)
   assert.ok(result.x > 99 + 44, "the avatar did not go through the broken rock: x=" + result.x);
-  assert.ok(Math.abs(result.health - 97.4) < 1e-9); // and the broken rock hurts no more
+  assert.ok(Math.abs(result.health - (100 - resisted(5.6, 30))) < 1e-9); // and the broken rock hurts no more
 });
 
 test("63 every rock rolls its own health from the seed: whole numbers from 10 to 20, the same every time, and all values show up", () => {
@@ -1286,9 +1294,11 @@ test("65 pressing into a rock hurts it once, at the arrival (no bounce, so no se
     for (let i = 0; i < 200; i++) step(s, { move: { x: 1, y: 0 } }); // keeps pressing
     return { settled, afterPressing: { rock: s.damagedObjects["small:0,1"], avatar: player.health.now, x: player.position.x } };
   `);
-  // The collision at impact 3: the rock loses 5000 x 0.001 x 3 / 6 = 2.5. The avatar loses the minimum damage 1
-  // (the rock's attack, 2800 x 0.001 x 3 / 6 = 1.4, is below its defense 3). Without a bounce nothing else triggers.
-  assert.deepStrictEqual(plain(result.settled), { rock: 7.5, avatar: 99, x: 55 });
+  // The collision at impact 3: the rock loses 5000 x 0.001 x 3 / 6 = 2.5. The avatar loses the rock's 2800 x 0.001 x 3 / 6 = 1.4
+  // less 23% (its 30 points of blunt resistance): 1.077. Without a bounce nothing else triggers.
+  assert.strictEqual(result.settled.rock, 7.5);
+  assert.strictEqual(result.settled.x, 55);
+  assert.ok(Math.abs(result.settled.avatar - (100 - resisted(1.4, 30))) < 1e-9, "avatar: " + result.settled.avatar);
   assert.deepStrictEqual(plain(result.afterPressing), plain(result.settled)); // pressing for 3 s more changed nothing
 });
 
@@ -1312,7 +1322,7 @@ test("66 touching again after separating is a new collision and hurts again; the
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });
 
-test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 has attack 0 and damage 0 at any impact, the same thing with weight does hit", () => {
+test("67 the body slam comes from the weight alone: a thing with weightPerRadius 0 has an empty packet and damage 0 at any impact, the same thing with weight does hit", () => {
   const weightless = loadGame((text) => text.replace('name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 100,', 'name: "Rock",\n      size: { min: 16, max: 32 },\n      weightPerRadius: 0,'));
   const probe = `
     const rock = finalizeObject("rock", { radius: 28 });
@@ -1320,24 +1330,24 @@ test("67 the attack comes from the weight alone: a thing with weightPerRadius 0 
     const avatar = createAvatar(full);
     return { attack: finalAttack(rock, { impact: 12 }), damage: damageOf(rock, { impact: 12 }, avatar, full) };
   `;
-  assert.deepStrictEqual(plain(run(probe, weightless)), { attack: 0, damage: 0 }); // no minimum damage either: there is no attack
+  assert.deepStrictEqual(plain(run(probe, weightless)), { attack: {}, damage: 0 }); // no minimum damage either: there is no attack
   const normal = run(probe);
-  assert.ok(Math.abs(normal.attack - 5.6) < 1e-9); // 2800 x 0.001 x 12 / 6
-  assert.ok(Math.abs(normal.damage - 2.6) < 1e-9); // 5.6 - 3
+  assert.ok(Math.abs(normal.attack.blunt - 5.6) < 1e-9); // 2800 x 0.001 x 12 / 6
+  assert.ok(Math.abs(normal.damage - resisted(5.6, 30)) < 1e-9); // 5.6 x 100 / 130
 });
 
-test("68 a hit always costs at least 1 (the defense never makes the target immune), but no attack means no damage", () => {
+test("68 a hit always costs at least 1 (the resistance never makes the target immune), but no attack means no damage", () => {
   const result = withBlueprints(`
     const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
     const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
     return {
-      weak: damageOf(small, { impact: 3 }, avatar, full), // attack 0.8, defense 3
-      strong: damageOf(large, { impact: 12 }, avatar, full), // attack 6.4, defense 3
+      weak: damageOf(small, { impact: 3 }, avatar, full), // attack 0.8, 0.62 after the resistance
+      strong: damageOf(large, { impact: 12 }, avatar, full), // attack 6.4, 4.92 after the resistance
       noImpact: damageOf(large, { impact: 0 }, avatar, full),
     };
   `);
   assert.strictEqual(result.weak, 1);
-  assert.ok(Math.abs(result.strong - 3.4) < 1e-9);
+  assert.ok(Math.abs(result.strong - resisted(6.4, 30)) < 1e-9);
   assert.strictEqual(result.noImpact, 0);
 });
 
@@ -1414,7 +1424,7 @@ test("74 a size that is not whole, or has a min above the max, stops the game wh
   }
 });
 
-test("75 everything is made by finalizeObject: an unknown type is refused, an object gets the radius the seed rolled, and the actor types are the avatar and the Dummy", () => {
+test("75 everything is made by finalizeObject: an unknown type is refused, an object gets the radius the seed rolled, and the actor types are the avatar, the Dummy and the Biter", () => {
   const result = run(`
     const attempt = (type) => { try { finalizeObject(type, {}); return "ok"; } catch (error) { return error.message; } };
     const rock = finalizeObject("rock", { radius: 28, health: { now: 12, max: 12 }, position: { x: 1, y: 2 }, square: { x: 0, y: 0 } });
@@ -1426,11 +1436,11 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
       fromSeed: JSON.stringify(objectsInArea(1, -960, -540, 960, 540)[0]),
     };
   `);
-  assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy"]);
+  assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy", "biter"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, defense: 0 });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 } } } });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, defense: 0 }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 } } } }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
@@ -1470,26 +1480,26 @@ test("78 the rock and the Shroom share nothing: changing the size of one in the 
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
 
-test("79 every final value is stored in the actor; the static ones are calculated once, when the actor is made, and the dynamic ones (top speed, defense, dash speed) again every frame: a blueprint that changes in the middle of a run reaches only the dynamic ones", () => {
+test("79 every final value is stored in the actor; the static ones are calculated once, when the actor is made, and the dynamic ones (top speed, resistance, dash speed) again every frame: a blueprint that changes in the middle of a run reaches only the dynamic ones", () => {
   const result = withBlueprints(`
     const s = createChamber1State(1, 1, full);
     const player = s.actors[0];
     const carried = () => ({ radius: player.radius, weight: player.weight, bounce: player.bounce, acceleration: player.acceleration, deceleration: player.deceleration,
       health: { ...player.health }, rechargeFrames: player.dash.rechargeFrames, charges: { ...player.dash.charges },
-      speed: player.speed, defense: player.defense, dashSpeed: player.dash.speed });
+      speed: player.speed, resistance: { ...player.resistance }, dashSpeed: player.dash.speed });
     const atBirth = carried();
     step(s, { move: { x: 0, y: 0 } }, full);
     const afterStep = carried();
-    // The run goes on with another blueprint: no Legs (they gave speed 3.5 and defense 1, and weighed 1300 kg) and no Booster.
+    // The run goes on with another blueprint: no Legs (they gave speed 3.5 and 10 blunt resistance, and weighed 1300 kg) and no Booster.
     const light = { parts: full.parts.filter((id) => id !== "legs" && id !== "booster") };
     step(s, { move: { x: 0, y: 0 } }, light);
     return { atBirth, afterStep, changed: carried() };
   `);
   const staticValues = { radius: 16, weight: 5000, bounce: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, rechargeFrames: 240, charges: { now: 1, max: 1 } };
-  assert.deepStrictEqual(plain(result.atBirth), { ...staticValues, speed: 3, defense: 3, dashSpeed: 12 });
-  assert.deepStrictEqual(plain(result.afterStep), { ...staticValues, speed: 3, defense: 3, dashSpeed: 12 });
-  // The dynamic ones follow: speed 0.5 - 3500 x 0.0002 = -0.2, so 0; defense 2; no dash speed. The static ones stay as they were made.
-  assert.deepStrictEqual(plain(result.changed), { ...staticValues, speed: 0, defense: 2, dashSpeed: 0 });
+  assert.deepStrictEqual(plain(result.atBirth), { ...staticValues, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
+  assert.deepStrictEqual(plain(result.afterStep), { ...staticValues, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
+  // The dynamic ones follow: speed 0.5 - 3500 x 0.0002 = -0.2, so 0; blunt resistance 20; no dash speed. The static ones stay as they were made.
+  assert.deepStrictEqual(plain(result.changed), { ...staticValues, speed: 0, resistance: { blunt: 20, puncture: 10 }, dashSpeed: 0 });
 });
 
 // ---- The Dummies ----
@@ -1661,13 +1671,13 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
     overlap();
     face(d, 180); // walking toward the avatar
     const blueprint = createRun(1).blueprint;
-    touchDummy(s, [key], d, avatar, key, blueprint); // was touching: no new angle, no hit
+    touchActors(s, [key], d, avatar, key, blueprint); // was touching: no new angle, no hit
     const kept = d.wander.turns;
     const healthKept = [d.health.now, avatar.health.now];
     const gap = Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius);
     const avatarPushed = avatar.position.x; // the avatar's share of the 5 px overlap: the Dummy's weight over the sum
     overlap();
-    touchDummy(s, [], d, avatar, key, blueprint); // new contact: a new angle, and a hit
+    touchActors(s, [], d, avatar, key, blueprint); // new contact: a new angle, and a hit
     return { kept, healthKept, health: [d.health.now, avatar.health.now], turned: d.wander.turns, gap, avatarPushed, expectedPush: -5 * d.weight / (d.weight + avatar.weight), contacts: s.contacts };
   `, EMPTY);
   assert.strictEqual(result.kept, 0);
@@ -1912,23 +1922,23 @@ const EVERY_PAIR = `
     const dummies = state.actors.filter((actor) => actor.wander);
     for (let i = 0; i < dummies.length; i++) {
       const dummy = dummies[i];
-      touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
-      for (let j = i + 1; j < dummies.length; j++) touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
+      touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+      for (let j = i + 1; j < dummies.length; j++) touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
     }
   };
   // Plays "frames" steps of a state made by "make", with the grid or with every pair, and returns the state as text.
   // The cells are left out of the comparison of every pair only when it does not write them (it never pushes through
   // refreshCells), so both sides write all the cells again before the text is made.
   const playWith = (make, frames, useEveryPair, input = () => ({ move: { x: 0, y: 0 } })) => {
-    const real = collideDummies;
-    if (useEveryPair) collideDummies = everyPair;
+    const real = collideActors;
+    if (useEveryPair) collideActors = everyPair;
     try {
       const s = make();
       for (let frame = 0; frame < frames; frame++) step(s, input(frame));
       for (const actor of s.actors) setCells(actor, s.grid);
       return JSON.stringify(s);
     } finally {
-      collideDummies = real;
+      collideActors = real;
     }
   };
   const turnsIn = (json) => JSON.parse(json).actors.reduce((sum, actor) => sum + (actor.wander ? actor.wander.turns : 0), 0);
@@ -2330,7 +2340,7 @@ test("109 the push between actors is split by weight: a giant Dummy (25600 kg) m
     const blueprint = createRun(1).blueprint;
     const pushed = (s, a, b) => {
       a.position.x = 1000; a.position.y = 0; b.position.x = 1000 + a.radius + b.radius - 10; b.position.y = 0; // overlap 10
-      touchDummy(s, ["x"], a, b, "x", blueprint); // an old contact: only the push (no hit, no turn)
+      touchActors(s, ["x"], a, b, "x", blueprint); // an old contact: only the push (no hit, no turn)
       return { a: a.position.x - 1000, b: b.position.x - (1000 + a.radius + b.radius - 10), gap: (b.position.x - a.position.x) - (a.radius + b.radius) };
     };
     const s = alone(0, 1);
@@ -2358,7 +2368,7 @@ test("109 the push between actors is split by weight: a giant Dummy (25600 kg) m
     const s = createChamber1State(1, 1);
     const [, a, b] = s.actors;
     a.position.x = 1000; a.position.y = 0; b.position.x = 1000 + a.radius + b.radius - 10; b.position.y = 0;
-    touchDummy(s, ["x"], a, b, "x", createRun(1).blueprint);
+    touchActors(s, ["x"], a, b, "x", createRun(1).blueprint);
     return { weights: [a.weight, b.weight], a: a.position.x - 1000, b: b.position.x - (1000 + a.radius + b.radius - 10) };
   `, weightless);
   assert.deepStrictEqual(plain(zero.weights), [0, 0]);
@@ -2495,4 +2505,312 @@ test("115 one routine for every actor that meets an object: a Shroom bounces a D
   assert.ok(Math.abs(result.rock.into) < 1e-9, "the rock left a speed going in, or bounced: " + result.rock.into);
   assert.ok(Math.abs(result.rock.along - result.rock.alongBefore) < 1e-9, "the part along the rock changed: " + result.rock.along + " vs " + result.rock.alongBefore);
   assert.deepStrictEqual([result.rock.turns, result.rock.health, result.rock.damaged], [1, 100, "{}"]);
+});
+
+// ---- Damage packets and resistance (the user's rules, 2026-11-11) ----
+// A hit is a packet with one amount per type of damage; the target resists each type on its own, by points that become a
+// share through the curve points / (points + 100); a hit with something in it costs at least 1.
+
+test("116 resistance is a curve: a hit of 10 blunt is 10 with no points, 8.85 with 13, 5 with 100, 3.33 with 200, 2.5 with 300 and 1 with 900; it never reaches 100% and every 100 points add the same life", () => {
+  const result = run(`
+    const rows = {};
+    for (const points of [0, 13, 100, 200, 300, 900, 9900]) {
+      const record = resolveDamage({ blunt: 10 }, { resistance: { blunt: points } });
+      rows[points] = { total: record.total, reduction: record.parts[0].reduction, minimumApplied: record.minimumApplied };
+    }
+    return rows;
+  `);
+  const expected = { 0: 10, 13: 10 * (1 - 13 / 113), 100: 5, 200: 10 / 3, 300: 2.5, 900: 1 };
+  for (const [points, total] of Object.entries(expected)) assert.ok(Math.abs(result[points].total - total) < 1e-9, points + " points: " + result[points].total);
+  assert.ok(Math.abs(result[13].total - 8.8496) < 1e-4); // the user's "13%" is 13 points: a little less than 13% off
+  for (const points of [100, 200, 300, 900]) {
+    const life = 10 / result[points].total; // how much life the target is worth
+    assert.ok(Math.abs(life - (1 + points / 100)) < 1e-9, "the life is not a straight line at " + points + " points: " + life);
+  }
+  for (const points of [0, 13, 100, 200, 300, 900, 9900]) assert.ok(result[points].reduction < 1, "the curve reached 100%");
+  assert.deepStrictEqual([result[9900].total, result[9900].minimumApplied], [1, true]); // 0.1 left, but a hit costs at least 1
+});
+
+test("117 each type of a packet is resisted on its own (a fire sword against a creature resistant to fire still hits with its blade), the record lists the terms in the order of the types, an empty packet costs nothing and a tiny one costs 1", () => {
+  const result = run(`
+    const target = { resistance: { puncture: 100, blunt: 0 } };
+    const both = resolveDamage({ puncture: 6, blunt: 3 }, target);
+    const onlyBlunt = resolveDamage({ blunt: 3 }, target);
+    const empty = resolveDamage({}, target);
+    const tiny = resolveDamage({ blunt: 0.25 }, target);
+    const noResistance = resolveDamage({ puncture: 6, blunt: 3 }, {});
+    return { both, onlyBlunt, empty, tiny, noResistance, types: DEFINITIONS.damageTypes };
+  `);
+  assert.deepStrictEqual(plain(result.types), ["blunt", "puncture"]);
+  assert.deepStrictEqual(plain(result.both.parts.map((part) => [part.type, part.amount, part.points, part.reduction, part.after])), [["blunt", 3, 0, 0, 3], ["puncture", 6, 100, 0.5, 3]]);
+  assert.strictEqual(result.both.total, 6); // 3 + 3: half of the puncture is gone, the blunt goes through whole
+  assert.strictEqual(result.onlyBlunt.total, 3); // a resistance to puncture does nothing to blunt
+  assert.deepStrictEqual(plain(result.empty), { parts: [], total: 0, minimumApplied: false });
+  assert.deepStrictEqual([result.tiny.total, result.tiny.minimumApplied], [1, true]);
+  assert.strictEqual(result.noResistance.total, 9); // a target with no resistance at all takes everything
+});
+
+test("118 a part can only have the specs the rules read, and resistance only to types of damage; an attack needs known types, numbers, a whole reach and freeze and a hitbox: anything else stops the game when it loads", () => {
+  const legs = "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 }";
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5, dashspeed: 1 }")), /The part legs has the spec dashspeed/);
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { fire: 10 }, speed: 3.5 }")), /resistance of the part legs is to fire/);
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -1 }, speed: 3.5 }")), /resistance of the part legs to blunt/);
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: -30, resistance: { blunt: 10 }, speed: 3.5 }")), /spec health of the part legs/);
+  const bite = "damage: { puncture: { flat: 3, perWeight: 0.002 } }";
+  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 3, perWeight: 0.002 } }")), /attack bite of the actor biter has fire/);
+  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.002 } }")), /attack bite of the actor biter needs flat and perWeight/);
+  assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the actor biter/);
+  assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 4 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the actor biter/);
+  assert.throws(() => loadGame((text) => text.replace("attacks: {\n        bite: {", "attacks: {\n        bodySlam: {")), /name bodySlam of the attack bodySlam/);
+});
+
+// ---- The Biter (Chamber 2: COMBAT) ----
+// The Biter chases the avatar and, when the space between the two bodies is within its reach, strikes with a hitbox and holds
+// still. A game with 6 Biters and no objects, so the only things that happen are the ones a test sets up.
+
+const QUIET = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }"));
+
+// A state with the avatar and only the Biters of the given numbers.
+const ALONE_BITERS = `
+  function aloneBiters(...numbers) {
+    const s = createChamber2State(1, 1);
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter_" + n))];
+    return s;
+  }
+`;
+
+test("119 an attack is { base, now }: the base is calculated once, when the actor is made (flat + perWeight x weight, 5.4 for the smallest Biter and 7 for the largest, and weight x 0.001 for the body slam of everyone), and now follows it every frame", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    const made = JSON.stringify(b.attacks);
+    const small = finalizeObject("biter", { radius: 12, health: { now: 30, max: 30 } }, undefined, "x");
+    const large = finalizeObject("biter", { radius: 20, health: { now: 30, max: 30 } }, undefined, "y");
+    b.attacks.bite.now.puncture = 99; // something changed it for a moment
+    b.weight = 1; // and the weight changed in the middle of the run: the base is static, it was made once
+    step(s, { move: { x: 0, y: 0 } });
+    return { made: JSON.parse(made), radius: b.radius, small: small.attacks.bite.base, large: large.attacks.bite.base, now: b.attacks.bite.now, base: b.attacks.bite.base, avatar: s.actors[0].attacks };
+  `, QUIET);
+  assert.ok(Math.abs(result.small.puncture - 5.4) < 1e-9 && Math.abs(result.large.puncture - 7) < 1e-9); // 3 + 0.002 x 1200, 3 + 0.002 x 2000
+  const weight = 100 * result.radius;
+  assert.ok(Math.abs(result.made.bite.base.puncture - (3 + 0.002 * weight)) < 1e-9);
+  assert.ok(Math.abs(result.made.bodySlam.base.blunt - weight * 0.001) < 1e-9);
+  assert.deepStrictEqual(plain(result.made.bite.now), plain(result.made.bite.base)); // a new actor: now is the base
+  assert.deepStrictEqual([result.made.bite.reach, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 10, { radius: 20, frames: 4 }]); // what is not damage is copied as it is
+  assert.deepStrictEqual(plain(result.now), plain(result.base)); // the 99 is gone: now is calculated again every frame from the base
+  assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
+  assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 } } }); // the avatar has only the body slam: 5000 kg x 0.001
+});
+
+test("120 a Biter walks straight at the avatar: its wanted direction is the unit vector toward it, its velocity speeds up by 0.125 per frame to its top speed of 2.5, and the distance only shrinks", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    b.position.x = 500; b.position.y = 0;
+    const speeds = [], distances = [];
+    for (let i = 0; i < 24; i++) {
+      step(s, { move: { x: 0, y: 0 } });
+      speeds.push(b.move.velocity.x);
+      distances.push(b.position.x);
+    }
+    const first = { x: b.move.direction.x, y: b.move.direction.y };
+
+    const t = aloneBiters(1);
+    const c = t.actors[1];
+    c.position.x = 300; c.position.y = 400; // 500 px away, the 3-4-5 triangle
+    step(t, { move: { x: 0, y: 0 } });
+    return { speeds, distances, first, diagonal: { x: c.move.direction.x, y: c.move.direction.y }, y: b.position.y, top: b.speed };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.first), { x: -1, y: 0 });
+  assert.deepStrictEqual(plain(result.diagonal), { x: -300 / 500, y: -400 / 500 });
+  assert.ok(Math.abs(result.speeds[0] + 0.125) < 1e-12 && Math.abs(result.speeds[7] + 1) < 1e-12 && Math.abs(result.speeds[19] + 2.5) < 1e-12, "the speeding up is wrong: " + result.speeds.slice(0, 8));
+  assert.ok(Math.abs(result.speeds[23] + 2.5) < 1e-12); // it stays at the top speed
+  assert.ok(Math.abs(result.distances[19] - (500 - 0.125 * 210)) < 1e-9); // 20 frames of speeding up: 0.125 x (1 + 2 + ... + 20)
+  for (let i = 1; i < result.distances.length; i++) assert.ok(result.distances[i] < result.distances[i - 1]);
+  assert.strictEqual(result.y, 0);
+  assert.strictEqual(result.top, 2.5);
+});
+
+test("121 within its reach the Biter strikes: one hitbox is born one body ahead of it with the damage the bite has now, and it stays still for 10 frames and then chases again (and bites again at once if the avatar is still there)", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const avatar = s.actors[0];
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0; // 5 px of space between the bodies: within the reach of 8
+    step(s, { move: { x: 0, y: 0 } });
+    const born = { hitboxes: JSON.parse(JSON.stringify(s.hitboxes)), ai: { ...b.ai }, direction: { ...b.move.direction }, radius: b.radius, bite: b.attacks.bite.now.puncture };
+    avatar.position.x = -1000; // the avatar goes away: the Biter has nothing to bite when the freeze ends
+    const phases = [];
+    for (let i = 2; i <= 12; i++) {
+      step(s, { move: { x: 0, y: 0 } });
+      phases.push([i, b.ai.phase, b.ai.frames, b.move.direction.x === 0 && b.move.direction.y === 0]);
+    }
+    return { born, phases, hitboxes: s.hitboxes.length };
+  `, QUIET);
+  const { born } = result;
+  assert.strictEqual(born.hitboxes.length, 1);
+  assert.deepStrictEqual(plain(born.hitboxes[0]), { owner: "biter_0", attack: "bite", position: { x: 21, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: born.bite }, landed: true });
+  assert.strictEqual(born.hitboxes[0].position.x, 16 + born.radius + 5 - born.radius); // one body (its radius) toward the avatar
+  assert.deepStrictEqual([born.ai.phase, born.ai.frames, plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
+  // Steps 2 to 10 it is frozen (frames 9 down to 1) and wants no movement; at step 11 the freeze is over and it chases.
+  for (const [step, phase, frames, still] of result.phases) {
+    if (step <= 10) assert.deepStrictEqual([phase, frames, still], ["freeze", 11 - step, true], "step " + step);
+    else assert.deepStrictEqual([phase, still], ["chase", false], "step " + step);
+  }
+  assert.strictEqual(result.hitboxes, 0); // nothing was bitten again: the avatar was far
+});
+
+test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture), lives 4 frames and goes; changing the bite later does not change a hitbox that exists", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const avatar = s.actors[0];
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    const bite = b.attacks.bite.base.puncture;
+    const health = [];
+    const alive = [];
+    step(s, { move: { x: 0, y: 0 } });
+    health.push(avatar.health.now); alive.push(s.hitboxes.length);
+    b.attacks.bite.base.puncture = 50; // the bite changes after the hitbox was born
+    b.attacks.bite.now.puncture = 50;
+    const frozen = s.hitboxes[0].damage.puncture;
+    for (let i = 2; i <= 4; i++) { step(s, { move: { x: 0, y: 0 } }); health.push(avatar.health.now); alive.push(s.hitboxes.length); }
+    return { bite, health, alive, frozen };
+  `, QUIET);
+  const damage = 100 - resisted(result.bite, 10); // 10 points of puncture: 10 / 110 = 9% off
+  assert.ok(Math.abs(result.health[0] - damage) < 1e-9, "the bite: " + result.health[0]);
+  for (const health of result.health) assert.strictEqual(health, result.health[0]); // it hurt once, in the frame it was born
+  assert.deepStrictEqual(plain(result.alive), [1, 1, 1, 0]); // 4 frames, and then it is gone
+  assert.strictEqual(result.frozen, result.bite); // the hitbox kept the value it was born with
+});
+
+test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, anything else's hurts the avatar; a hitbox that does not touch the avatar hurts nobody", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const avatar = s.actors[0];
+    const b = s.actors[1];
+    b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
+    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, landed: false }); // 100 px away: a miss
+    step(s, { move: { x: 0, y: 0 } });
+    return { rule: [hitboxHurts(avatar.id, avatar), hitboxHurts(avatar.id, b), hitboxHurts(b.id, avatar), hitboxHurts(b.id, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.rule), [false, true, true, false]);
+  assert.strictEqual(result.health, 100);
+  assert.deepStrictEqual(plain(result.left), [2]); // it keeps losing frames even when it misses
+});
+
+// ---- Destruction ----
+
+test("124 an actor with no health left leaves the scene at the end of the step, the others keep their order, and the avatar is never destroyed; a dash kills a weak Biter and a Dummy in Chamber 1 goes too", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1, 2, 3);
+    s.actors[2].health.now = 0; // biter_1
+    step(s, { move: { x: 0, y: 0 } });
+    const order = s.actors.map((actor) => actor.id);
+
+    const t = aloneBiters(0);
+    t.actors[0].health.now = 0;
+    step(t, { move: { x: 0, y: 0 } });
+    const avatarStays = t.actors.map((actor) => actor.id);
+
+    const u = aloneBiters(0);
+    const b = u.actors[1];
+    b.position.x = 16 + b.radius + 6; b.position.y = 0; b.health.now = 5; // 6 px away, 5 health: a dash hits for about 10
+    step(u, { move: { x: 1, y: 0 }, dash: true });
+    const afterDash = u.actors.map((actor) => actor.id);
+
+    const d = createChamber1State(1, 1);
+    d.actors = [d.actors[0], d.actors.find((actor) => actor.id === "dummy_0"), d.actors.find((actor) => actor.id === "dummy_1")];
+    d.actors[1].health.now = 0;
+    step(d, { move: { x: 0, y: 0 } });
+    return { order, avatarStays, afterDash, avatarHurt: u.actors[0].health.now < 100, dummies: d.actors.map((actor) => actor.id) };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.order), ["avatar_1", "biter_0", "biter_2", "biter_3"]);
+  assert.deepStrictEqual(plain(result.avatarStays), ["avatar_1", "biter_0"]); // the avatar at 0 stays: there is no death for it yet
+  assert.deepStrictEqual(plain(result.afterDash), ["avatar_1"]);
+  assert.deepStrictEqual(plain(result.dummies), ["avatar_1", "dummy_1"]);
+});
+
+test("125 two Biters that overlap are pushed apart by weight until they touch, nobody is hurt, and the contact is in the list like any other pair", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, a, b] = s.actors;
+    a.position.x = 600; a.position.y = 0;
+    b.position.x = 600 + a.radius + b.radius - 4; b.position.y = 0; // overlapping by 4 px
+    const before = { a: a.position.x, b: b.position.x, weights: [a.weight, b.weight] };
+    step(s, { move: { x: 0, y: 0 } });
+    return { before, a: a.position.x, b: b.position.x, gap: Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) - (a.radius + b.radius), health: [a.health.now, b.health.now], contacts: s.contacts.filter((c) => c.startsWith("biter")) };
+  `, QUIET);
+  assert.ok(Math.abs(result.gap) < 1e-6, "they were not pushed to just touching: " + result.gap);
+  assert.deepStrictEqual(plain(result.health), [30, 30]);
+  assert.deepStrictEqual(plain(result.contacts), ["biter_0|biter_1"]);
+  const [weightA, weightB] = result.before.weights;
+  const pushA = (result.before.a - result.a); // a (on the left, pushed left) took b's share of the 4 px
+  assert.ok(Math.abs(Math.abs(pushA) - 4 * weightB / (weightA + weightB)) < 0.3, "the heavier one did not move less: " + pushA); // the two also walk 0.125 toward the avatar
+});
+
+test("126 Chamber 2 has 40 Biters (ids biter_0 to biter_39), no Dummies, born off the screen inside the window with a radius from 12 to 20 and 30 health, the same for the same seed and not for another, and the state is plain JSON", () => {
+  const result = run(`
+    const s = createChamber2State(1, 7);
+    const again = createChamber2State(1, 7);
+    const other = createChamber2State(1, 8);
+    const biters = s.actors.filter((actor) => actor.ai);
+    const width = s.grid.windowWidth * s.grid.cellSize;
+    const height = s.grid.windowHeight * s.grid.cellSize;
+    const avatar = s.actors[0].position;
+    let bad = 0;
+    for (const b of biters) {
+      const dx = b.position.x - avatar.x, dy = b.position.y - avatar.y;
+      if (!Number.isInteger(b.radius) || b.radius < 12 || b.radius > 20) bad++;
+      if (b.health.now !== 30 || b.health.max !== 30) bad++;
+      if (Math.abs(dx) < s.grid.screenWidth / 2 + b.radius && Math.abs(dy) < s.grid.screenHeight / 2 + b.radius) bad++; // inside the screen
+      if (Math.abs(dx) > width / 2 || Math.abs(dy) > height / 2) bad++; // outside the window
+      if (b.ai.phase !== "chase" || b.ai.frames !== 0 || b.ai.attack !== "bite" || b.crushes !== false) bad++;
+    }
+    return { count: biters.length, others: s.actors.length - biters.length - 1, ids: biters.map((b) => b.id), bad, hitboxes: s.hitboxes,
+      same: JSON.stringify(s) === JSON.stringify(again), different: JSON.stringify(s) !== JSON.stringify(other), json: JSON.stringify(s) };
+  `);
+  assert.strictEqual(result.count, 40);
+  assert.strictEqual(result.others, 0);
+  assert.deepStrictEqual(plain(result.ids), Array.from({ length: 40 }, (_, i) => "biter_" + i));
+  assert.strictEqual(result.bad, 0);
+  assert.deepStrictEqual(plain(result.hitboxes), []);
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.different, true);
+  assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
+});
+
+test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing among 40 Biters give the same state twice and a clean cross-check, and the Biters really reach it and bite", () => {
+  const result = run(`
+    const play = () => {
+      const run = createRun(1);
+      const s = createChamber2State(1, 1, run.blueprint);
+      const history = createHistory(s, run.blueprint);
+      let bitten = 0;
+      let mostHitboxes = 0;
+      for (let i = 0; i < 900; i++) {
+        const input = { move: { x: 0, y: 0 } };
+        step(s, input, run.blueprint);
+        recordFrame(history, s, input);
+        bitten = Math.max(bitten, s.hitboxes.length);
+        mostHitboxes = Math.max(mostHitboxes, s.hitboxes.length);
+      }
+      return { s, check: crossCheck(history), mostHitboxes };
+    };
+    const a = play();
+    const b = play();
+    return { same: JSON.stringify(a.s) === JSON.stringify(b.s), check: a.check, health: a.s.actors[0].health.now, mostHitboxes: a.mostHitboxes, alive: a.s.actors.length - 1 };
+  `);
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.check, null);
+  assert.ok(result.health < 100, "no Biter bit the avatar in 15 seconds: health " + result.health);
+  assert.ok(result.mostHitboxes >= 1);
+  assert.ok(result.alive > 0 && result.alive <= 40);
 });

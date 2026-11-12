@@ -21,6 +21,7 @@
     <h1>TEST CHAMBERS</h1>
     <button data-goto="screen-chamber-0">CHAMBER 0: DIAGNOSTICS</button>
     <button data-goto="screen-chamber-1">CHAMBER 1: MOVEMENT</button>
+    <button data-goto="screen-chamber-2">CHAMBER 2: COMBAT</button>
     <button data-goto="screen-menu">BACK</button>
   </main>
 
@@ -29,6 +30,16 @@
     <canvas id="canvas" width="1920" height="1080"></canvas>
     <div class="overlay">
       <span>CHAMBER 1: MOVEMENT</span>
+      <span class="hint">WASD / LEFT STICK: MOVE · SPACE / A: DASH</span>
+      <button data-goto="screen-chambers">BACK (ESC)</button>
+    </div>
+  </main>
+
+  <!-- Chamber 2: only for testing combat (Biters) -->
+  <main id="screen-chamber-2" class="screen fullscreen" hidden>
+    <canvas id="canvas-2" width="1920" height="1080"></canvas>
+    <div class="overlay">
+      <span>CHAMBER 2: COMBAT</span>
       <span class="hint">WASD / LEFT STICK: MOVE · SPACE / A: DASH</span>
       <button data-goto="screen-chambers">BACK (ESC)</button>
     </div>

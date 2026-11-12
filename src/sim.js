@@ -34,7 +34,8 @@ function finalizeObject(type, rolls, blueprint, id) {
   object.radius = finalRadius(object, blueprint);
   object.weight = finalWeight(object, blueprint);
   object.bounce = finalBounce(object, blueprint);
-  object.defense = finalDefense(object, blueprint);
+  if (object.resistance) writeResistance(object, blueprint); // only a thing whose recipe starts with a resistance has one (the avatar)
+  object.attacks = finalAttacks(object);
   return object;
 }
 
@@ -46,12 +47,13 @@ function finalizeObject(type, rolls, blueprint, id) {
 // Which is which is a list, here. A value moves from one list to the other the day something makes it change during
 // a run.
 
-// The static values: radius, weight, bounce, acceleration, deceleration, the maximum health, and for an actor with a
-// dash its recharge time and its maximum of charges.
+// The static values: radius, weight, bounce, the base of every attack, acceleration, deceleration, the maximum health,
+// and for an actor with a dash its recharge time and its maximum of charges.
 function finalizeStatic(actor, blueprint) {
   actor.radius = finalRadius(actor, blueprint);
   actor.weight = finalWeight(actor, blueprint);
   actor.bounce = finalBounce(actor, blueprint);
+  actor.attacks = finalAttacks(actor);
   actor.acceleration = finalAcceleration(actor, blueprint);
   actor.deceleration = finalDeceleration(actor, blueprint);
   actor.health.max = finalMaxHealth(actor, blueprint);
@@ -61,10 +63,14 @@ function finalizeStatic(actor, blueprint) {
   }
 }
 
-// The dynamic values: the top speed, the defense, and for an actor with a dash its speed.
+// The dynamic values: the top speed, the resistance, what every attack is now (its base plus whatever other things
+// add: nothing yet), and for an actor with a dash its speed.
 function finalizeDynamic(actor, blueprint) {
   actor.speed = finalSpeed(actor, blueprint);
-  actor.defense = finalDefense(actor, blueprint);
+  if (actor.resistance) writeResistance(actor, blueprint);
+  for (const attack of Object.values(actor.attacks)) {
+    for (const type of Object.keys(attack.base)) attack.now[type] = finalAttackNow(actor, attack, type);
+  }
   if (actor.dash) actor.dash.speed = finalDashSpeed(actor, blueprint);
 }
 
@@ -109,6 +115,11 @@ function sumSpec(blueprint, name) {
   return partsOf(blueprint).reduce((sum, part) => sum + (part.specs[name] || 0), 0);
 }
 
+// The sum of the resistance of the parts to one type of damage (a part without it adds 0).
+function sumResistance(blueprint, type) {
+  return partsOf(blueprint).reduce((sum, part) => sum + (part.specs.resistance?.[type] || 0), 0);
+}
+
 // What the parts add to a value, for the avatar. Objects get nothing from the blueprint.
 function fromParts(actor, blueprint, name) {
   return isAvatar(actor) ? sumSpec(blueprint, name) : 0;
@@ -124,6 +135,10 @@ function assertValidBlueprint(blueprint) {
   }
 }
 
+// The specs a part can have: the ones the rules read (see "parts" in src/data.js). Anything else is refused when the
+// definitions load.
+const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges", "rechargeFrames", "capacity"];
+
 // Fails loudly if a definition breaks a rule of the library. It runs once, when this file is loaded, so a
 // bad definition stops the game before the first frame.
 // - Every weight is a whole number of kg, zero or more (the user's rule): the weight of a part, and for an
@@ -137,8 +152,8 @@ function assertValidBlueprint(blueprint) {
 //   enough for its largest radius (see objectMargin): a layer where an object would not fit in its square cannot be
 //   made in the first place. Two layers cannot have the same square size, because the larger one wins an overlap.
 function assertValidDefinitions() {
-  // The things made by the seed from ranges: every object, and the Dummy (an actor made the same way).
-  for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy })) {
+  // The things made by the seed from ranges: every object, and the actors of the crowds (the Dummy and the Biter).
+  for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy, biter: DEFINITIONS.actors.biter })) {
     const where = (DEFINITIONS.objects[id] ? "the object " : "the actor ") + id;
     if (!object.size) throw new Error("The size of " + where + " is missing: { min, max }, the range of its radius");
     const { min, max } = object.size;
@@ -165,6 +180,40 @@ function assertValidDefinitions() {
   for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
     if (!(Number.isInteger(part.weight) && part.weight >= 0)) {
       throw new Error("The weight of the part " + id + " must be a whole number of kg, 0 or more, and it is " + part.weight);
+    }
+    // A spec the rules do not read adds nothing and says nothing (a typo like "dashspeed" would silently remove a dash),
+    // so a part can only have the specs listed in PART_SPECS.
+    for (const [name, value] of Object.entries(part.specs)) {
+      if (!PART_SPECS.includes(name)) throw new Error("The part " + id + " has the spec " + name + ", which no rule reads. The specs are: " + PART_SPECS.join(", "));
+      if (name === "resistance") {
+        for (const [type, points] of Object.entries(value)) {
+          if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The resistance of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
+          if (!(points >= 0)) throw new Error("The resistance of the part " + id + " to " + type + " must be 0 or more, and it is " + points);
+        }
+      } else if (!(typeof value === "number" && value >= 0)) {
+        throw new Error("The spec " + name + " of the part " + id + " must be a number, 0 or more, and it is " + value);
+      }
+    }
+  }
+  // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
+  for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
+    for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
+      const where = "the attack " + name + " of the actor " + id;
+      if (name === "bodySlam") throw new Error("The name bodySlam of " + where + " is taken: every thing has the body slam");
+      const types = Object.keys(attack.damage ?? {});
+      if (types.length === 0) throw new Error("The damage of " + where + " is missing: { type: { flat, perWeight } }");
+      for (const type of types) {
+        const part = attack.damage[type];
+        if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of " + where + " has " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
+        if (!(part.flat >= 0 && part.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(part));
+      }
+      for (const field of ["reach", "freezeFrames"]) {
+        if (!Number.isInteger(attack[field]) || attack[field] < 0) throw new Error("The " + field + " of " + where + " must be a whole number, 0 or more, and it is " + attack[field]);
+      }
+      const hitbox = attack.hitbox;
+      if (!hitbox || !Number.isInteger(hitbox.radius) || hitbox.radius < 1 || !Number.isInteger(hitbox.frames) || hitbox.frames < 1) {
+        throw new Error("The hitbox of " + where + " needs a whole radius and whole frames, 1 or more: " + JSON.stringify(hitbox));
+      }
     }
   }
   const squareSizes = [];
@@ -259,35 +308,106 @@ function finalBounce(thing, blueprint) {
   return bounce.min + ((bounce.max - bounce.min) * (thing.radius - min)) / (max - min);
 }
 
-// The attack of a hit (the body slam). "hit" says what happened: for a collision it is
-// { impact }, the part of the velocity that went into the other thing, in px/frame.
-// There is no flag for who hits: the attack grows with the weight of the attacker (a weight of 0 gives an
-// attack of 0, so nothing happens) and with the impact: weight x attackPerKg x impact / referenceImpact.
-// Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all
-// (the minimum impact) is decided in collideWithObjects. (The formula is a provisional proposal, to be
-// discussed with the user.)
-// Like finalSpeed, it is a function so parts and buffs (the modifiers of the body slam)
-// can be added later, as terms of the damage trace. Pure: it depends only on its
-// arguments and the definitions. The attacker can be the avatar or an object.
+// ---- Damage: packets, resistance and attacks ----
+// The damage of a hit is a PACKET: one amount per type of damage ({ blunt: 3, puncture: 2 }, only the types above
+// zero; the types are DEFINITIONS.damageTypes). The parts of a packet are independent (the user's rule, 2026-11-11: a
+// fire sword against a creature resistant to fire still hits with its blade): the target's resistance works on each
+// type alone. A hit that already happened keeps its packet as it was calculated.
+
+// The resistance of an actor to one type of damage, in points: for the avatar the sum of the resistance of its parts
+// (the user's decision: the resistance is a number of points, and the points become a share of the damage taken off by
+// a curve, see resolveDamage). Nothing else has any: no recipe gives it. Pure, like finalSpeed.
+function finalResistance(actor, blueprint, type) {
+  return isAvatar(actor) ? sumResistance(blueprint, type) : 0;
+}
+
+// Writes the resistance of every type into the actor (an actor that carries one starts with { } in its recipe).
+function writeResistance(actor, blueprint) {
+  for (const type of DEFINITIONS.damageTypes) actor.resistance[type] = finalResistance(actor, blueprint, type);
+}
+
+// The packet of an attack from its recipe: for each type, flat + perWeight x weight (the user's idea: the weight
+// helps some attacks and not others, so each attack says in its own recipe how much it counts, and an attack that does
+// not scale with weight has a perWeight of 0). Types at zero are left out.
+function packetOf(parts, weight) {
+  const packet = {};
+  for (const type of DEFINITIONS.damageTypes) {
+    const part = parts[type];
+    if (part === undefined) continue;
+    const amount = part.flat + part.perWeight * weight;
+    if (amount > 0) packet[type] = amount;
+  }
+  return packet;
+}
+
+// The attacks of a thing, by name, each { base, now, ...what is its own }. The BASE is calculated once, when the thing is
+// made (the user's rule: static values at the start); NOW is the base plus whatever other things add, calculated again
+// every frame (finalAttackNow); a hit takes the NOW of the moment. Every thing has the body slam, whose base is the
+// weight times bodySlam.attackPerKg (the hit itself scales it by the impact, see finalAttack); a recipe can have more
+// (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, freezeFrames, the hitbox) is copied as it is.
+function finalAttacks(thing) {
+  const attacks = {};
+  const bodySlam = packetOf({ blunt: { flat: 0, perWeight: DEFINITIONS.constants.bodySlam.attackPerKg } }, thing.weight);
+  attacks.bodySlam = { base: bodySlam, now: { ...bodySlam } };
+  for (const [name, recipe] of Object.entries(definitionOf(thing).attacks ?? {})) {
+    const base = packetOf(recipe.damage, thing.weight);
+    const { damage, ...own } = recipe;
+    attacks[name] = { base, now: { ...base }, ...JSON.parse(JSON.stringify(own)) };
+  }
+  return attacks;
+}
+
+// What an attack is now for one type: its base. The day an aura gives its neighbors more attack, the term goes here
+// (the base stays as it was made, so the bonus can leave without losing it).
+function finalAttackNow(actor, attack, type) {
+  return attack.base[type];
+}
+
+// The packet of a hit by body slam. "hit" says what happened: for a collision it is { impact }, the part of the velocity
+// that went into the other thing, in px/frame. The body slam is the user's first attack: every type of it grows with
+// the impact, now x impact / referenceImpact (provisional formula, the agent's proposal, to be discussed). A weight of 0
+// gives an empty packet, so nothing happens, and so does an impact of 0 or less.
+// Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all (the
+// minimum impact) is decided where the collision is. Pure.
 function finalAttack(attacker, hit) {
-  const rules = DEFINITIONS.constants.bodySlam;
-  if (hit.impact <= 0) return 0;
-  return (attacker.weight * rules.attackPerKg * hit.impact) / rules.referenceImpact;
+  const packet = {};
+  if (hit.impact <= 0) return packet;
+  const { now } = attacker.attacks.bodySlam;
+  for (const type of DEFINITIONS.damageTypes) {
+    if (now[type] > 0) packet[type] = (now[type] * hit.impact) / DEFINITIONS.constants.bodySlam.referenceImpact;
+  }
+  return packet;
 }
 
-// The defense of the avatar: the sum of the defense of its parts. An object has no defense (none was defined).
-// Pure, like finalSpeed.
-function finalDefense(actor, blueprint) {
-  return fromParts(actor, blueprint, "defense");
+// How a packet hurts a target, in the order the terms are applied, so the damage can be explained (the damage trace
+// the user wants will read this record; nothing keeps it yet). For each type with an amount:
+//   reduction = points / (points + resistanceScale), points = the resistance of the target to that type;
+//   after = amount x (1 - reduction).
+// The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
+// by adding more). The total is the sum of the parts, and a packet with something in it always costs at least
+// damage.minDamage (the defense never makes the target immune). An empty packet costs nothing.
+// Returns { parts: [{ type, amount, points, reduction, after }], total, minimumApplied }.
+function resolveDamage(packet, target) {
+  const scale = DEFINITIONS.constants.damage.resistanceScale;
+  const parts = [];
+  let sum = 0;
+  for (const type of DEFINITIONS.damageTypes) {
+    const amount = packet[type];
+    if (!(amount > 0)) continue;
+    const points = target.resistance?.[type] ?? 0;
+    const reduction = points / (points + scale);
+    const after = amount * (1 - reduction);
+    parts.push({ type, amount, points, reduction, after });
+    sum += after;
+  }
+  if (parts.length === 0) return { parts, total: 0, minimumApplied: false };
+  const minimum = DEFINITIONS.constants.damage.minDamage;
+  return { parts, total: Math.max(minimum, sum), minimumApplied: sum < minimum };
 }
 
-// The damage of a hit on a target: finalAttack - the defense the target carries, but never below minDamage
-// (a hit always costs something). No attack (a weight of 0) means no damage at all.
-// The shield is not here yet.
+// The damage of a body slam on a target, as one number: the packet of the hit (finalAttack) resolved against the target.
 function damageOf(attacker, hit, target) {
-  const attack = finalAttack(attacker, hit);
-  if (attack <= 0) return 0;
-  return Math.max(DEFINITIONS.constants.bodySlam.minDamage, attack - target.defense);
+  return resolveDamage(finalAttack(attacker, hit), target).total;
 }
 
 // Whether a collision between two things is a hit at all (the user's rule, 2026-11-10): the body slam hurts only where
@@ -684,24 +804,38 @@ function birthOffset(seed, index, radius, grid) {
   return { x: -innerX + (pick % Math.floor(2 * innerX)), y: innerY + (along % capHeight) }; // below
 }
 
-// Makes the Dummies of a new state, by the seed. For each one the seed rolls (salts 11, 14 and 15, with the number of
-// the Dummy) radius, health and first angle, and birthOffset says where it is born.
-function createDummies(state) {
-  const recipe = DEFINITIONS.actors.dummy;
+// Makes the actors of one crowd of a new state, by the seed: `count` actors of one type, numbered from 0. For each one
+// the seed rolls (salts 11 and 14, with the number of the actor) radius and health, and birthOffset says where it is born
+// (the user's birth rule, see "Birth" in AGENTS.md). `rollsFor(index)` gives what is its own to the type (the Dummy's first
+// angle). Ids are the type and the number ("dummy_0", "biter_0"). Returns the new actors, in order.
+function createCrowd(state, type, count, rollsFor) {
+  const recipe = DEFINITIONS.actors[type];
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const made = [];
 
-  for (let index = 0; index < DEFINITIONS.terrain.dummies.count; index++) {
+  for (let index = 0; index < count; index++) {
     const radius = rollInRange(state.seed, index, 0, 11, recipe.size.min, recipe.size.max);
     const offset = birthOffset(state.seed, index, radius, state.grid);
     const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
     const health = rollInRange(state.seed, index, 0, 14, recipe.healthRange.min, recipe.healthRange.max);
-    const angle = hashInts(state.seed, index, 0, 15) % 360;
-    const dummy = finalizeObject("dummy", { position, radius, health: { now: health, max: health }, wander: { index, angle, turns: 0 } }, undefined, "dummy_" + index);
-    finalizeStatic(dummy);
-    finalizeDynamic(dummy);
-    setHeading(dummy);
-    state.actors.push(dummy);
+    const actor = finalizeObject(type, { position, radius, health: { now: health, max: health }, ...rollsFor(index) }, undefined, type + "_" + index);
+    finalizeStatic(actor);
+    finalizeDynamic(actor);
+    state.actors.push(actor);
+    made.push(actor);
   }
+  return made;
+}
+
+// The Dummies of Chamber 1: each also rolls its first angle (salt 15) and is pointed at it.
+function createDummies(state) {
+  const dummies = createCrowd(state, "dummy", DEFINITIONS.terrain.dummies.count, (index) => ({ wander: { index, angle: hashInts(state.seed, index, 0, 15) % 360, turns: 0 } }));
+  for (const dummy of dummies) setHeading(dummy);
+}
+
+// The Biters of Chamber 2: they have nothing to roll besides what every actor of a crowd rolls.
+function createBiters(state) {
+  createCrowd(state, "biter", DEFINITIONS.terrain.biters.count, () => ({}));
 }
 
 // The part of the overlap that "a" takes when the actors a and b are pushed apart (the user's decision, 2026-11-11:
@@ -713,17 +847,17 @@ function pushShare(a, b) {
   return total === 0 ? 0.5 : b.weight / total;
 }
 
-// What happens when a Dummy touches another actor (the avatar or another Dummy). If they overlap:
+// What happens when an actor that moves (not the avatar) touches another actor (the avatar or another that moves). If they overlap:
 // 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
 //    only against the avatar) and the speed at which they close in on each other (the impact: the part of the
 //    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
 //    the same body slam as the avatar's (damageOf), and BOTH sides hurt the other with their own weight.
 // 2. The two are pushed apart along the line until they just touch, the push split by weight (pushShare): the
 //    heavier moves less. Nobody's velocity changes.
-// 3. If the contact is new, the Dummy picks a new angle (turnDummy), hit or not, and so does the other if it is a
-//    Dummy. A pair that was already touching still pushes, but does not hurt and does not turn.
+// 3. If the contact is new, each of the two reacts in its own way (reactToNewContact: a Dummy picks a new angle, a Biter
+//    does nothing), hit or not. A pair that was already touching still pushes, but does not hurt and does not react.
 // Returns true if they touched (so the cells of both must be written again).
-function touchDummy(state, lastContacts, dummy, other, key) {
+function touchActors(state, lastContacts, dummy, other, key) {
   const contact = contactBetween(dummy, other);
   if (contact === null) return false;
   const { normalX, normalY, overlap } = contact;
@@ -747,10 +881,15 @@ function touchDummy(state, lastContacts, dummy, other, key) {
   other.position.y -= normalY * overlap * (1 - share);
 
   if (isNewContact) {
-    turnDummy(state, dummy);
-    if (other.wander !== undefined) turnDummy(state, other);
+    reactToNewContact(state, dummy);
+    reactToNewContact(state, other);
   }
   return true;
+}
+
+// What an actor does when it meets something new: a Dummy picks a new angle. The other actors have no reaction of their own.
+function reactToNewContact(state, actor) {
+  if (actor.wander) turnDummy(state, actor);
 }
 
 // ---- The cells of an actor ----
@@ -776,7 +915,7 @@ function shareCell(a, b) {
   return a.from.x <= b.to.x && b.from.x <= a.to.x && a.from.y <= b.to.y && b.from.y <= a.to.y;
 }
 
-// The index of the grid: for each cell ("x,y"), the numbers of the Dummies that cover it. It is made again in every
+// The index of the grid: for each cell ("x,y"), the numbers of the actors that move (not the avatar) that cover it. It is made again in every
 // step from actor.cells (it is not part of the state), and kept right while the collisions push the Dummies.
 function addToCells(inCell, number, cells) {
   for (let y = cells.from.y; y <= cells.to.y; y++) {
@@ -797,7 +936,7 @@ function removeFromCells(inCell, number, cells) {
   }
 }
 
-// The smallest number above "after" among the Dummies that cover any of these cells, or -1 if there is none.
+// The smallest number above "after" among the actors that cover any of these cells, or -1 if there is none.
 function nextInCells(inCell, cells, after) {
   let next = -1;
   for (let y = cells.from.y; y <= cells.to.y; y++) {
@@ -812,8 +951,8 @@ function nextInCells(inCell, cells, after) {
   return next;
 }
 
-// The collisions of every Dummy with the other actors, in list order: with the avatar, and with the Dummies after it
-// in the list (so each pair is looked at once). (The objects were met in the movement, by collideWithObjects, like
+// The collisions of every actor that moves (not the avatar) with the other actors, in list order: with the avatar, and
+// with the actors that move after it in the list (so each pair is looked at once). (The objects were met in the movement, by collideWithObjects, like
 // the avatar's.) The result is exactly the one of testing every
 // pair in that order; the grid only skips the pairs that cannot touch:
 // - a Dummy is tested against the avatar only if they share a cell, and against the Dummies that share a cell with it;
@@ -822,9 +961,9 @@ function nextInCells(inCell, cells, after) {
 //   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
 //   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
 //   list made before.
-function collideDummies(state, lastContacts) {
+function collideActors(state, lastContacts) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-  const dummies = state.actors.filter((actor) => actor.wander);
+  const dummies = state.actors.filter((actor) => actor.move && !isAvatar(actor));
 
   const inCell = new Map();
   dummies.forEach((dummy, number) => addToCells(inCell, number, dummy.cells));
@@ -840,7 +979,7 @@ function collideDummies(state, lastContacts) {
     const dummy = dummies[i];
 
     if (shareCell(dummy.cells, player.cells)) {
-      if (touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID)) {
+      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID)) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
@@ -848,12 +987,114 @@ function collideDummies(state, lastContacts) {
 
     let j = nextInCells(inCell, dummy.cells, i);
     while (j !== -1) {
-      if (touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id)) {
+      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id)) {
         refreshCells(i);
         refreshCells(j);
       }
       j = nextInCells(inCell, dummy.cells, j);
     }
+  }
+}
+
+// ---- The Biter: chase, then strike ----
+// The first actor that decides what to do (the user's start of the AI, 2026-11-11). Its mind is data that lives in the
+// actor, small: actor.ai = { attack, phase, frames }: which of its attacks it uses, "chase" or "freeze", and the frames
+// left of the freeze. The numbers of the attack (how close it must be, how long it stays still, the hitbox) are in
+// actor.attacks[ai.attack], copied from the recipe when the actor was made.
+// Chase: it wants to walk straight at the avatar. When the space between the two bodies is within the reach of the
+// attack, it strikes: a hitbox is born (createHitbox) and the actor stays still for freezeFrames frames (its wanted
+// direction is zero, so it slows down by its deceleration), and then chases again.
+// Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
+function think(state, actor, player) {
+  const ai = actor.ai;
+  const attack = actor.attacks[ai.attack];
+  const direction = actor.move.direction;
+
+  if (ai.phase === "freeze") {
+    ai.frames -= 1;
+    if (ai.frames > 0) {
+      direction.x = 0;
+      direction.y = 0;
+      return;
+    }
+    ai.phase = "chase"; // the freeze is over: this frame it already chases
+  }
+
+  const dx = player.position.x - actor.position.x;
+  const dy = player.position.y - actor.position.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  // Toward the avatar (if the centers are the same there is no direction: it faces right, so the result is the same everywhere).
+  const towardX = distance === 0 ? 1 : dx / distance;
+  const towardY = distance === 0 ? 0 : dy / distance;
+
+  if (distance - actor.radius - player.radius <= attack.reach) {
+    createHitbox(state, actor, ai.attack, towardX, towardY);
+    ai.phase = "freeze";
+    ai.frames = attack.freezeFrames;
+    direction.x = 0;
+    direction.y = 0;
+    return;
+  }
+  direction.x = towardX;
+  direction.y = towardY;
+}
+
+// ---- Hitboxes ----
+// A hitbox is the first thing in the game that is neither an actor nor an object: a circle that exists for a few frames
+// and hurts (the user's idea: an attack is a hitbox of size X). It carries the damage as it was calculated in the frame it
+// was born (the user's decision: it keeps the final value, as a packet), and it stays where it was born. state.hitboxes
+// is the list of the living ones, in the order they were born. Whether a hitbox is an actor, like a projectile, is open.
+// { owner: id of whoever made it, attack: its name, position, radius, framesLeft, damage: packet, landed: true after it hurt }
+
+// Born one body ahead of the owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now.
+function createHitbox(state, owner, attackName, towardX, towardY) {
+  const attack = owner.attacks[attackName];
+  state.hitboxes.push({
+    owner: owner.id,
+    attack: attackName,
+    position: { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius },
+    radius: attack.hitbox.radius,
+    framesLeft: attack.hitbox.frames,
+    damage: { ...attack.now },
+    landed: false,
+  });
+}
+
+// Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
+// side and everything else the other, and nobody hurts their own side): the hitbox of the avatar hurts what is not the
+// avatar, the hitbox of anything else hurts the avatar.
+function hitboxHurts(ownerId, target) {
+  return (ownerId === AVATAR_ID) !== isAvatar(target);
+}
+
+// Every living hitbox looks for who it hurts, once (landed), and loses a frame; the ones with no frames left are gone.
+// For now the only thing a hitbox can hurt is the avatar (no actor but the avatar's side exists yet to be hurt by the
+// avatar's hitboxes; the day the avatar has one, the targets are looked for in the cells of the grid).
+function resolveHitboxes(state) {
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  for (const hitbox of state.hitboxes) {
+    if (!hitbox.landed && hitboxHurts(hitbox.owner, player) && contactBetween(hitbox, player) !== null) {
+      applyDamage(player, resolveDamage(hitbox.damage, player).total);
+      hitbox.landed = true;
+    }
+    hitbox.framesLeft -= 1;
+  }
+  state.hitboxes = state.hitboxes.filter((hitbox) => hitbox.framesLeft > 0);
+}
+
+// ---- Destruction ----
+// The one place where an actor leaves the scene (the user's decision, 2026-11-11: for now it only removes the actor, so it
+// is not drawn and is not in the state any more; a drop, an explosion or a sound will be written here). The others keep
+// their order. The avatar is not destroyed yet: nothing has been decided about what its end does to the run.
+function destroyActor(state, actor) {
+  state.actors.splice(state.actors.indexOf(actor), 1);
+}
+
+// Destroys every actor, but the avatar, that has no health left. Called once, at the end of the step, in list order, so
+// nothing is removed while a loop walks the list.
+function removeDestroyed(state) {
+  for (const actor of [...state.actors]) {
+    if (!isAvatar(actor) && actor.health.now <= 0) destroyActor(state, actor);
   }
 }
 
@@ -867,13 +1108,13 @@ function createRun(id) {
   return { id, blueprint };
 }
 
-// Initial state of Chamber 1: the avatar at the center of the world, with the full health of its blueprint, and the
-// Dummies born around it. The objects come from the seed and are not in the state.
+// Initial state of a chamber: the avatar at the center of the world, with the full health of its blueprint, and the crowd
+// of the chamber born around it (`populate` makes it). The objects come from the seed and are not in the state.
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
 // blueprint: the blueprint of the run, used only to make the avatar (createAvatar).
-function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
+function createChamberState(populate, runId, seed, blueprint) {
   const avatar = createAvatar(blueprint);
 
   const state = {
@@ -920,13 +1161,26 @@ function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 },
 
+    // The hitboxes alive now (see "Hitboxes"). Empty until something strikes.
+    hitboxes: [],
+
     actors: [avatar],
   };
 
   assertValidGrid(state.grid);
-  createDummies(state);
+  populate(state);
   for (const actor of state.actors) setCells(actor, state.grid);
   return state;
+}
+
+// Chamber 1: the Dummies, which only walk and collide.
+function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
+  return createChamberState(createDummies, runId, seed, blueprint);
+}
+
+// Chamber 2 (COMBAT): the same world, with the Biters, which chase the avatar and strike.
+function createChamber2State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
+  return createChamberState(createBiters, runId, seed, blueprint);
 }
 
 // Fails loudly if the grid settings make no sense.
@@ -964,6 +1218,11 @@ function step(state, input, blueprint) {
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
   player.move.direction.y = input.move.y;
+
+  // 1b. The minds: every actor that has `ai` decides where to go and whether to strike (think), before anyone moves.
+  for (const actor of state.actors) {
+    if (actor.ai) think(state, actor, player);
+  }
 
   // 2. Movement: every actor that has "move" walks, in list order.
   // The velocity does not jump to the wanted value: it speeds up toward it
@@ -1007,17 +1266,23 @@ function step(state, input, blueprint) {
 
     // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
     const metSomethingNew = collideWithObjects(state, actor, lastContacts);
-    if (metSomethingNew && actor.wander) turnDummy(state, actor);
+    if (metSomethingNew) reactToNewContact(state, actor);
   }
 
   // 3. Cells: the cells every actor covers now (see "The cells of an actor").
   // Every actor must already have "cells" and a radius (it fails loudly if one does not).
   for (const actor of state.actors) setCells(actor, state.grid);
 
-  // 4. The actors collide with each other (a Dummy with the avatar, and the Dummies among themselves) and the Dummies
-  // turn. The collision reads the cells from the actors, and writes them again for everyone it pushes, so at the end
-  // of the step they are still right.
-  collideDummies(state, lastContacts);
+  // 4. The actors collide with each other (the ones that move with the avatar, and among themselves) and each one reacts to
+  // a new contact in its own way. The collision reads the cells from the actors, and writes them again for everyone it
+  // pushes, so at the end of the step they are still right.
+  collideActors(state, lastContacts);
+
+  // 5. The hitboxes hurt, once each, and lose a frame.
+  resolveHitboxes(state);
+
+  // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor).
+  removeDestroyed(state);
 
   state.frame += 1;
 }

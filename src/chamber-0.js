@@ -102,7 +102,7 @@ function blueprintText(blueprint) {
     `total weight: ${weight} kg, capacity: ${sumSpec(blueprint, "capacity")} kg`,
     `top speed: ${sumSpec(blueprint, "speed")} - ${weight} x ${penalty} = ${finalSpeed(avatar, blueprint)}`,
     `maximum health: ${sumSpec(blueprint, "health")} = ${finalMaxHealth(avatar, blueprint)}`,
-    `defense: ${sumSpec(blueprint, "defense")} = ${finalDefense(avatar, blueprint)}`,
+    ...DEFINITIONS.damageTypes.map((type) => `resistance to ${type}: ${sumResistance(blueprint, type)} points = ${finalResistance(avatar, blueprint, type)}`),
     `dash speed: ${sumSpec(blueprint, "dashSpeed")} = ${finalDashSpeed(avatar, blueprint)}`,
     `dash charges (maximum): ${sumSpec(blueprint, "dashCharges")} = ${finalDashMaxCharges(avatar, blueprint)}`,
     `radius: ${finalRadius(avatar, blueprint)}, acceleration: ${finalAcceleration(avatar, blueprint)}, deceleration: ${finalDeceleration(avatar, blueprint)} (from the recipe of the avatar)`,

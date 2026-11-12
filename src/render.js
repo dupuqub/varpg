@@ -4,7 +4,8 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
-const DUMMY_COLOR = "#3d8bff"; // the Dummies are blue circles
+const ACTOR_COLORS = { dummy: "#3d8bff", biter: "#e0453a" }; // by actor type (not the avatar): a new actor type needs its color here
+const HITBOX_COLOR = "#ffd23f"; // the hitboxes are yellow circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
 function draw(context, state, blueprint, fps) {
@@ -20,7 +21,7 @@ function draw(context, state, blueprint, fps) {
   drawReferenceGrid(context, player.position.x, player.position.y);
 
   drawObjects(context, state, player);
-  drawDummies(context, state, player);
+  drawActors(context, state, player);
 
   const radius = player.radius;
 
@@ -28,6 +29,8 @@ function draw(context, state, blueprint, fps) {
   context.beginPath();
   context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
   context.fill();
+
+  drawHitboxes(context, state, player);
 
   drawDashStatus(context, player);
   drawHealth(context, player);
@@ -78,18 +81,36 @@ function drawObjects(context, state, player) {
   }
 }
 
-// The Dummies that fall on the screen, as blue circles (the camera is on the avatar, which is in the center).
-function drawDummies(context, state, player) {
+// Every actor that is not the avatar (Dummies, Biters), as a circle of the color of its type. The camera is on the avatar,
+// which is in the center. An actor that was hurt shows its health (current/maximum). A type without a color stops the game.
+function drawActors(context, state, player) {
   const { width, height } = context.canvas;
-  context.fillStyle = DUMMY_COLOR;
   for (const actor of state.actors) {
-    if (!actor.wander) continue;
+    if (actor.id === AVATAR_ID) continue;
+    const color = ACTOR_COLORS[actor.type];
+    if (color === undefined) throw new Error("The actor type " + actor.type + " has no color in ACTOR_COLORS");
     const screenX = actor.position.x - player.position.x + width / 2;
     const screenY = actor.position.y - player.position.y + height / 2;
     if (screenX < -actor.radius || screenX > width + actor.radius || screenY < -actor.radius || screenY > height + actor.radius) continue;
+    context.fillStyle = color;
     context.beginPath();
     context.arc(screenX, screenY, actor.radius, 0, Math.PI * 2);
     context.fill();
+    if (actor.health.now < actor.health.max) {
+      drawHealthLabel(context, screenX, screenY - actor.radius - 8, actor.health.now, actor.health.max);
+    }
+  }
+}
+
+// The hitboxes that exist, as yellow circles (only the outline: the bodies stay visible).
+function drawHitboxes(context, state, player) {
+  const { width, height } = context.canvas;
+  context.strokeStyle = HITBOX_COLOR;
+  context.lineWidth = 3;
+  for (const hitbox of state.hitboxes) {
+    context.beginPath();
+    context.arc(hitbox.position.x - player.position.x + width / 2, hitbox.position.y - player.position.y + height / 2, hitbox.radius, 0, Math.PI * 2);
+    context.stroke();
   }
 }
 

@@ -1,7 +1,7 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
-// There are four things in it: two actors, the avatar and the Dummy, and two objects, the Rock and the Shroom.
+// There are five things in it: three actors, the avatar, the Dummy and the Biter, and two objects, the Rock and the Shroom.
 // The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
-// The Dummy is an actor made by the seed from the ranges of its entry, like an object (see "terrain" below).
+// The Dummy and the Biter are actors made by the seed from the ranges of their entries, like an object (see "terrain" below).
 // Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object
 // is a single fixed value, and nothing is placed by hand. A value that is not used by anything does not belong here:
 // it is deleted, and it comes back when something uses it.
@@ -21,13 +21,18 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 28;
+const DEFINITIONS_VERSION = 29;
 
 const DEFINITIONS = {
+  // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
+  // each type on its own). Only the types something uses today: blunt is the body slam, puncture is the Biter's bite.
+  // The order here is the order the terms of a hit are calculated and shown. Fire, ice... come when something uses them.
+  damageTypes: ["blunt", "puncture"],
+
   actors: {
     avatar: {
       name: "Avatar",
-      // The maximum health, the defense, the top speed and the dash strength of the
+      // The maximum health, the resistance, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
       // What is here is the base of each value. The avatar does not read it while it plays: createAvatar
       // (src/sim.js) gives the avatar its own copy of each one, through a final function (finalRadius,
@@ -44,6 +49,7 @@ const DEFINITIONS = {
         position: { x: 0, y: 0 },
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the user's decision: a potential behavior of every actor (see crushObject in src/sim.js), off until a buff switches it on
+        resistance: {}, // points per type of damage, written from the parts every frame (see "parts" below); an actor without it has none
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
@@ -53,7 +59,7 @@ const DEFINITIONS = {
     },
 
     // The Dummy (the user's idea, a test actor): it does not attack, it only walks toward an angle and, at every
-    // collision, picks a new random angle (see createDummies and collideDummies in src/sim.js). Like an object, it is
+    // collision, picks a new random angle (see createDummies and collideActors in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
     // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
     // weightPerRadius: guess, the same number as the objects', written here on their own. The weight is the attack of
@@ -80,6 +86,55 @@ const DEFINITIONS = {
         move: {
           direction: { x: 0, y: 0 }, // what it wants: the unit vector of the angle it is walking at
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame: it is born still and speeds up
+        },
+      },
+    },
+
+    // The Biter (the user's idea, 2026-11-11, the first enemy that decides what to do; the worm of his screenshot): it
+    // chases the avatar and, when close enough, strikes with a hitbox and stays still for a moment (see think in src/sim.js).
+    // Like the Dummy it is only ranges and a recipe: the seed rolls its radius and health, and it is born like any actor.
+    // size: guess, 12 to 20, a little smaller than the avatar (16) on average, so a crowd of them is a swarm and not a wall.
+    // weightPerRadius: guess, the same number as the objects' and the Dummy's, written here on its own: 1200 to 2000 kg.
+    //   The weight is its body slam (blunt, see constants.bodySlam) and part of its bite (see attacks below).
+    // healthRange: guess, 30: the avatar's body slam at a walk (impact 3) hurts for 2.5 and a dash (impact 12) for 10, so a
+    //   Biter takes about 3 dashes or a dozen bumps. To be tuned by playing.
+    // speed: guess, 2.5 px/frame (150 px per second): below the avatar's 3, so the avatar can outrun it, above the Dummy's 2.
+    // acceleration, deceleration: guess, written here on their own. 0.125: the top speed in 2.5 / 0.125 = 20 frames.
+    //   0.25: a stop in 2.5 / 0.25 = 10 frames, the length of the freeze after a bite (target), so it is still when it ends.
+    //   Powers of two, so the sums are exact.
+    // attacks.bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames):
+    //   damage: puncture = flat + perWeight x weight (the user's idea: bigger Biters bite harder, and the weight counts for
+    //     this attack, not for every attack). guess: flat 3, perWeight 0.002, so 3 + 0.002 x 1200 = 5.4 for the smallest
+    //     and 3 + 0.002 x 2000 = 7 for the largest. The avatar has 100 health, so about 15 bites.
+    //   reach: guess, 8 px of space between the two bodies, about a quarter of the avatar's width, "close enough to bite".
+    //   freezeFrames: the user's number, "about 10 frames".
+    //   hitbox: radius guess 20 (a little more than the avatar's radius, so a bite at the reach always lands: the hitbox is
+    //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames guess 4 (0.07 s: a bite is
+    //     a snap, not a zone). A hitbox hurts once.
+    biter: {
+      name: "Biter",
+      size: { min: 12, max: 20 },
+      weightPerRadius: 100,
+      healthRange: { min: 30, max: 30 },
+      speed: 2.5,
+      acceleration: 0.125,
+      deceleration: 0.25,
+      attacks: {
+        bite: {
+          damage: { puncture: { flat: 3, perWeight: 0.002 } },
+          reach: 8,
+          freezeFrames: 10,
+          hitbox: { radius: 20, frames: 4 },
+        },
+      },
+      initial: {
+        position: { x: 0, y: 0 }, // set by the seed
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
+        crushes: false, // the same potential behavior as every actor's, off
+        ai: { attack: "bite", phase: "chase", frames: 0 }, // which attack it uses, what it is doing, and the frames left of the freeze
+        move: {
+          direction: { x: 0, y: 0 }, // what it wants: toward the avatar, or still while it holds the freeze
+          velocity: { x: 0, y: 0 }, // how it is really moving: it is born still and speeds up
         },
       },
     },
@@ -137,15 +192,25 @@ const DEFINITIONS = {
     // in a row: pressing (acceleration 0.25 per frame) never reaches it, so it cannot hit again and again.
     collision: { minImpact: 1 },
 
-    // The body slam: what a collision does. Every collision is a hit; the attack is
-    // the weight of whoever hits (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the
-    // speed going into the other thing, in px/frame. Provisional formula (agent's proposal, to be discussed):
+    // The body slam: what a collision does, and the first attack of every thing (the user's decision, 2026-11-11: it is a
+    // packet like any other attack, of blunt damage). Every collision is a hit; the blunt damage is the weight of whoever hits
+    // (kg) x attackPerKg x impact / referenceImpact, where the impact is the part of the speed going into the other thing,
+    // in px/frame. Provisional formula (agent's proposal, to be discussed):
     //   attackPerKg 0.001: the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly weight x attackPerKg.
     //     Walking (3) hits for half of it, a dash (12) for double.
-    //   minDamage 1: the user's decision, a hit by something with an attack (a weight above 0) always costs at least 1,
-    //     so a defense never makes the target immune.
-    bodySlam: { attackPerKg: 0.001, referenceImpact: 6, minDamage: 1 },
+    bodySlam: { attackPerKg: 0.001, referenceImpact: 6 },
+
+    // How a packet of damage hurts (see resolveDamage in src/sim.js), the same for every hit and every type.
+    //   resistanceScale 100: the user's wish (2026-11-11): nobody is immortal, and there is always something to gain by adding
+    //     resistance. The share taken off a type is points / (points + resistanceScale), a curve that never reaches 100%. At 100
+    //     points it is half (the number is the scale), at 300 it is 75%, at 900 90%, and for small amounts a point is about
+    //     1%, so the user's "13% of resistance" is 13 points, a little less than 13%. The life the target is worth ("effective
+    //     health") grows in a straight line with the points: every 100 points add the life it has without any. guess: the
+    //     scale, to be tuned by playing with real items.
+    //   minDamage 1: the user's decision, a hit with something in its packet always costs at least 1 (the defense never
+    //     makes the target immune); an empty packet (a weight of 0) costs nothing.
+    damage: { resistanceScale: 100, minDamage: 1 },
 
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that
@@ -156,7 +221,8 @@ const DEFINITIONS = {
   // The mecha parts. A part has a weight (kg) and specs, and the avatar's final values are the SUM
   // of the specs of the parts in its blueprint (src/sim.js: sumSpec). Specs used so far:
   //   speed     px/frame added to the top speed        health    added to the maximum health
-  //   defense   taken off every hit                    dashSpeed px/frame of the dash (the Booster)
+  //   resistance points of resistance per type of damage ({ blunt: 20, puncture: 10 }, see constants.damage)
+  //                                                    dashSpeed px/frame of the dash (the Booster)
   //   dashCharges how many charges of dash the blueprint has at most (the Booster)
   //   rechargeFrames frames a spent dash charge takes to come back (the Booster)
   //   capacity  kg the blueprint can carry (the Torso)
@@ -165,7 +231,10 @@ const DEFINITIONS = {
   //   total 2.3) scaled to a total of 5000 kg (two large cars), rounded to tens.
   // health: target, the old proportions (Head 20, Torso 80, Legs 40 = 1 : 4 : 2) scaled to a total of 100,
   //   the health the avatar already had.
-  // defense: guess, the old project had none; a total of 3 (Torso 2, Legs 1).
+  // resistance: guess, the old project had none (the user's decision, 2026-11-11: the flat defense was replaced by resistance
+  //   per type, with a curve). With constants.damage.resistanceScale 100: blunt 30 points (Torso 20, Legs 10) take off
+  //   30 / 130 = 23% of a body slam; puncture 10 points (Torso) take off 10 / 110 = 9% of a bite. Enough to see the difference
+  //   in play, small enough to leave room to grow. The Torso is the tough case, the Legs a little.
   // speed: target, 3.5 + 0.5 - 5000 x 0.0002 = 3 px/frame (180 px per second, the 1920 px screen in about 10.7 s),
   //   the speed the avatar already had. The Legs are the primary source, the Torso a small part (the user's decision).
   // dashSpeed: target, 4 x the top speed. With overspeedDecay it lasts (12 - 3) / 0.5 = 18 frames (0.3 s) and
@@ -182,8 +251,8 @@ const DEFINITIONS = {
     "arm-r": { name: "Arm R", weight: 650, specs: {} },
     "arm-l": { name: "Arm L", weight: 650, specs: {} },
     head: { name: "Head", weight: 200, specs: { health: 15 } },
-    torso: { name: "Torso", weight: 900, specs: { health: 55, defense: 2, speed: 0.5, capacity: 6000 } },
-    legs: { name: "Legs", weight: 1300, specs: { health: 30, defense: 1, speed: 3.5 } },
+    torso: { name: "Torso", weight: 900, specs: { health: 55, resistance: { blunt: 20, puncture: 10 }, speed: 0.5, capacity: 6000 } },
+    legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },
     generator: { name: "Generator", weight: 200, specs: {} },
     booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1, rechargeFrames: 240 } },
   },
@@ -217,6 +286,10 @@ const DEFINITIONS = {
     // search for a free place, and they wrap around the edges of the window (see wrapIntoWindow).
     // count: the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot").
     dummies: { count: 1000 },
+
+    // The Biters of Chamber 2 (COMBAT), made by the seed and born like the Dummies.
+    // count: guess, 40: enough to be chased from every side, few enough to count the hits and to see each one.
+    biters: { count: 40 },
   },
 };
 

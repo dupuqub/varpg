@@ -1,4 +1,4 @@
-// Screen navigation and the Chamber 1 loop.
+// Screen navigation and the loop of the chambers that are played (1 and 2).
 
 const screens = document.querySelectorAll(".screen");
 
@@ -7,11 +7,8 @@ function showScreen(id) {
     screen.hidden = screen.id !== id;
   }
 
-  if (id === "screen-chamber-1") {
-    startChamber1();
-  } else {
-    stopChamber1();
-  }
+  stopChamber();
+  if (CHAMBERS[id]) startChamber(id);
 }
 
 // Every button with data-goto leads to the screen it names.
@@ -21,18 +18,24 @@ for (const button of document.querySelectorAll("[data-goto]")) {
 
 // Esc leaves the game view (it has no room for a big BACK button).
 document.addEventListener("keydown", (event) => {
-  if (event.code === "Escape" && !document.getElementById("screen-chamber-1").hidden) {
+  if (event.code === "Escape" && Object.keys(CHAMBERS).some((id) => !document.getElementById(id).hidden)) {
     showScreen("screen-chambers");
   }
 });
 
-// ---- Chamber 1 ----
+// ---- The chambers that are played ----
+
+// screen id -> the canvas it draws on and the function that makes its first state.
+const CHAMBERS = {
+  "screen-chamber-1": { canvasId: "canvas", create: createChamber1State },
+  "screen-chamber-2": { canvasId: "canvas-2", create: createChamber2State },
+};
 
 const STEP_MS = 1000 / 60; // 60 steps per second
 const STEP_TOLERANCE_MS = 0.5; // slack for the jitter of a 60 Hz monitor
 
-const canvas = document.getElementById("canvas");
-const context = canvas.getContext("2d");
+let canvas = null;
+let context = null;
 
 let run = null;
 let state = null;
@@ -44,10 +47,12 @@ let fps = 0; // frames drawn in the last full second, shown on the screen
 let fpsFrames = 0;
 let fpsSince = null;
 
-function startChamber1() {
-  stopChamber1();
+function startChamber(id) {
+  stopChamber();
+  canvas = document.getElementById(CHAMBERS[id].canvasId);
+  context = canvas.getContext("2d");
   run = createRun(1);
-  state = createChamber1State(run.id, 1, run.blueprint);
+  state = CHAMBERS[id].create(run.id, 1, run.blueprint);
   // The rules know the size of the screen (state.grid); the canvas must be that size, or what the rules call "off the
   // screen" would be visible. Fail loudly instead of playing a wrong game.
   if (canvas.width !== state.grid.screenWidth || canvas.height !== state.grid.screenHeight) {
@@ -63,7 +68,7 @@ function startChamber1() {
   animationId = requestAnimationFrame(loop);
 }
 
-function stopChamber1() {
+function stopChamber() {
   if (animationId !== null) {
     cancelAnimationFrame(animationId);
     animationId = null;

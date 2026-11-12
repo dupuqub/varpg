@@ -25,21 +25,21 @@ const source = ["data.js", "sim.js"].map((name) => fs.readFileSync(path.join(SRC
 // The game, with extra handles: a counter of tested pairs, and the old way of testing every pair.
 const makeGame = () => new Function(source + `
   let pairs = 0;
-  const realTouch = touchDummy;
-  touchDummy = function (state, lastContacts, dummy, other, key, blueprint) {
+  const realTouch = touchActors;
+  touchActors = function (state, lastContacts, dummy, other, key, blueprint) {
     if (other.wander) pairs++;
     return realTouch(state, lastContacts, dummy, other, key, blueprint);
   };
-  const withGrid = collideDummies;
+  const withGrid = collideActors;
 
   function everyPair(state, lastContacts, blueprint) {
     const player = state.actors.find((actor) => actor.id === AVATAR_ID);
     const dummies = state.actors.filter((actor) => actor.wander);
     for (let i = 0; i < dummies.length; i++) {
       const dummy = dummies[i];
-      touchDummy(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
+      touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, blueprint);
       for (let j = i + 1; j < dummies.length; j++) {
-        touchDummy(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
+        touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, blueprint);
       }
     }
   }
@@ -47,8 +47,8 @@ const makeGame = () => new Function(source + `
   return {
     createChamber1State, createRun, step,
     writeCells(state) { for (const actor of state.actors) setCells(actor, state.grid); },
-    useGrid() { collideDummies = withGrid; },
-    useEveryPair() { collideDummies = everyPair; },
+    useGrid() { collideActors = withGrid; },
+    useEveryPair() { collideActors = everyPair; },
     pairs: () => pairs,
     resetPairs() { pairs = 0; },
   };
