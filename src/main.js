@@ -25,10 +25,10 @@ document.addEventListener("keydown", (event) => {
 
 // ---- The chambers that are played ----
 
-// screen id -> the canvas it draws on and the function that makes its first state.
+// screen id -> the canvas it draws on, the blueprint of the mecha, and the function that makes its first state.
 const CHAMBERS = {
-  "screen-chamber-1": { canvasId: "canvas", create: createChamber1State },
-  "screen-chamber-2": { canvasId: "canvas-2", create: createChamber2State },
+  "screen-chamber-1": { canvasId: "canvas", blueprint: DEFINITIONS.starterBlueprint, create: createChamber1State },
+  "screen-chamber-2": { canvasId: "canvas-2", blueprint: DEFINITIONS.combatBlueprint, create: createChamber2State },
 };
 
 const STEP_MS = 1000 / 60; // 60 steps per second
@@ -51,7 +51,7 @@ function startChamber(id) {
   stopChamber();
   canvas = document.getElementById(CHAMBERS[id].canvasId);
   context = canvas.getContext("2d");
-  run = createRun(1);
+  run = createRun(1, CHAMBERS[id].blueprint);
   state = CHAMBERS[id].create(run.id, 1, run.blueprint);
   // The rules know the size of the screen (state.grid); the canvas must be that size, or what the rules call "off the
   // screen" would be visible. Fail loudly instead of playing a wrong game.

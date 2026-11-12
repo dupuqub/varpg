@@ -1095,7 +1095,7 @@ test("52 the cross-check stays clean in a run where both sides are hurt, and the
 // ---- The kit of parts ----
 // The final values of the avatar are the SUM of the specs of the parts in its blueprint.
 // Starter blueprint: 9 parts, 5000 kg. Top speed 3.5 + 0.5 - 5000 x 0.0002 = 3; health 15 + 55 + 30 = 100;
-// resistance: blunt 20 + 10 = 30, puncture 10; dash 12; capacity 6000.
+// resistance: blunt 20 + 10 = 30, puncture 10; dash 12; capacity 8000.
 
 // Runs code with "avatar", "full" (the starter blueprint) and "without(id)" (the starter blueprint minus one part).
 function withBlueprints(code) {
@@ -1117,7 +1117,7 @@ test("53 the starter blueprint adds up to the values the avatar had before parts
       startsFullWithoutHead: createChamber1State(1, 1, without("head")).actors[0].health.now,
     };
   `);
-  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 6000, speed: 3, health: 100, resistance: { blunt: 30, puncture: 10 }, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
+  assert.deepStrictEqual(plain(result), { weight: 5000, capacity: 8000, speed: 3, health: 100, resistance: { blunt: 30, puncture: 10 }, dash: 12, startsFull: 100, startsFullWithoutHead: 85 });
 });
 
 test("54 weight takes speed away directly: taking off a 650 kg arm gives back 650 x 0.0002 = 0.13 px/frame", () => {
@@ -1177,13 +1177,13 @@ test("58 a blueprint over the capacity of the Torso is refused, and so is an unk
   const result = withBlueprints(`
     const attempt = (blueprint) => { try { assertValidBlueprint(blueprint); return "accepted"; } catch (error) { return error.message; } };
     return {
-      starter: attempt(full), // 5000 kg of 6000
-      tooHeavy: attempt({ parts: [...full.parts, "legs", "legs"] }), // 7600 kg
+      starter: attempt(full), // 5000 kg of 8000
+      tooHeavy: attempt({ parts: [...full.parts, "legs", "legs", "legs"] }), // 8900 kg
       unknown: attempt({ parts: [...full.parts, "wings"] }),
     };
   `);
   assert.strictEqual(result.starter, "accepted");
-  assert.strictEqual(result.tooHeavy, "The blueprint weighs 7600 kg and can carry only 6000 kg");
+  assert.strictEqual(result.tooHeavy, "The blueprint weighs 8900 kg and can carry only 8000 kg");
   assert.strictEqual(result.unknown, "Unknown part: wings");
 });
 
@@ -1480,7 +1480,7 @@ test("78 the rock and the Shroom share nothing: changing the size of one in the 
   assert.deepStrictEqual(sizes, { rock: { min: 20, max: 40 }, shroom: { min: 16, max: 32 } });
 });
 
-test("79 every final value is stored in the actor; the static ones are calculated once, when the actor is made, and the dynamic ones (top speed, resistance, dash speed) again every frame: a blueprint that changes in the middle of a run reaches only the dynamic ones", () => {
+test("79 every final value is stored in the actor; the static ones are calculated once, when the actor is made, and the dynamic ones (the avatar's weight, top speed, resistance, dash speed) again every frame: a blueprint that changes in the middle of a run reaches only the dynamic ones", () => {
   const result = withBlueprints(`
     const s = createChamber1State(1, 1, full);
     const player = s.actors[0];
@@ -1495,11 +1495,11 @@ test("79 every final value is stored in the actor; the static ones are calculate
     step(s, { move: { x: 0, y: 0 } }, light);
     return { atBirth, afterStep, changed: carried() };
   `);
-  const staticValues = { radius: 16, weight: 5000, bounce: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, rechargeFrames: 240, charges: { now: 1, max: 1 } };
-  assert.deepStrictEqual(plain(result.atBirth), { ...staticValues, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
-  assert.deepStrictEqual(plain(result.afterStep), { ...staticValues, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
-  // The dynamic ones follow: speed 0.5 - 3500 x 0.0002 = -0.2, so 0; blunt resistance 20; no dash speed. The static ones stay as they were made.
-  assert.deepStrictEqual(plain(result.changed), { ...staticValues, speed: 0, resistance: { blunt: 20, puncture: 10 }, dashSpeed: 0 });
+  const staticValues = { radius: 16, bounce: 0, acceleration: 0.25, deceleration: 0.125, health: { now: 100, max: 100 }, rechargeFrames: 240, charges: { now: 1, max: 1 } };
+  assert.deepStrictEqual(plain(result.atBirth), { ...staticValues, weight: 5000, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
+  assert.deepStrictEqual(plain(result.afterStep), { ...staticValues, weight: 5000, speed: 3, resistance: { blunt: 30, puncture: 10 }, dashSpeed: 12 });
+  // The dynamic ones follow: weight 5000 - 1300 - 200 = 3500 (the avatar's weight is dynamic since the ammunition weighs); speed 0.5 - 3500 x 0.0002 = -0.2, so 0; blunt resistance 20; no dash speed. The static ones stay as they were made.
+  assert.deepStrictEqual(plain(result.changed), { ...staticValues, weight: 3500, speed: 0, resistance: { blunt: 20, puncture: 10 }, dashSpeed: 0 });
 });
 
 // ---- The Dummies ----
@@ -2657,7 +2657,7 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   for (const [step, phase, frames, still, hitboxes] of plain(rows.slice(1, 15))) assert.deepStrictEqual([phase, frames, still, hitboxes], ["windup", 16 - step, true, 0], "step " + step);
   // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now) and the freeze begins.
   assert.strictEqual(born.hitboxes.length, 1);
-  assert.deepStrictEqual(plain(born.hitboxes[0]), { owner: "biter_0", attack: "bite", position: { x: 21, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: born.bite }, landed: true });
+  assert.deepStrictEqual(plain(born.hitboxes[0]), { owner: "biter_0", attack: "bite", position: { x: 21, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: born.bite }, velocity: { x: 0, y: 0 }, struck: ["avatar_1"], pierceLeft: null });
   assert.deepStrictEqual([rows[15][1], rows[15][2], plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
   // Steps 17 to 25 it is frozen (frames 9 down to 1) and wants no movement; at step 26 the freeze is over and it chases.
   for (const [step, phase, frames, still] of plain(rows.slice(16))) {
@@ -2699,7 +2699,7 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
-    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, landed: false }); // 100 px away: a miss
+    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
     return { rule: [hitboxHurts(avatar.id, avatar), hitboxHurts(avatar.id, b), hitboxHurts(b.id, avatar), hitboxHurts(b.id, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
@@ -2823,7 +2823,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 30, hash: "1fbb5fd90a877d26" };
+const DATA_FINGERPRINT = { version: 31, hash: "a0eea6b76ca67b1e" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2890,8 +2890,256 @@ test("132 with no windup (windupFrames 0) the Biter strikes in the same step it 
     step(t, { move: { x: 0, y: 0 } }); // windup begins
     t.actors[0].position.x = -1000; // the avatar leaves
     for (let i = 0; i < 15; i++) step(t, { move: { x: 0, y: 0 } }); // the windup lasts 15 steps after the one that began it
-    return { immediately, afterWindup: { hitboxes: t.hitboxes.length, landed: t.hitboxes[0] && t.hitboxes[0].landed, health: t.actors[0].health.now, phase: c.ai.phase } };
+    return { immediately, afterWindup: { hitboxes: t.hitboxes.length, struck: t.hitboxes[0] && t.hitboxes[0].struck.length, health: t.actors[0].health.now, phase: c.ai.phase } };
   `, QUIET);
   assert.deepStrictEqual(plain(result.immediately), { hitboxes: 1, phase: "freeze" });
-  assert.deepStrictEqual(plain(result.afterWindup), { hitboxes: 1, landed: false, health: 100, phase: "freeze" });
+  assert.deepStrictEqual(plain(result.afterWindup), { hitboxes: 1, struck: 0, health: 100, phase: "freeze" });
+});
+
+// ---- The repeater (the user, 2026-11-11): ammunition with weight, cadence, reload, auto-aim, a bullet that travels and pierces ----
+
+// A game with 6 Biters, none of them able to bite, and the pierce 1 variant (a weapon whose bullet crosses one thing).
+const PIERCE_ONE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 1"));
+const PIERCE_THREE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 3"));
+
+// The avatar with the combat blueprint, and the Biters of the given numbers held still (the freeze is made very long, so
+// they stay where the test puts them and do not bite). `bp` is the blueprint to give to step.
+const ARMED = `
+  function armed(...numbers) {
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter_" + n))];
+    for (const b of s.actors.slice(1)) { b.ai.phase = "freeze"; b.ai.frames = 1000000; b.health.now = 30; b.health.max = 30; }
+    return { s, bp };
+  }
+  const idle = { move: { x: 0, y: 0 } };
+`;
+
+test("133 the combat blueprint carries a repeater arm in place of the plain Arm L: it weighs 5150 kg plus 400 rounds of 6 kg (7550 loaded, under the 8000 of the Torso), the avatar starts with the weapon full and the speed that weight gives; the starter blueprint has no weapon at all", () => {
+  const result = run(`
+    ${ARMED}
+    const { s, bp } = armed();
+    const avatar = s.actors[0];
+    const starter = createChamber1State(1, 1, createRun(1).blueprint).actors[0];
+    return {
+      loaded: totalWeight(bp), parts: bp.parts, weapons: avatar.weapons, weight: avatar.weight, speed: avatar.speed,
+      attack: avatar.attacks["repeater-arm"], starterWeapons: starter.weapons, starterWeight: starter.weight, starterAttacks: Object.keys(starter.attacks),
+    };
+  `);
+  assert.strictEqual(result.loaded, 7550); // 5000 - 650 + 800 = 5150, and 400 x 6 = 2400
+  assert.strictEqual(result.parts[3], "repeater-arm");
+  assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
+  assert.strictEqual(result.weight, 7550);
+  assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, lifeFrames: 65, pierce: 0 } });
+  assert.deepStrictEqual(plain(result.starterWeapons), []);
+  assert.strictEqual(result.starterWeight, 5000);
+  assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
+});
+
+test("134 the auto-aim picks the closest actor in range (the first in the list on a tie), ignores what is out of range and what has no health, and the bullet is born one body ahead of the avatar moving at 8 toward it", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0, 1, 2);
+    const [a, b, c] = t.s.actors.slice(1);
+    a.position.x = 400; a.position.y = 0;      // 400 away
+    b.position.x = 0;   b.position.y = -200;   // 200 away: the closest
+    c.position.x = 900; c.position.y = 0;      // out of range (520 + its radius)
+    const first = closestTarget(t.s, t.s.actors[0], 520).id;
+    b.health.now = 0;                          // the closest has no health: the next one
+    const second = closestTarget(t.s, t.s.actors[0], 520).id;
+    a.health.now = 0;
+    const third = closestTarget(t.s, t.s.actors[0], 520);
+    b.health.now = 30; a.health.now = 30;
+    a.position.x = 0; a.position.y = -200;     // the same distance as b: a is first in the list, so it is the target
+    const tie = closestTarget(t.s, t.s.actors[0], 520).id;
+
+    const u = armed(0);
+    u.s.actors[1].position.x = 300; u.s.actors[1].position.y = 400; // 500 away: the 3-4-5 triangle, in range
+    step(u.s, idle, u.bp);
+    return { first, second, third, tie, bullet: JSON.parse(JSON.stringify(u.s.hitboxes)), avatarRadius: u.s.actors[0].radius, avatar: u.s.actors[0].position };
+  `);
+  assert.strictEqual(result.first, "biter_1");
+  assert.strictEqual(result.second, "biter_0");
+  assert.strictEqual(result.third, null);
+  assert.strictEqual(result.tie, "biter_0");
+  assert.strictEqual(result.bullet.length, 1);
+  const [bullet] = plain(result.bullet);
+  // Born at the avatar + 16 x (0.6, 0.8), then moved by its velocity in the same step: 8 x (0.6, 0.8).
+  assert.ok(Math.abs(bullet.position.x - (0.6 * 16 + 4.8)) < 1e-9 && Math.abs(bullet.position.y - (0.8 * 16 + 6.4)) < 1e-9, JSON.stringify(bullet.position));
+  assert.ok(Math.abs(bullet.velocity.x - 4.8) < 1e-9 && Math.abs(bullet.velocity.y - 6.4) < 1e-9);
+  assert.deepStrictEqual([bullet.owner, bullet.attack, bullet.radius, bullet.framesLeft, bullet.damage, bullet.struck, bullet.pierceLeft], ["avatar_1", "repeater-arm", 6, 64, { puncture: 10 }, [], 0]);
+});
+
+test("135 the repeater fires every 10 frames while it has a target and a round, and not at all without a target", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0);
+    const b = t.s.actors[1];
+    b.position.x = 400; b.position.y = 0;
+    const shots = [];
+    let rounds = t.s.actors[0].weapons[0].magazine;
+    for (let i = 1; i <= 31; i++) {
+      step(t.s, idle, t.bp);
+      const now = t.s.actors[0].weapons[0].magazine;
+      if (now < rounds) shots.push(i);
+      rounds = now;
+    }
+    b.position.x = 5000; // out of range: nothing to shoot at
+    const before = t.s.actors[0].weapons[0].magazine;
+    for (let i = 0; i < 30; i++) step(t.s, idle, t.bp);
+    return { shots, quiet: t.s.actors[0].weapons[0].magazine === before };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.shots), [1, 11, 21, 31]);
+  assert.strictEqual(result.quiet, true);
+});
+
+test("136 every round fired makes the mecha 6 kg lighter and its top speed a little higher (the weight is calculated at the start of each step, so it follows a shot one step later); reloading moves rounds from the reserve to the magazine and changes no weight; with nothing left it stops", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0);
+    const avatar = t.s.actors[0];
+    const w = avatar.weapons[0];
+    t.s.actors[1].position.x = 400; t.s.actors[1].position.y = 0;
+    t.s.actors[1].health.now = 1000000; t.s.actors[1].health.max = 1000000; // a target that lasts: it is shot all the time
+    const samples = [];
+    for (let i = 1; i <= 21; i++) { step(t.s, idle, t.bp); if (i === 1 || i === 11 || i === 21) samples.push([w.magazine + w.reserve, avatar.weight, avatar.speed]); }
+    // One round in the magazine and 40 in the reserve: the shot empties the magazine, the next step starts the reload.
+    w.magazine = 1; w.reserve = 40; w.interval = 0; w.reload = 0;
+    step(t.s, idle, t.bp); // the shot
+    const afterShot = { magazine: w.magazine, reload: w.reload };
+    step(t.s, idle, t.bp); // the reload starts
+    const weightWhenReloadStarted = avatar.weight;
+    const reloading = { magazine: w.magazine, reserve: w.reserve, reload: w.reload };
+    const magazines = [];
+    for (let i = 0; i < 89; i++) { step(t.s, idle, t.bp); magazines.push(w.magazine); }
+    const lastFrame = { magazine: w.magazine, reserve: w.reserve, reload: w.reload };
+    step(t.s, idle, t.bp); // the reload ends: the magazine is filled from the reserve
+    const filled = { magazine: w.magazine, reserve: w.reserve, reload: w.reload, weight: avatar.weight };
+    step(t.s, idle, t.bp); // and in the next step it fires again
+    const firing = { magazine: w.magazine, interval: w.interval };
+    // Nothing left in the magazine or in the reserve: nothing happens any more.
+    t.s.hitboxes = [];
+    w.magazine = 0; w.reserve = 0; w.interval = 0; w.reload = 0;
+    for (let i = 0; i < 200; i++) step(t.s, idle, t.bp);
+    return { samples, afterShot, reloading, weightWhenReloadStarted, stillEmpty: magazines.every((n) => n === 0), lastFrame, filled, firing, dry: { magazine: w.magazine, reload: w.reload, bullets: t.s.hitboxes.length } };
+  `, QUIET);
+  const [s1, s11, s21] = plain(result.samples);
+  assert.deepStrictEqual([s1[0], s1[1]], [399, 7550]); // one round fired, and the weight still the loaded one: it follows next step
+  assert.deepStrictEqual([s11[0], s11[1]], [398, 7550 - 6]);
+  assert.deepStrictEqual([s21[0], s21[1]], [397, 7550 - 12]);
+  for (const sample of [s1, s11, s21]) assert.ok(Math.abs(sample[2] - (4 - sample[1] * 0.0002)) < 1e-9); // the top speed follows the weight
+  assert.ok(s21[2] > s11[2] && s11[2] > s1[2]);
+  assert.deepStrictEqual(plain(result.afterShot), { magazine: 0, reload: 0 });
+  assert.deepStrictEqual(plain(result.reloading), { magazine: 0, reserve: 40, reload: 90 });
+  assert.strictEqual(result.stillEmpty, true); // 89 more frames: still empty
+  assert.deepStrictEqual(plain(result.lastFrame), { magazine: 0, reserve: 40, reload: 1 });
+  assert.deepStrictEqual(plain(result.filled), { magazine: 30, reserve: 10, reload: 0, weight: result.weightWhenReloadStarted }); // min(30, 40) rounds moved, no weight changed
+  assert.strictEqual(result.firing.magazine, 29);
+  assert.deepStrictEqual(plain(result.dry), { magazine: 0, reload: 0, bullets: 0 });
+});
+
+test("137 a bullet travels 8 px per frame, hurts the first thing it touches with its packet frozen at birth and, with pierce 0, ends there; the second thing in line is not touched", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0, 1);
+    const [near, far] = t.s.actors.slice(1);
+    near.position.x = 200; near.position.y = 0;
+    far.position.x = 300; far.position.y = 0;
+    const w = t.s.actors[0].weapons[0];
+    w.magazine = 1; w.reserve = 0; // one round only
+    const positions = [];
+    step(t.s, idle, t.bp);
+    const born = JSON.parse(JSON.stringify(t.s.hitboxes[0]));
+    t.s.actors[0].attacks["repeater-arm"].now.puncture = 99; // changed after it was born: the bullet keeps its own packet
+    let frames = 0;
+    while (t.s.hitboxes.length > 0 && frames < 100) { step(t.s, idle, t.bp); frames += 1; positions.push(t.s.hitboxes.length ? t.s.hitboxes[0].position.x : null); }
+    return { born, frames, health: [near.health.now, far.health.now], positions: positions.slice(0, 3), ended: t.s.hitboxes.length };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.health), [20, 30]); // 10 puncture, no resistance; the bullet ended on the first
+  assert.strictEqual(result.born.damage.puncture, 10);
+  assert.deepStrictEqual(plain(result.born.struck), []);
+  assert.ok(result.frames < 30, "the bullet did not end at the first hit: " + result.frames);
+  assert.ok(Math.abs(result.positions[1] - result.positions[0] - 8) < 1e-9); // 8 px per frame along x
+  assert.strictEqual(result.ended, 0);
+});
+
+test("138 pierce is how many times a bullet crosses: pierce 1 hurts two of three in line and ends on the second; pierce 3 hurts all three; each thing is hurt once", () => {
+  const body = `
+    ${ARMED}
+    const t = armed(0, 1, 2);
+    const list = t.s.actors.slice(1);
+    list.forEach((b, i) => { b.position.x = 150 + i * 90; b.position.y = 0; });
+    const w = t.s.actors[0].weapons[0];
+    w.magazine = 1; w.reserve = 0;
+    let most = 0;
+    for (let i = 0; i < 80; i++) { step(t.s, idle, t.bp); most = Math.max(most, t.s.hitboxes.length ? t.s.hitboxes[0].struck.length : 0); }
+    return { health: list.map((b) => b.health.now), most, left: t.s.hitboxes.length };
+  `;
+  const one = run(body, PIERCE_ONE);
+  const three = run(body, PIERCE_THREE);
+  assert.deepStrictEqual(plain(one.health), [20, 20, 30]); // crossed the first, ended on the second
+  assert.strictEqual(one.left, 0);
+  assert.deepStrictEqual(plain(three.health), [20, 20, 20]);
+  assert.strictEqual(three.most, 3);
+});
+
+test("139 a bullet that kills leaves a corpse that the bullet does not spend a pierce on, and the dead actor is gone at the end of the step; the avatar's bullets never hurt the avatar", () => {
+  const result = run(`
+    ${ARMED}
+    const t = armed(0, 1);
+    const [weak, behind] = t.s.actors.slice(1);
+    weak.position.x = 150; weak.position.y = 0; weak.health.now = 10; // one bullet kills it
+    behind.position.x = 240; behind.position.y = 0;
+    const w = t.s.actors[0].weapons[0];
+    w.magazine = 1; w.reserve = 0;
+    for (let i = 0; i < 40; i++) step(t.s, idle, t.bp);
+    const avatar = t.s.actors[0];
+    return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts(avatar.id, avatar) };
+  `, PIERCE_ONE);
+  assert.deepStrictEqual(plain(result.ids), ["avatar_1", "biter_1"]); // the weak one is gone
+  assert.strictEqual(result.behind, 20); // the bullet had a pierce left because the dead one did not spend it... and hurt this one
+  assert.strictEqual(result.avatarHealth, 100);
+  assert.strictEqual(result.rule, false);
+});
+
+test("140 a weapon must be sound when the data loads: only the closest rule, whole numbers, known types of damage, a bullet that lives long enough to reach its range and that is slower than the smallest radius it must not skip over", () => {
+  const bad = (from, to) => assert.throws(() => loadGame((text) => text.replace(from, to)), /weapon of the part repeater-arm|projectile of the weapon|bullet of the weapon|rounds of the weapon/);
+  bad('target: "closest",\n        range: 520', 'target: "farthest",\n        range: 520');
+  bad("reloadFrames: 90", "reloadFrames: 0");
+  bad("intervalFrames: 10", "intervalFrames: 1.5");
+  bad("rounds: { weight: 6, magazine: 30, reserve: 370 }", "rounds: { weight: 1.5, magazine: 30, reserve: 370 }");
+  bad("rounds: { weight: 6, magazine: 30, reserve: 370 }", "rounds: { weight: 6, magazine: 0, reserve: 370 }");
+  bad("damage: { puncture: 10 }, speed", "damage: { fire: 10 }, speed");
+  bad("damage: { puncture: 10 }, speed", "damage: { puncture: 0 }, speed");
+  bad("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: -1");
+  bad("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 0.5");
+  bad("lifeFrames: 65", "lifeFrames: 10"); // 80 px: it never reaches 520
+  bad("speed: 8, radius: 6", "speed: 20, radius: 6"); // 20 >= 6 + 12: it could skip over a Biter of radius 12
+});
+
+test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with the avatar standing among 40 Biters give the same state twice and a clean cross-check, rounds are spent, the mecha is lighter, and Biters die", () => {
+  const result = run(`
+    const play = () => {
+      const r = createRun(1, DEFINITIONS.combatBlueprint);
+      const s = createChamber2State(1, 1, r.blueprint);
+      const h = createHistory(s, r.blueprint);
+      for (let i = 0; i < 900; i++) {
+        const input = { move: { x: 0, y: 0 } };
+        step(s, input, r.blueprint);
+        recordFrame(h, s, input);
+      }
+      return { s, check: crossCheck(h) };
+    };
+    const a = play();
+    const b = play();
+    const w = a.s.actors[0].weapons[0];
+    return { same: JSON.stringify(a.s) === JSON.stringify(b.s), check: a.check, rounds: 400 - (w.magazine + w.reserve), weight: a.s.actors[0].weight, left: a.s.actors.length - 1 };
+  `);
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.check, null);
+  // The weight is calculated at the start of the step, so it can be one round behind the shots of the last step.
+  assert.ok(result.rounds > 0 && [7550 - 6 * result.rounds, 7550 - 6 * (result.rounds - 1)].includes(result.weight), "rounds " + result.rounds + ", weight " + result.weight);
+  assert.ok(result.left < 40, "no Biter died in 15 seconds of firing");
 });

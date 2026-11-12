@@ -47,13 +47,14 @@ function finalizeObject(type, rolls, blueprint, id) {
 // Which is which is a list, here. A value moves from one list to the other the day something makes it change during
 // a run.
 
-// The static values: radius, weight, bounce, the base of every attack, acceleration, deceleration, the maximum health,
+// The static values: radius, weight (at the start; the avatar's weight is recalculated every frame, it follows its ammunition), bounce, the base of every attack, acceleration, deceleration, the maximum health,
 // and for an actor with a dash its recharge time and its maximum of charges.
 function finalizeStatic(actor, blueprint) {
   actor.radius = finalRadius(actor, blueprint);
   actor.weight = finalWeight(actor, blueprint);
   actor.bounce = finalBounce(actor, blueprint);
   actor.attacks = finalAttacks(actor);
+  addWeaponAttacks(actor);
   actor.acceleration = finalAcceleration(actor, blueprint);
   actor.deceleration = finalDeceleration(actor, blueprint);
   actor.health.max = finalMaxHealth(actor, blueprint);
@@ -66,6 +67,7 @@ function finalizeStatic(actor, blueprint) {
 // The dynamic values: the top speed, the resistance, what every attack is now (its base plus whatever other things
 // add: nothing yet), and for an actor with a dash its speed.
 function finalizeDynamic(actor, blueprint) {
+  if (isAvatar(actor)) actor.weight = finalWeight(actor, blueprint); // the ammunition it still carries (before the speed, which depends on it)
   actor.speed = finalSpeed(actor, blueprint);
   if (actor.resistance) writeResistance(actor, blueprint);
   for (const attack of Object.values(actor.attacks)) {
@@ -79,6 +81,7 @@ function createAvatar(blueprint) {
   const avatar = finalizeObject("avatar", {}, blueprint, AVATAR_ID);
   avatar.health = { now: 0, max: 0 };
   avatar.dash.charges = { now: 0, max: 0 };
+  avatar.weapons = weaponStates(blueprint);
   finalizeStatic(avatar, blueprint); // writes the maximums
   finalizeDynamic(avatar, blueprint);
   avatar.health.now = avatar.health.max;
@@ -105,9 +108,28 @@ function partsOf(blueprint) {
   });
 }
 
-// Total weight of the blueprint, in kg.
+// Total weight of the blueprint, in kg, as it leaves the workshop: the parts and all the ammunition loaded (every round
+// weighs, see the weapon of a part). This is the weight the capacity must carry.
 function totalWeight(blueprint) {
-  return partsOf(blueprint).reduce((sum, part) => sum + part.weight, 0);
+  return partsOf(blueprint).reduce((sum, part) => sum + part.weight + loadedAmmoWeight(part), 0);
+}
+
+// The weight of all the rounds a weapon part carries when full, magazine and reserve (0 for a part without a weapon).
+function loadedAmmoWeight(part) {
+  return part.weapon ? part.weapon.rounds.weight * (part.weapon.rounds.magazine + part.weapon.rounds.reserve) : 0;
+}
+
+// What the avatar weighs now: the loaded weight minus the rounds it has fired (the user's rule, 2026-11-11: the ammunition
+// costs weight, so the mecha gets lighter and faster as it fights). Reloading only moves rounds from the reserve to the
+// magazine, so it changes nothing. Dynamic: calculated again every frame (finalizeDynamic).
+function carriedWeight(actor, blueprint) {
+  let weight = totalWeight(blueprint);
+  for (const weapon of actor.weapons ?? []) {
+    const recipe = DEFINITIONS.parts[weapon.part].weapon.rounds;
+    const fired = recipe.magazine + recipe.reserve - (weapon.magazine + weapon.reserve);
+    weight -= fired * recipe.weight;
+  }
+  return weight;
 }
 
 // The sum of one spec over all the parts (a part without it adds 0).
@@ -195,6 +217,29 @@ function assertValidDefinitions() {
       }
     }
   }
+  // The weapon of a part: whole numbers where the rules count, known types of damage, and a bullet that lives long enough to
+  // reach the range and is slower than the smallest radius it must not skip over (so it cannot jump a target in one frame).
+  for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
+    const weapon = part.weapon;
+    if (!weapon) continue;
+    const where = "the weapon of the part " + id;
+    if (weapon.target !== "closest") throw new Error("The target of " + where + " is " + weapon.target + ", and the only rule is closest");
+    const whole = (value, least) => Number.isInteger(value) && value >= least;
+    if (!whole(weapon.range, 1) || !whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The range, intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
+    const rounds = weapon.rounds;
+    if (!rounds || !whole(rounds.weight, 0) || !whole(rounds.magazine, 1) || !whole(rounds.reserve, 0)) throw new Error("The rounds of " + where + " need a whole weight (0 or more), a magazine (1 or more) and a reserve (0 or more)");
+    const bullet = weapon.projectile;
+    if (!bullet || !whole(bullet.radius, 1) || !whole(bullet.lifeFrames, 1) || !whole(bullet.pierce, 0) || !(bullet.speed > 0)) throw new Error("The projectile of " + where + " needs a whole radius and lifeFrames (1 or more), a whole pierce (0 or more) and a speed above 0");
+    const types = Object.keys(bullet.damage ?? {});
+    if (types.length === 0) throw new Error("The damage of the projectile of " + where + " is missing");
+    for (const type of types) {
+      if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of the projectile of " + where + " has " + type + ", which is not a type of damage");
+      if (!(bullet.damage[type] > 0)) throw new Error("The damage " + type + " of the projectile of " + where + " must be above 0");
+    }
+    if (bullet.speed * bullet.lifeFrames < weapon.range) throw new Error("The bullet of " + where + " lives " + bullet.lifeFrames + " frames at " + bullet.speed + " and never reaches the range " + weapon.range);
+    const smallest = Math.min(...Object.values(DEFINITIONS.actors).filter((actor) => actor.size).map((actor) => actor.size.min));
+    if (bullet.speed >= bullet.radius + smallest) throw new Error("The bullet of " + where + " moves " + bullet.speed + " px per frame and could skip over an actor of radius " + smallest);
+  }
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
@@ -244,7 +289,7 @@ function assertValidDefinitions() {
 // It must stay pure: the result depends only on the arguments and the definitions.
 function finalSpeed(actor, blueprint) {
   if (!isAvatar(actor)) return definitionOf(actor).speed ?? 0; // not the avatar: its recipe (a Dummy), or none (no parts, no weight penalty)
-  const weightPenalty = totalWeight(blueprint) * DEFINITIONS.constants.weightSpeedPenalty;
+  const weightPenalty = carriedWeight(actor, blueprint) * DEFINITIONS.constants.weightSpeedPenalty;
   return Math.max(0, fromParts(actor, blueprint, "speed") - weightPenalty);
 }
 
@@ -294,7 +339,7 @@ function finalDashRechargeFrames(actor, blueprint) {
 // weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
 // (assertValidDefinitions), so the weight is whole and nothing is rounded.
 function finalWeight(thing, blueprint) {
-  return isAvatar(thing) ? totalWeight(blueprint) : definitionOf(thing).weightPerRadius * thing.radius;
+  return isAvatar(thing) ? carriedWeight(thing, blueprint) : definitionOf(thing).weightPerRadius * thing.radius;
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
@@ -1081,12 +1126,107 @@ function think(state, actor, player) {
   direction.y = towardY;
 }
 
+// ---- Weapons ----
+// A part can have a weapon (DEFINITIONS.parts, the "weapon" of a part: the user's decision, 2026-11-11, one part per slot,
+// and the weapon is the arm or shoulder itself). The avatar carries the state of each weapon it has (avatar.weapons):
+// { part, magazine, reserve, interval, reload }: the rounds in the magazine and in the reserve, the frames left until it can
+// fire again (interval) and until the reload ends (reload, 0 when not reloading). Everything is whole numbers.
+// The weapons aim by themselves: the target is the closest actor in range (the first in the list on a tie, so it is the
+// same everywhere). Every round weighs (see carriedWeight). The damage of a weapon is an attack of the avatar like any
+// other ({ base, now }), so what changes it later (mods, the skill tree) has the same place to enter.
+
+// The state of the weapons of a blueprint, full: one entry per part that has a weapon.
+function weaponStates(blueprint) {
+  const states = [];
+  for (const id of blueprint.parts) {
+    const weapon = DEFINITIONS.parts[id].weapon;
+    if (weapon) states.push({ part: id, magazine: weapon.rounds.magazine, reserve: weapon.rounds.reserve, interval: 0, reload: 0 });
+  }
+  return states;
+}
+
+// The attack of each weapon of an actor, by the id of its part: { base, now, projectile } (the projectile numbers, among
+// them pierce, are copied so each can change in a run).
+function addWeaponAttacks(actor) {
+  for (const weapon of actor.weapons ?? []) {
+    const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile };
+  }
+}
+
+// The closest actor (not the avatar, still with health) whose body is within range of the avatar, or null.
+function closestTarget(state, player, range) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const actor of state.actors) {
+    if (isAvatar(actor) || actor.health.now <= 0) continue;
+    const dx = actor.position.x - player.position.x;
+    const dy = actor.position.y - player.position.y;
+    const distance = dx * dx + dy * dy;
+    const reach = range + actor.radius;
+    if (distance <= reach * reach && distance < bestDistance) {
+      best = actor;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
+// there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
+// and has a target fires one bullet at it (born one body ahead of the avatar, moving at the speed of the weapon).
+function fireWeapons(state, player) {
+  for (const weapon of player.weapons) {
+    const recipe = DEFINITIONS.parts[weapon.part].weapon;
+    if (weapon.interval > 0) weapon.interval -= 1;
+    if (weapon.reload > 0) {
+      weapon.reload -= 1;
+      if (weapon.reload === 0) {
+        const taken = Math.min(recipe.rounds.magazine - weapon.magazine, weapon.reserve);
+        weapon.magazine += taken;
+        weapon.reserve -= taken;
+      }
+      continue; // a frame spent reloading is not a frame of firing
+    }
+    if (weapon.magazine === 0) {
+      if (weapon.reserve > 0) weapon.reload = recipe.reloadFrames;
+      continue;
+    }
+    if (weapon.interval > 0) continue;
+    const target = closestTarget(state, player, recipe.range);
+    if (target === null) continue;
+    const dx = target.position.x - player.position.x;
+    const dy = target.position.y - player.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
+    const towardY = distance === 0 ? 0 : dy / distance;
+    const attack = player.attacks[weapon.part];
+    state.hitboxes.push({
+      owner: player.id,
+      attack: weapon.part,
+      position: { x: player.position.x + towardX * player.radius, y: player.position.y + towardY * player.radius },
+      radius: attack.projectile.radius,
+      framesLeft: attack.projectile.lifeFrames,
+      damage: { ...attack.now },
+      velocity: { x: towardX * attack.projectile.speed, y: towardY * attack.projectile.speed },
+      struck: [],
+      pierceLeft: attack.projectile.pierce,
+    });
+    weapon.magazine -= 1;
+    weapon.interval = recipe.intervalFrames;
+  }
+}
+
 // ---- Hitboxes ----
 // A hitbox is the first thing in the game that is neither an actor nor an object: a circle that exists for a few frames
 // and hurts (the user's idea: an attack is a hitbox of size X). It carries the damage as it was calculated in the frame it
 // was born (the user's decision: it keeps the final value, as a packet), and it stays where it was born. state.hitboxes
 // is the list of the living ones, in the order they were born. Whether a hitbox is an actor, like a projectile, is open.
-// { owner: id of whoever made it, attack: its name, position, radius, framesLeft, damage: packet, landed: true after it hurt }
+// { owner: id of whoever made it, attack: its name, position, radius, framesLeft, damage: packet,
+//   velocity: { x, y } (zero for a bite, the speed of a bullet), struck: ids already hurt (each is hurt once),
+//   pierceLeft: how many more things it can cross, or null for a hitbox that does not end when it hits (a bite lives its frames) }
+// A projectile is a hitbox with a velocity and a pierceLeft (the user's decision: a bullet is just a hitbox that moves).
+// pierce 0 crosses nothing: it ends at the first thing it hits; pierce 1 crosses one thing and ends at the second.
 
 // Born one body ahead of the owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now.
 function createHitbox(state, owner, attackName, towardX, towardY) {
@@ -1098,7 +1238,9 @@ function createHitbox(state, owner, attackName, towardX, towardY) {
     radius: attack.hitbox.radius,
     framesLeft: attack.hitbox.frames,
     damage: { ...attack.now },
-    landed: false,
+    velocity: { x: 0, y: 0 },
+    struck: [],
+    pierceLeft: null,
   });
 }
 
@@ -1109,15 +1251,27 @@ function hitboxHurts(ownerId, target) {
   return (ownerId === AVATAR_ID) !== isAvatar(target);
 }
 
-// Every living hitbox looks for who it hurts, once (landed), and loses a frame; the ones with no frames left are gone.
-// For now the only thing a hitbox can hurt is the avatar (no actor but the avatar's side exists yet to be hurt by the
-// avatar's hitboxes; the day the avatar has one, the targets are looked for in the cells of the grid).
+// Every living hitbox moves by its velocity, hurts what it touches (each thing once: struck), and loses a frame; the ones
+// with no frames left, or that crossed all they could, are gone. The side rule is hitboxHurts: the avatar's hitboxes hurt
+// every other actor, anyone else's hurt only the avatar (so those look only at the avatar). Things with no health left
+// are not hit (a corpse does not spend a pierce). A bullet is slower than the radii it must not skip over (see the
+// validation of weapons), so it cannot jump a target between two frames.
 function resolveHitboxes(state) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   for (const hitbox of state.hitboxes) {
-    if (!hitbox.landed && hitboxHurts(hitbox.owner, player) && contactBetween(hitbox, player) !== null) {
-      applyDamage(player, resolveDamage(hitbox.damage, player).total);
-      hitbox.landed = true;
+    hitbox.position.x += hitbox.velocity.x;
+    hitbox.position.y += hitbox.velocity.y;
+    const targets = hitbox.owner === AVATAR_ID ? state.actors : [player];
+    for (const target of targets) {
+      if (!hitboxHurts(hitbox.owner, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
+      if (contactBetween(hitbox, target) === null) continue;
+      applyDamage(target, resolveDamage(hitbox.damage, target).total);
+      hitbox.struck.push(target.id);
+      if (hitbox.pierceLeft === 0) {
+        hitbox.framesLeft = 0; // it crossed all it could: it ends here
+        break;
+      }
+      if (hitbox.pierceLeft !== null) hitbox.pierceLeft -= 1;
     }
     hitbox.framesLeft -= 1;
   }
@@ -1144,8 +1298,8 @@ function removeDestroyed(state) {
 // chose before the run). The blueprint is an input of the run, not a state, so it
 // is not inside the snaps. It starts as the starter blueprint (DEFINITIONS.starterBlueprint),
 // copied, and it must be a valid one.
-function createRun(id) {
-  const blueprint = { parts: [...DEFINITIONS.starterBlueprint.parts] };
+function createRun(id, source = DEFINITIONS.starterBlueprint) {
+  const blueprint = { parts: [...source.parts] };
   assertValidBlueprint(blueprint);
   return { id, blueprint };
 }
@@ -1265,6 +1419,9 @@ function step(state, input, blueprint) {
   for (const actor of state.actors) {
     if (actor.ai) think(state, actor, player);
   }
+
+  // 1c. The weapons of the avatar count down, reload, and fire at the closest target (fireWeapons).
+  fireWeapons(state, player);
 
   // 2. Movement: every actor that has "move" walks, in list order.
   // The velocity does not jump to the wanted value: it speeds up toward it

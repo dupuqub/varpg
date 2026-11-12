@@ -34,6 +34,7 @@ function draw(context, state, blueprint, fps) {
 
   drawDashStatus(context, player);
   drawHealth(context, player);
+  drawWeapons(context, player);
   drawFps(context, fps);
 }
 
@@ -54,6 +55,22 @@ function drawHealth(context, player) {
   context.textBaseline = "bottom";
   context.fillStyle = AVATAR_COLOR;
   context.fillText(`HEALTH ${player.health.now.toFixed(1)}/${player.health.max}`, 24, context.canvas.height - 56);
+}
+
+// The weapons as plain text in the bottom-left corner, above the health: the name, the rounds in the magazine and in the
+// reserve, and the reload while it lasts; and the weight the mecha carries now (it gets lighter as it fires).
+function drawWeapons(context, player) {
+  context.font = "24px monospace";
+  context.textBaseline = "bottom";
+  context.fillStyle = AVATAR_COLOR;
+  let y = context.canvas.height - 88;
+  context.fillText(`WEIGHT ${player.weight} KG`, 24, y);
+  for (const weapon of player.weapons) {
+    y -= 32;
+    const recipe = DEFINITIONS.parts[weapon.part].weapon;
+    const reload = weapon.reload > 0 ? `  RELOAD ${recipe.reloadFrames - weapon.reload}/${recipe.reloadFrames}` : "";
+    context.fillText(`${DEFINITIONS.parts[weapon.part].name.toUpperCase()} ${weapon.magazine}/${weapon.reserve}${reload}`, 24, y);
+  }
 }
 
 // The objects that fall on the screen (rocks, Shrooms), as circles of the color of their type.

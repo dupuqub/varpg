@@ -63,11 +63,22 @@ Today's hitbox of the Biter is the simplest case of this: no velocity, immediate
 4. First weapon: the repeater (targeting, a traveling hitbox, damage on actors, destruction, ammunition and its weight).
 5. Then grenade (object with an arc or a timer), mine (proximity trigger), and last the emission at the end of life.
 
+## Built so far (2026-11-11): the repeater
+
+A part `repeater-arm` in the combat blueprint (Chamber 2): auto-aim at the closest actor in range, a cadence, a magazine and a reserve, a reload, **ammunition that weighs** (the mecha lightens and speeds up as it fires; reloading changes no weight), and a bullet that is a hitbox that travels, with a **pierce** that counts how many times it crosses (0 crosses nothing). The capacity of the Torso is 8 t. Numbers err upward on purpose and are tuned later.
+
+## Decided since
+
+- The bullet **travels**; the other kind (hits the chosen target at once, more precise and a little weaker) is wanted too and not built.
+- **Pierce is the number of crossings** (0 = none), a variable of the projectile inherited from the weapon or the skill tree.
+
 ## Open items
 
-- **Does the repeater's bullet travel (a hitbox that moves toward the target) or appear at the target at once?** Asked on 2026-11-11, not answered yet.
-- **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered. A range needs a salt per shot and makes the record of a hit store the rolled value.
+- **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered; the repeater has a fixed value for now. A range needs a salt per shot and makes the record of a hit store the rolled value.
+- **The avatar's body slam does not follow its current weight** (its base is made once). A lighter mecha is pushed more but hits the same. Wanted?
 - Can a slot be truly **empty**? The user said an empty arm "is really empty", then chose one item per slot with armor-only parts; the two are not settled together.
 - Two-handed weapons, a bonus for the same sword in both arms, and set bonuses were discussed and **left out on purpose** for now. They can come later as part variants or as mods with a condition.
-- Where the weight of a unit of ammunition lives (in the weapon recipe) and whether the reserve and the magazine weigh the same.
-- What the avatar's death does (still open; the weapons close the loop of the game).
+- Does a bullet stop at a rock or a Shroom? Today it passes over objects.
+- A bullet must be slower than the smallest radius it should not skip (the data checks it at load). Fast bullets will need a swept test.
+- The avatar at zero health stays and keeps firing; what its death does is still open.
+- Order proposed earlier and still ahead: store the record of a hit, a bench of weapons, then grenade, mine and the emission at the end of a life.

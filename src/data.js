@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 30;
+const DEFINITIONS_VERSION = 31;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -248,14 +248,43 @@ const DEFINITIONS = {
   //   have them, primarily the Booster. Without one there is no charge, so no dash.
   // rechargeFrames: anchor, the user's old project (4 s) = 240 frames at 60 steps per second. The user's decision: all
   //   the numbers of the dash come from the Booster at first.
-  // capacity: anchor and rule, the user's 6 t, the 5 t of the starter blueprint plus 20%.
+  // capacity: the user's decision (2026-11-11): 8 t, from his "10 t, or maybe 8", so the starter's 5 t leaves 3 t of room for
+  //   heavy ammunition and for changing parts, early, because small changes and ammunition must make a difference to the feel
+  //   of the speed. (It was 6 t, the starter's 5 t plus 20%.)
   parts: {
     "shoulder-r": { name: "Shoulder R", weight: 450, specs: {} },
     "shoulder-l": { name: "Shoulder L", weight: 450, specs: {} },
     "arm-r": { name: "Arm R", weight: 650, specs: {} },
     "arm-l": { name: "Arm L", weight: 650, specs: {} },
     head: { name: "Head", weight: 200, specs: { health: 15 } },
-    torso: { name: "Torso", weight: 900, specs: { health: 55, resistance: { blunt: 20, puncture: 10 }, speed: 0.5, capacity: 6000 } },
+    torso: { name: "Torso", weight: 900, specs: { health: 55, resistance: { blunt: 20, puncture: 10 }, speed: 0.5, capacity: 8000 } },
+    // The repeater arm (the user, 2026-11-11): the weapon is the arm itself and takes the place of the plain Arm L. A
+    // machine gun, slow at first, with limited ammunition that weighs: the mecha gets lighter and faster as it fires.
+    // weight 800: the plain arm's 650 plus 150 for the gun (guess).
+    // weapon.target: "closest", the only rule of auto-aim for now.
+    // The user (2026-11-11): "err upward first, better to look overpowered than a rubber duck"; the numbers are tuned later.
+    // weapon.range 520: guess, a bit under half the height of the screen, so it only fires at what is near.
+    // weapon.intervalFrames 10: guess, 6 shots a second (the old project's 0.3 s was 18 frames; raised on purpose).
+    // weapon.reloadFrames 90: guess, 1.5 s.
+    // weapon.rounds: weight 6 kg each and 400 of them (magazine 30, reserve 370), guess: 2400 kg of ammunition, so firing
+    //   it all makes the mecha lighter by a fifth of its loaded weight, a speed gain the player can feel, and there is plenty
+    //   of ammunition to fire. The loaded mecha is 7550 kg, under the 8000 of the Torso.
+    // weapon.projectile: damage puncture 10 (guess: a Biter has 30 health, so 3 hits), speed 8 px per frame (guess: faster
+    //   than the avatar's 3 and the Biter's 2.5), radius 6 (a small bullet), lifeFrames 65 (520 px, the range), pierce 0
+    //   (the user: nothing crosses by default; each crossing is a +1 from the weapon or the skill tree).
+    "repeater-arm": {
+      name: "Repeater arm",
+      weight: 800,
+      specs: {},
+      weapon: {
+        target: "closest",
+        range: 520,
+        intervalFrames: 10,
+        reloadFrames: 90,
+        rounds: { weight: 6, magazine: 30, reserve: 370 },
+        projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, lifeFrames: 65, pierce: 0 },
+      },
+    },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },
     generator: { name: "Generator", weight: 200, specs: {} },
     booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1, rechargeFrames: 240 } },
@@ -264,6 +293,10 @@ const DEFINITIONS = {
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
   starterBlueprint: {
     parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
+  },
+  // The blueprint of Chamber 2 (combat): the starter with the repeater arm in place of the plain Arm L.
+  combatBlueprint: {
+    parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"],
   },
 
   // How the ground is filled (provisional values, to be tuned). The seed places the objects, every one of them.
