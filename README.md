@@ -9,7 +9,7 @@ A 2D top-down action RPG about mechas, in the browser, in **early development**.
 
 **Controls:** WASD or the left stick of a gamepad to move, Space or the gamepad A button to dash. The weapons aim by themselves. The `||`, `<<` and `>>` buttons at the top pause the game and walk through the last two seconds, frame by frame. Esc goes back to the menu.
 
-**Phones:** there are no touch controls yet. A Bluetooth gamepad works. Chamber 0 (diagnostics) works with touch.
+**Phones (landscape):** put a finger on the left half of the screen and drag: it is a floating analog stick (the farther the finger from where it touched, the faster). A touch anywhere on the right half is the dash, in the direction you are moving. A Bluetooth gamepad also works.
 
 ## What exists
 

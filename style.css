@@ -101,6 +101,70 @@ textarea {
   background: #000;
 }
 
+/* The game views take no browser gestures: a drag is the stick, a touch is the dash (src/input.js). */
+.screen.fullscreen {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The touch controls (src/input.js draw and place them; they are only pictures and take no touch). The dash button is a round
+   picture on the dash side, but the whole half of the screen is the button. */
+.touch-dash,
+.touch-ring,
+.touch-dot {
+  position: fixed;
+  pointer-events: none;
+  border-radius: 50%;
+  z-index: 10;
+}
+
+.touch-dash {
+  bottom: 28px;
+  width: 96px;
+  height: 96px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+.touch-dash::after {
+  content: "DASH";
+}
+
+.touch-dash[data-side="right"] { right: 28px; }
+.touch-dash[data-side="left"] { left: 28px; }
+
+.touch-dash.pressed {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.touch-dash[hidden],
+.touch-ring[hidden],
+.touch-dot[hidden] {
+  display: none;
+}
+
+.touch-ring {
+  width: 180px; /* twice TOUCH_STICK_RADIUS */
+  height: 180px;
+  margin: -90px 0 0 -90px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.touch-dot {
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
 /* The canvas is 1920 x 1080 inside. It fills the window and keeps its shape:
    on a window with another shape, black bars appear. At exactly 1920 x 1080
    (for example the browser in full screen, F11) one canvas pixel is one screen pixel. */
