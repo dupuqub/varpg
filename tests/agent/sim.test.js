@@ -2814,3 +2814,49 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
   assert.ok(result.mostHitboxes >= 1);
   assert.ok(result.alive > 0 && result.alive <= 40);
 });
+
+// ---- Guards of the review of 2026-11-11 (salts, fingerprint of the data, snap of another version) ----
+
+// The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
+// new version and fingerprint below (the failure message prints the new fingerprint).
+const DATA_FINGERPRINT = { version: 29, hash: "0ac3af852c27f800" };
+
+test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
+  const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
+  const values = Object.values(plain(result.salts));
+  assert.strictEqual(result.frozen, true);
+  assert.strictEqual(new Set(values).size, values.length, "two salts have the same number: " + JSON.stringify(result.salts));
+  // The object salts are added to 100 x the place of the layer, so they must stay under 100 and the others must not look like one.
+  for (const [name, value] of Object.entries(plain(result.salts))) assert.ok(Number.isInteger(value) && value > 0 && value < 100, name + " is not a whole number from 1 to 99");
+  // The crowd salts must not be reachable from a layer: layer index x 100 + 1..6 never equals a salt from 11 up.
+  const objectSalts = values.slice(0, 6);
+  assert.ok(Math.max(...objectSalts) < 11, "an object salt reaches the crowd salts");
+  const code = readSource("sim.js").replace(/\/\/.*$/gm, "");
+  const calls = [...code.matchAll(/\b(?:hashInts|rollInRange)\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g)].map((match) => match[1]);
+  const bare = calls.filter((args) => /^[^,]+,[^,]+,[^,]+,\s*\d+\s*(,|$)/.test(args.replace(/\([^()]*\)/g, "()")));
+  assert.deepStrictEqual(bare, [], "a salt written as a number: " + bare.join(" | "));
+});
+
+test("129 src/data.js and DEFINITIONS_VERSION change together: the fingerprint of the data (comments and spaces aside) is kept in this file next to the version", () => {
+  const crypto = require("node:crypto");
+  const text = readSource("data.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "").replace(/\s+/g, " ").trim();
+  const hash = crypto.createHash("sha256").update(text).digest("hex").slice(0, 16);
+  const version = run(`return DEFINITIONS_VERSION;`);
+  const message = "data.js is now version " + version + " with fingerprint " + hash + " and the test keeps version " + DATA_FINGERPRINT.version + " with " + DATA_FINGERPRINT.hash;
+  if (hash !== DATA_FINGERPRINT.hash) assert.notStrictEqual(version, DATA_FINGERPRINT.version, "data.js changed and DEFINITIONS_VERSION did not: raise it. " + message);
+  assert.deepStrictEqual([version, hash], [DATA_FINGERPRINT.version, DATA_FINGERPRINT.hash], "update DATA_FINGERPRINT in the test. " + message);
+});
+
+test("130 a snap of another definitions version is refused with a clear message instead of being replayed under other rules", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const history = createHistory(s, DEFINITIONS.starterBlueprint);
+    const fine = stateFromSnap(history, 0).definitionsVersion;
+    history.snaps[0].definitionsVersion = DEFINITIONS_VERSION - 1;
+    let error = null;
+    try { stateFromSnap(history, 0); } catch (e) { error = e.message; }
+    return { fine, version: DEFINITIONS_VERSION, error };
+  `);
+  assert.strictEqual(result.fine, result.version);
+  assert.match(result.error, /definitions version \d+ and the game has version \d+/);
+});

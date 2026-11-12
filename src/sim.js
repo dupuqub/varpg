@@ -482,6 +482,24 @@ function approach(velocity, target, rate) {
 
 // A number from 0 to 4294967295 made from four integers. Only integer
 // arithmetic (Math.imul, xor, shifts), so it is exact in every browser. The
+// Every question asked of the seed has its own salt, so the answers do not follow each other. The numbers are written
+// here and nowhere else (a test fails if a number is used twice or if a call of the hash uses a bare number). The first
+// six are added to 100 x the place of the layer in the list, so two layers never roll the same numbers.
+const SALTS = Object.freeze({
+  objectChance: 1,
+  objectX: 2,
+  objectY: 3,
+  objectKind: 4,
+  objectHealth: 5,
+  objectRadius: 6,
+  crowdRadius: 11,
+  crowdHealth: 14,
+  dummyAngle: 15,
+  dummyTurn: 16,
+  birthPick: 17,
+  birthAlong: 18,
+});
+
 // "salt" gives a different number to each question asked about the same square.
 function hashInts(seed, x, y, salt) {
   let h = Math.imul(seed, 0x9e3779b1) ^ Math.imul(x, 0x85ebca6b) ^ Math.imul(y, 0xc2b2ae35) ^ Math.imul(salt, 0x27d4eb2f);
@@ -520,20 +538,20 @@ function rollInRange(seed, squareX, squareY, salt, min, max) {
 // object it is (see damageObject). The salts, added to 100 x the place of the layer in the list: 1 chance, 2 and 3
 // position, 4 type, 5 health, 6 radius. An object that overlaps an object of a layer with a larger square is not placed.
 function objectInSquare(seed, layer, squareX, squareY) {
-  const salt = (kind) => layer.index * 100 + kind;
+  const salt = (kind) => layer.index * 100 + kind; // kind: one of the object salts of SALTS
 
-  if (hashInts(seed, squareX, squareY, salt(1)) % 100 >= layer.chancePercent) return null;
+  if (hashInts(seed, squareX, squareY, salt(SALTS.objectChance)) % 100 >= layer.chancePercent) return null;
 
   const margin = objectMargin(layer);
   const room = layer.cellSize - 2 * margin;
-  const x = squareX * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(2)) % room);
-  const y = squareY * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(3)) % room);
+  const x = squareX * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(SALTS.objectX)) % room);
+  const y = squareY * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(SALTS.objectY)) % room);
   if (x * x + y * y < layer.safeRadius * layer.safeRadius) return null;
 
-  const type = layer.kinds[hashInts(seed, squareX, squareY, salt(4)) % layer.kinds.length];
+  const type = layer.kinds[hashInts(seed, squareX, squareY, salt(SALTS.objectKind)) % layer.kinds.length];
   const definition = DEFINITIONS.objects[type];
-  const health = rollInRange(seed, squareX, squareY, salt(5), definition.healthRange.min, definition.healthRange.max);
-  const radius = rollInRange(seed, squareX, squareY, salt(6), definition.size.min, definition.size.max);
+  const health = rollInRange(seed, squareX, squareY, salt(SALTS.objectHealth), definition.healthRange.min, definition.healthRange.max);
+  const radius = rollInRange(seed, squareX, squareY, salt(SALTS.objectRadius), definition.size.min, definition.size.max);
   const object = finalizeObject(type, { layer: layer.id, position: { x, y }, square: { x: squareX, y: squareY }, radius, health: { now: health, max: health } });
   return isUnderBiggerLayer(seed, layer, object) ? null : object;
 }
@@ -756,7 +774,7 @@ function setHeading(dummy) {
 // A new random angle, from 0 to 359, for the next stretch of the walk.
 function turnDummy(state, dummy) {
   dummy.wander.turns += 1;
-  dummy.wander.angle = hashInts(state.seed, dummy.wander.index, dummy.wander.turns, 16) % 360;
+  dummy.wander.angle = hashInts(state.seed, dummy.wander.index, dummy.wander.turns, SALTS.dummyTurn) % 360;
   setHeading(dummy);
 }
 
@@ -793,8 +811,8 @@ function birthOffset(seed, index, radius, grid) {
   const total = 2 * sideArea + 2 * capArea;
   if (total === 0) throw new Error("No room off the screen and inside the window for an actor of radius " + radius);
 
-  let pick = hashInts(seed, index, 0, 17) % total;
-  const along = hashInts(seed, index, 0, 18);
+  let pick = hashInts(seed, index, 0, SALTS.birthPick) % total;
+  const along = hashInts(seed, index, 0, SALTS.birthAlong);
   if (pick < sideArea) return { x: -halfWidth + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // left
   pick -= sideArea;
   if (pick < sideArea) return { x: innerX + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // right
@@ -805,7 +823,7 @@ function birthOffset(seed, index, radius, grid) {
 }
 
 // Makes the actors of one crowd of a new state, by the seed: `count` actors of one type, numbered from 0. For each one
-// the seed rolls (salts 11 and 14, with the number of the actor) radius and health, and birthOffset says where it is born
+// the seed rolls (SALTS.crowdRadius and SALTS.crowdHealth, with the number of the actor) radius and health, and birthOffset says where it is born
 // (the user's birth rule, see "Birth" in AGENTS.md). `rollsFor(index)` gives what is its own to the type (the Dummy's first
 // angle). Ids are the type and the number ("dummy_0", "biter_0"). Returns the new actors, in order.
 function createCrowd(state, type, count, rollsFor) {
@@ -814,10 +832,10 @@ function createCrowd(state, type, count, rollsFor) {
   const made = [];
 
   for (let index = 0; index < count; index++) {
-    const radius = rollInRange(state.seed, index, 0, 11, recipe.size.min, recipe.size.max);
+    const radius = rollInRange(state.seed, index, 0, SALTS.crowdRadius, recipe.size.min, recipe.size.max);
     const offset = birthOffset(state.seed, index, radius, state.grid);
     const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
-    const health = rollInRange(state.seed, index, 0, 14, recipe.healthRange.min, recipe.healthRange.max);
+    const health = rollInRange(state.seed, index, 0, SALTS.crowdHealth, recipe.healthRange.min, recipe.healthRange.max);
     const actor = finalizeObject(type, { position, radius, health: { now: health, max: health }, ...rollsFor(index) }, undefined, type + "_" + index);
     finalizeStatic(actor);
     finalizeDynamic(actor);
@@ -827,9 +845,9 @@ function createCrowd(state, type, count, rollsFor) {
   return made;
 }
 
-// The Dummies of Chamber 1: each also rolls its first angle (salt 15) and is pointed at it.
+// The Dummies of Chamber 1: each also rolls its first angle (SALTS.dummyAngle) and is pointed at it.
 function createDummies(state) {
-  const dummies = createCrowd(state, "dummy", DEFINITIONS.terrain.dummies.count, (index) => ({ wander: { index, angle: hashInts(state.seed, index, 0, 15) % 360, turns: 0 } }));
+  const dummies = createCrowd(state, "dummy", DEFINITIONS.terrain.dummies.count, (index) => ({ wander: { index, angle: hashInts(state.seed, index, 0, SALTS.dummyAngle) % 360, turns: 0 } }));
   for (const dummy of dummies) setHeading(dummy);
 }
 

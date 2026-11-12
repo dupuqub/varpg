@@ -34,7 +34,12 @@ function recordFrame(history, state, input) {
 // A copy of a snap, to load as the live state. It must be a copy, because
 // step() changes the state in place and would otherwise rewrite the history.
 function stateFromSnap(history, index) {
-  return copyOf(history.snaps[index]);
+  const snap = history.snaps[index];
+  // A snap made under other definitions would replay under rules it was not played with: refuse it, loudly.
+  if (snap.definitionsVersion !== DEFINITIONS_VERSION) {
+    throw new Error("The snap is of definitions version " + snap.definitionsVersion + " and the game has version " + DEFINITIONS_VERSION);
+  }
+  return copyOf(snap);
 }
 
 // Pressing play on a past frame: everything after it is discarded, snaps and

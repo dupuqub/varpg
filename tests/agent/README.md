@@ -219,6 +219,9 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 125 | Two Biters that overlap are pushed apart by weight until they just touch, nobody is hurt, and the pair is in the list of contacts. | One collision routine for every mover. |
 | 126 | Chamber 2 has 40 Biters (`biter_0` to `biter_39`), no Dummies, born off the screen inside the window with radius 12 to 20 and 30 health, the same for the same seed and different for another, as plain JSON. | The world of Chamber 2. |
 | 127 | A run of Chamber 2 is reproducible: 900 frames with the avatar standing among 40 Biters give the same state twice and a clean cross-check, and the Biters do reach it and bite. | Combat must be deterministic like everything else. |
+| 128 | Every salt of the seed is named in one frozen table (`SALTS` in `src/sim.js`), all the numbers are different, and no call of `hashInts` or `rollInRange` writes a bare number as its salt. | A repeated salt would tie two rolls together with no sign of it. |
+| 129 | `src/data.js` and `DEFINITIONS_VERSION` change together: the test keeps the version and a fingerprint of the data (comments and spaces aside). A change of the data with the same version fails; a change of both asks to update the pair in the test. | The version is raised by hand, and forgetting it would replay old runs under new rules. |
+| 130 | A snap of another definitions version is refused by `stateFromSnap` with a clear message. | A snap is only valid under the rules it was played with. |
 
 ### Benchmark of the grid (not a test)
 
