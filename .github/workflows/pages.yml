@@ -1,11 +1,11 @@
 # Publishes the game as a static site on GitHub Pages. The game is plain files (no build), so the site is a copy of
 # index.html, style.css and src/. On the free plan, GitHub Pages works only for a public repository; until then this
-# workflow does nothing useful (it can be run by hand from the Actions tab once Pages is turned on in the settings).
+# workflow cannot publish. It runs only by hand (Actions tab, Run workflow) so that it does not fail on every push while the
+# repository is private. When the repository is public and Pages is set to "GitHub Actions" in the settings, add
+# `push: { branches: [main] }` under `on:` to publish on every push.
 name: Pages
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
