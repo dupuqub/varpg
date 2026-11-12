@@ -51,6 +51,19 @@ button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
+/* The buttons of the game view that pause and step through the history are small, unlike the menu buttons. */
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.controls button {
+  width: 44px;
+  padding: 4px 0;
+  letter-spacing: 0;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: not-allowed;

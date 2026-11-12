@@ -1,5 +1,5 @@
 // Run history: the last HISTORY_SIZE snaps (saved copies of the state) and the
-// last HISTORY_SIZE inputs. There are no buttons for it yet.
+// last HISTORY_SIZE inputs. The pause, back and forward buttons of the game views (src/main.js) walk through it.
 //
 // Two lists, same length, and index 0 is the oldest. Same index = same frame:
 //   snaps[i]  = the state at that frame

@@ -46,6 +46,11 @@ let accumulatedMs = 0;
 let fps = 0; // frames drawn in the last full second, shown on the screen
 let fpsFrames = 0;
 let fpsSince = null;
+// Pause and the history (the user, 2026-11-12). While paused the buttons walk through the saved snaps: viewIndex is the snap
+// that is shown (the last one while the game is live). Pressing play on a past frame discards everything after it (discardAfter)
+// and the run goes on from there with new inputs (the agent's default, to be confirmed by the user).
+let paused = false;
+let viewIndex = 0;
 
 function startChamber(id) {
   stopChamber();
@@ -59,12 +64,15 @@ function startChamber(id) {
     throw new Error("The canvas is " + canvas.width + " x " + canvas.height + " and the rules expect " + state.grid.screenWidth + " x " + state.grid.screenHeight);
   }
   runHistory = createHistory(state, run.blueprint);
+  paused = false;
+  viewIndex = 0;
   lastTimestamp = null;
   accumulatedMs = 0;
   fps = 0;
   fpsFrames = 0;
   fpsSince = null;
   draw(context, state, run.blueprint, fps);
+  updateControls();
   animationId = requestAnimationFrame(loop);
 }
 
@@ -85,14 +93,17 @@ function loop(timestamp) {
   accumulatedMs += timestamp - lastTimestamp;
   lastTimestamp = timestamp;
 
+  if (paused) {
+    accumulatedMs = 0; // no time is owed for the pause: playing again does not run a burst of steps
+    return;
+  }
+
   if (accumulatedMs < STEP_MS - STEP_TOLERANCE_MS) return;
 
   // Keep the leftover time, but never more than one step of delay.
   accumulatedMs = Math.min(accumulatedMs - STEP_MS, STEP_MS);
 
-  const input = readInput();
-  step(state, input, run.blueprint);
-  recordFrame(runHistory, state, input);
+  stepLive();
   // The fps counter: frames drawn, counted over one second.
   if (fpsSince === null) fpsSince = timestamp;
   fpsFrames += 1;
@@ -103,4 +114,81 @@ function loop(timestamp) {
   }
 
   draw(context, state, run.blueprint, fps);
+  updateControls();
+}
+
+// One step of the live game with the input of now, saved in the history. The shown snap is then the last one.
+function stepLive() {
+  const input = readInput();
+  step(state, input, run.blueprint);
+  recordFrame(runHistory, state, input);
+  viewIndex = runHistory.snaps.length - 1;
+}
+
+// ---- The buttons: pause/play, one frame back, one frame forward ----
+
+function pauseGame() {
+  paused = true;
+}
+
+function playGame() {
+  if (viewIndex < runHistory.snaps.length - 1) discardAfter(runHistory, viewIndex); // playing from a past frame
+  paused = false;
+  accumulatedMs = 0;
+  lastTimestamp = null;
+}
+
+// Back goes to the snap before the one shown, and pauses. The oldest snap has nothing before it.
+function stepBack() {
+  if (viewIndex === 0) return;
+  pauseGame();
+  viewIndex -= 1;
+  state = stateFromSnap(runHistory, viewIndex);
+  draw(context, state, run.blueprint, fps);
+  updateControls();
+}
+
+// Forward goes to the next snap, and pauses. On the newest one there is none yet, so it plays one new step with the input of now.
+function stepForward() {
+  pauseGame();
+  if (viewIndex < runHistory.snaps.length - 1) {
+    viewIndex += 1;
+    state = stateFromSnap(runHistory, viewIndex);
+  } else {
+    stepLive();
+  }
+  draw(context, state, run.blueprint, fps);
+  updateControls();
+}
+
+function currentScreen() {
+  return Object.keys(CHAMBERS).map((id) => document.getElementById(id)).find((screen) => !screen.hidden);
+}
+
+// The symbol of the toggle says what pressing it does (|| while playing, a triangle while paused), the status line says the frame
+// and, when a past frame is shown, how far behind it is.
+function updateControls() {
+  const screen = currentScreen();
+  if (!screen) return;
+  const part = (name) => screen.querySelector(`[data-control="${name}"]`);
+  part("toggle").textContent = paused ? "\u25B6" : "||";
+  part("back").disabled = viewIndex === 0;
+  const behind = runHistory.snaps.length - 1 - viewIndex;
+  part("status").textContent = (paused ? "PAUSED " : "") + "FRAME " + state.frame + (behind > 0 ? " (" + behind + " BEHIND)" : "");
+}
+
+// A button that keeps the focus would be pressed again by the Space key, which is the dash: so each click gives the focus back.
+for (const button of document.querySelectorAll('[data-control="back"]')) {
+  button.addEventListener("click", () => { stepBack(); button.blur(); });
+}
+for (const button of document.querySelectorAll('[data-control="forward"]')) {
+  button.addEventListener("click", () => { stepForward(); button.blur(); });
+}
+for (const button of document.querySelectorAll('[data-control="toggle"]')) {
+  button.addEventListener("click", () => {
+    if (paused) playGame();
+    else pauseGame();
+    updateControls();
+    button.blur();
+  });
 }

@@ -113,7 +113,7 @@ Keep everything simple. Screens are HTML and CSS, and only one is shown at a tim
 - **60 steps per second.** All game values are based on 60 fps.
 - Physics is calculated once per frame: **one step per displayed frame**. Steps are never skipped and frames that are not shown are not calculated ("calculate and show, always"). If the machine cannot keep 60 fps, the game runs in slow motion.
 - **The game state is a single JSON object.**
-- **Frame debug:** be able to pause and have a button that advances one frame at a time, to understand what happens at each moment. Not implemented yet.
+- **Frame debug (the user, 2026-11-12; built):** the game views of Chambers 1 and 2 have three buttons in the top bar: `||` / a triangle (pause and play), `<<` (one frame back) and `>>` (one frame forward), plus a status text (`FRAME n`, `PAUSED`, and how many frames behind when a past frame is shown). Back and forward pause the game and walk through the saved snaps (`stateFromSnap`, the last `HISTORY_SIZE`, so about 1.6 s of walking back); forward on the newest frame plays one new step with the input of that moment. **Play on a past frame discards everything after it (`discardAfter`) and goes on from there with new inputs** (the agent's default, not confirmed by the user). A click gives the focus back (`blur`), or the Space key (the dash) would press the button again. The logic is in `src/main.js` (it touches the page), so it has no Node test; it was checked in Chromium (back and forward return the same snaps, play from the past keeps the cross-check clean).
 - There are no internal intra-pause or intra-play tools: debugging uses only normal play and frame by frame.
 
 ### State, definitions, blueprint and rules
@@ -246,7 +246,7 @@ The user approved this and noted that everything may change.
 
 ### Run history (two logs)
 
-Agreed with the user. Implemented in `src/history.js` and recorded by the Chamber 1 loop (no buttons, no automatic cross-check yet; from the browser console, `crossCheck(runHistory)` runs it).
+Agreed with the user. Implemented in `src/history.js` and recorded by the loop of Chambers 1 and 2 (the pause, back and forward buttons walk through it; no automatic cross-check yet; from the browser console, `crossCheck(runHistory)` runs it).
 
 - **Vocabulary:** a **snap** is a saved copy of the state at one frame (the user's word). "State" is the live one.
 - Each snap carries `run` and `frame`, so a snap exported to disk can be identified. The rules never read `state.run`.
@@ -334,7 +334,7 @@ Read `docs/weapons.md` before touching anything about weapons: it keeps the user
 - `src/input.js`: reads keyboard and gamepad, and returns `{ move, dash }` for the frame.
 - `src/render.js`: draws the state and never changes it.
 - `src/chamber-0.js`: the test bench of Chamber 0. The text builders do not touch the page; only the end of the file does.
-- `src/main.js`: screen navigation and the loop of the chambers that are played, 1 and 2 (it also records the history every frame).
+- `src/main.js`: screen navigation and the loop of the chambers that are played, 1 and 2 (it also records the history every frame, and has the pause, back and forward buttons).
 - `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` tests the rules, and `README.md` explains each test in plain words, with the worked numbers (a test checks that every test has its row). `benchmark-grid.js` and `benchmark-layers.js` measure the collision grid and the layers of the ground (they are not tests). Any other kind of test the user writes later should go in its own folder.
 - `docs/`: reviews written by an agent at the user's request. `docs/review-2026-11-11.md` is the map of the relations in the code, the fragile ones included, the tensions in the structure, the costs measured and what the direction of the game asks of today's code. **Read it before adding a rule.** Delete from it what gets solved.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node outside the tests.
@@ -359,7 +359,7 @@ They only become decisions when the user approves.
 
 - **Agreed order of work (critical review of 2026-11-10):**
   1. The user played Chamber 1 (2026-11-11) and said everything was very good: the swarm, the push by weight, the birth and the damage rules are validated by play. The combat of Chamber 2 is not played yet.
-  2. Pause and one-frame advance (the history already exists, there are no buttons yet).
+  2. ~~Pause and one-frame advance~~ (built, 2026-11-12; see "Simulation").
   3. A **damage trace** of real hits on screen, each hit written as its own arithmetic, coming from the simulation itself. This replaces the idea of printing static arithmetic of the body slam in DATA, which would be one more copy of the numbers.
   4. Only then decide the known weaknesses listed in "Damage", "The kit of parts" and "Collision with still things".
 - The user has not yet confirmed in his Chrome the final position of the SIMULATION CHECK since inertia was added (the agent's Chromium value is in `tests/agent/README.md`, "Known answers in the browser"). The scripted run has no dash and never releases the keys, so the dash and the deceleration are only tested in Node; changing the script changes the final position.
