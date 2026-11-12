@@ -12,8 +12,11 @@ const pressedKeys = new Set();
 let dashPressed = false;
 let padDashWasDown = false;
 
+// The screens that are played (the same ones as CHAMBERS in main.js, which is loaded after this file).
+const GAME_SCREENS = ["screen-chamber-1", "screen-chamber-2"];
+
 function inGameView() {
-  return !document.getElementById("screen-chamber-1").hidden;
+  return GAME_SCREENS.some((id) => !document.getElementById(id).hidden);
 }
 
 window.addEventListener("keydown", (event) => {

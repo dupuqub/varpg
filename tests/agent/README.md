@@ -222,6 +222,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 128 | Every salt of the seed is named in one frozen table (`SALTS` in `src/sim.js`), all the numbers are different, and no call of `hashInts` or `rollInRange` writes a bare number as its salt. | A repeated salt would tie two rolls together with no sign of it. |
 | 129 | `src/data.js` and `DEFINITIONS_VERSION` change together: the test keeps the version and a fingerprint of the data (comments and spaces aside). A change of the data with the same version fails; a change of both asks to update the pair in the test. | The version is raised by hand, and forgetting it would replay old runs under new rules. |
 | 130 | A snap of another definitions version is refused by `stateFromSnap` with a clear message. | A snap is only valid under the rules it was played with. |
+| 131 | Every screen that is played (`CHAMBERS` in `src/main.js`) is in `GAME_SCREENS` of `src/input.js`. | Space only dashes in the screens of that list: Chamber 2 was missing from it at first and the dash did nothing there. |
 
 ### Benchmark of the grid (not a test)
 

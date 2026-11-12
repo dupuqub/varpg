@@ -2860,3 +2860,12 @@ test("130 a snap of another definitions version is refused with a clear message 
   assert.strictEqual(result.fine, result.version);
   assert.match(result.error, /definitions version \d+ and the game has version \d+/);
 });
+
+test("131 every screen that is played (the table CHAMBERS of src/main.js) is also in the list of the input (GAME_SCREENS of src/input.js), so Space dashes in all of them", () => {
+  const main = readSource("main.js");
+  const input = readSource("input.js");
+  const played = [...main.match(/const CHAMBERS = \{([\s\S]*?)\n\};/)[1].matchAll(/"(screen-chamber-\d+)":/g)].map((match) => match[1]);
+  const listed = [...input.match(/const GAME_SCREENS = \[([^\]]*)\]/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  assert.ok(played.length >= 2, "the chambers were not found in main.js");
+  assert.deepStrictEqual(listed.slice().sort(), played.slice().sort());
+});
