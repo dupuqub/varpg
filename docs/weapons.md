@@ -2,9 +2,8 @@
 
 Written 2026-11-11 from the conversation with the user, after several summaries of earlier conversations had lost parts of it. It records what he said and decided, what the old project did, and what the agent proposed. It has **no numbers of the new game** (those live in `src/data.js`, each with its reason). When a point here is decided in code, move it to `AGENTS.md` and leave a short pointer.
 
-Relics of the old project, kept as they were (**relics, not truths about this project**; see `docs/reference/README.md`):
+A relic of the old project, kept as it was (**a relic, not a truth about this project**; see `docs/reference/README.md`):
 
-- `docs/reference/relic-old-project-state.json`: the state file of the old project (parts, specs, mods, one weapon, the final values).
 - `docs/reference/relic-old-project-hud.jpg`: a screenshot of the old project. Weapon status is shown at each slot (`ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`): type, magazine, storage, interval, reload. The booster and the halo (shield) have their own boxes. Resin (a resource) is at the top left. The worms are the enemies, and the small orange dash near one of them is a bullet in flight.
 
 ## Why it matters (the user's business reasoning)
@@ -19,13 +18,12 @@ The game has to pay the bills, and weapons are the flagship of what is sold: **t
 - The first weapon is the simplest of all: a repeater of hitboxes, like a machine gun, slow at first, with limited ammunition, a reload time and a cadence. "All the basics."
 - **The style is crowds** (Diablo and Path of Exile in feel, close to Musou): many enemies, and seeing each attack is not a priority.
 
-## The old project's model (see the JSON and the screenshot)
+## What the old project had that the user wants again (a relic, described only as intent; see the screenshot)
 
-- A **part** has `Type`, `Model`, `Maker`, `Specs` (a list of `[name, value]`, summed into the final values), optional `Mods` and an optional `Weapon`.
-- A **weapon** (`Weapon.Base`) has: `Type` (the name of the recipe, `Repeater`), `Target` (the rule of auto-aim, `Closer`), `Storage` (the reserve of ammunition), `Magazine` (the clip), `Interval` (the time between shots), `Reload` (the time to reload) and `Damage` as a range `{ Min, Max }`.
-- The screen shows the live counters per slot (magazine now/capacity, interval now/base, reload now/base), so a weapon has **state** that changes every frame.
-- **Mods** (`Assault`, `Fortress`) sit on parts and change final values: they are what the new project calls the dynamic part (`now`) of a value.
-- **Halo** is the shield (a health that regenerates, from the Generator). **Armor** in the old project is what the new one calls health. Resin, Magnet and Radar are drops and collection, to come later.
+- A part gives specs that are summed into the final values, and may have **mods** (two examples were an offensive one on the head and a defensive one on the torso) that change final values: this is what the new project calls the dynamic part (`now`) of a value.
+- A weapon has: a **name of its recipe** (a repeater), a **rule of auto-aim** (the closest target), a **reserve** of ammunition, a **magazine**, a **time between shots**, a **reload time**, and a **damage range** per shot.
+- The screen shows the live counters per slot (magazine now/capacity, interval, reload), so a weapon has **state** that changes every frame.
+- The shield (a health that regenerates, from the generator) is already in `AGENTS.md`. Drops and collection (a resource, a magnet, a radar) come later.
 - Times were in seconds; the new simulation counts whole frames, so they become frames (the seconds can stay on the screen).
 
 ## The natures of weapons the user wants to allow
