@@ -1,0 +1,40 @@
+# Publishes the game as a static site on GitHub Pages. The game is plain files (no build), so the site is a copy of
+# index.html, style.css and src/. On the free plan, GitHub Pages works only for a public repository; until then this
+# workflow does nothing useful (it can be run by hand from the Actions tab once Pages is turned on in the settings).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the tests first (a broken rule must not be published)
+        run: node --test
+      - name: Collect the site
+        run: |
+          mkdir site
+          cp index.html style.css site/
+          cp -r src site/src
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
