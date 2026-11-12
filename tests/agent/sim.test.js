@@ -3345,3 +3345,16 @@ test("151 the shield specs are checked when the data loads: resistance only to k
   assert.throws(() => loadGame((text) => text.replace("shieldDelayFrames: 180", "shieldDelayFrames: 1.5"), { shield: true }), /whole number of frames/);
   assert.throws(() => loadGame((text) => text.replace("shieldMax: 40", "shieldMax: -1"), { shield: true }), /0 or more/);
 });
+
+// ---- The docs and the code ----
+
+test("152 every function or constant that the \"Code layout\" of AGENTS.md names exists in src/ (so the map that every agent reads first cannot point to something that is gone)", () => {
+  const agents = fs.readFileSync(path.join(__dirname, "..", "..", "AGENTS.md"), "utf8");
+  const layout = agents.slice(agents.indexOf("## Code layout"), agents.indexOf("## Ideas"));
+  assert.ok(layout.length > 1000, "the Code layout section was not found in AGENTS.md");
+  const names = new Set([...layout.matchAll(/`([A-Za-z_][A-Za-z0-9_]*)`/g)].map((match) => match[1]));
+  const code = fs.readdirSync(SRC).map((name) => fs.readFileSync(path.join(SRC, name), "utf8")).join("\n");
+  const missing = [...names].filter((name) => !new RegExp("(function|const|let)\\s+" + name + "\\b").test(code));
+  assert.ok(names.size > 50, "too few names were read from the Code layout: " + names.size);
+  assert.deepStrictEqual(missing, []);
+});

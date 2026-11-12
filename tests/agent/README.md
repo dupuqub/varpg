@@ -243,6 +243,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 149 | The ring growing over a Biter hurts nobody (a hit needs an impact): the Biter is pushed out and nothing is absorbed; walking into a Biter with the shield up is a real hit and the shield takes it. | The user: no body slam when the ring grows, and no step of collision added for it. |
 | 150 | The cross-check stays clean in a shielded run of 900 frames where the Biters drain the shield, and the shield is plain numbers. | Reproducibility: the new state is part of the snaps. |
 | 151 | The shield specs are checked when the data loads: resistance only to known types of damage, the wait a whole number of frames 1 or more, the maximum 0 or more. | What must not exist cannot be made. |
+| 152 | Every function or constant that the "Code layout" section of `AGENTS.md` names exists in `src/`. | Several agents read that map first; it must not point to something that is gone (it once named `createHitbox` after it was merged away). |
 
 ### Benchmark of the grid (not a test)
 

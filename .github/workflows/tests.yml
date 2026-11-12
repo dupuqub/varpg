@@ -1,0 +1,17 @@
+# Runs the tests on every push and pull request, on every branch, so that no desk (see docs/desks.md) can leave the rules
+# broken without it showing. Publishing has its own workflow (pages.yml), which also runs them first.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --test
