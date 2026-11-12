@@ -173,8 +173,8 @@ function updateControls() {
   const part = (name) => screen.querySelector(`[data-control="${name}"]`);
   part("toggle").textContent = paused ? "\u25B6" : "||";
   part("back").disabled = viewIndex === 0;
-  const behind = runHistory.snaps.length - 1 - viewIndex;
-  part("status").textContent = (paused ? "PAUSED " : "") + "FRAME " + state.frame + (behind > 0 ? " (" + behind + " BEHIND)" : "");
+  // FRAME is the frame of the game; HISTORY is the place of the shown snap among the saved ones (1 is the oldest).
+  part("status").textContent = (paused ? "PAUSED \u00B7 " : "") + "FRAME " + state.frame + " \u00B7 HISTORY " + (viewIndex + 1) + "/" + runHistory.snaps.length;
 }
 
 // A button that keeps the focus would be pressed again by the Space key, which is the dash: so each click gives the focus back.
