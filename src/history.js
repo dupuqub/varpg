@@ -7,7 +7,9 @@
 // The very first snap has no input (null), because nothing produced it.
 // Like the rules, this file knows nothing about the screen.
 
-const HISTORY_SIZE = 100;
+// 120 snaps: two whole seconds at 60 steps per second (the user's choice, 2026-11-12: a round number to look at; it costs a
+// copy of the state per frame, which the history already made, and about 120 copies kept in memory).
+const HISTORY_SIZE = 120;
 
 // A deep copy of plain JSON data. The state is JSON, so this is always possible.
 function copyOf(value) {

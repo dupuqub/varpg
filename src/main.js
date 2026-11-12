@@ -39,7 +39,7 @@ let context = null;
 
 let run = null;
 let state = null;
-let runHistory = null; // the last 100 snaps and inputs. In the console: crossCheck(runHistory)
+let runHistory = null; // the last 120 snaps and inputs. In the console: crossCheck(runHistory)
 let animationId = null;
 let lastTimestamp = null;
 let accumulatedMs = 0;

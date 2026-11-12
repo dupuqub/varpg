@@ -447,7 +447,7 @@ test("20 history: two aligned lists, index 0 is the oldest, and the snaps are co
   assert.strictEqual(result.inputUnchanged, true);
 });
 
-test("21 history keeps only the last 100, and the oldest (index 0) leaves first", () => {
+test("21 history keeps only the last 120, and the oldest (index 0) leaves first", () => {
   const result = run(`
     const s = createChamber1State();
     const h = createHistory(s, createRun(1).blueprint);
@@ -461,14 +461,14 @@ test("21 history keeps only the last 100, and the oldest (index 0) leaves first"
       inputs: h.inputs.length,
       oldest: h.snaps[0].frame,
       newest: h.snaps[h.snaps.length - 1].frame,
-      aligned: h.snaps.every((snap, i) => snap.frame === 151 + i),
+      aligned: h.snaps.every((snap, i) => snap.frame === 131 + i),
       historySize: HISTORY_SIZE,
     };
   `);
-  assert.strictEqual(result.historySize, 100);
-  assert.strictEqual(result.snaps, 100);
-  assert.strictEqual(result.inputs, 100);
-  assert.strictEqual(result.oldest, 151);
+  assert.strictEqual(result.historySize, 120);
+  assert.strictEqual(result.snaps, 120);
+  assert.strictEqual(result.inputs, 120);
+  assert.strictEqual(result.oldest, 131);
   assert.strictEqual(result.newest, 250);
   assert.strictEqual(result.aligned, true);
 });

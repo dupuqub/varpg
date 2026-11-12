@@ -69,7 +69,7 @@ node --test
 | # | What it checks | Why it matters |
 |---|---|---|
 | 20 | Two lists (snaps and inputs), index 0 is the oldest, and the saved snaps are copies. | The history must not change when the live state changes. |
-| 21 | After 250 steps only the last 100 stay, and the oldest leaves first. | The history has a fixed size (100). |
+| 21 | After 250 steps only the last 120 stay, and the oldest leaves first. | The history has a fixed size (120: two seconds at 60 steps per second, the user's round number). |
 | 22 | The cross-check finds no difference in a normal run, even after the history has slid. | The cross-check must not accuse a correct run. |
 | 23 | If one saved snap is changed on purpose, the cross-check reports the exact frame and field. | A check that can never fail proves nothing. This shows that it can fail. |
 | 24 | The cross-check catches a rule that secretly depends on something outside the state (here, a hidden counter). | This is the real purpose of the cross-check: finding non-determinism. |
