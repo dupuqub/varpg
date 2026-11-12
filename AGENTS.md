@@ -423,6 +423,18 @@ The list, in the order the agent would ask, is at the end of `docs/review-2026-1
 - The user said "everything calculated is stored in its actor" and the agent built "everything is recalculated every frame", the weight included. Storing and recalculating are two questions; when a rule of his has two readings, say both in one line and ask which.
 - A test said it checked the avatar's cells after a push, and it rewrote the cells before looking, so it could not fail. Breaking the code on purpose showed it. Always break the thing once and see the test fail.
 
+## Publishing (2026-11-12, written by one agent for the next)
+
+The user wants the game **online, to play anywhere (PC and phone) without a terminal**, and he will make the repository public himself. What is ready and what is left:
+
+- **Ready:** `README.md` (a public face: early prototype, what exists, what does not, controls, how it is made, no license yet) and `.github/workflows/pages.yml`, which runs the tests and publishes `index.html`, `style.css` and `src/` to GitHub Pages on every push to `main`. **While the repository is private the job is skipped** (the free plan publishes only public repositories), so nothing fails.
+- **Left, the user's clicks (the agent cannot do them from its session):** (1) Settings, General, Danger Zone, Change visibility, public. (2) Settings, Pages, Source: **GitHub Actions**. (3) A first publication: any push to `main`, or Actions, Pages, Run workflow. The address will be `https://dupuqub.github.io/varpg/`. If a run fails after that, read its log before anything else (the usual cause is step 2 not done).
+- **After it is public, check once:** open the address, Chamber 0, SIMULATION CHECK, and compare the final position with `tests/agent/README.md` ("Known answers in the browser"); on a phone it is the first real test of reproducibility on another processor. There are **no touch controls**: on a phone only Chamber 0 and the buttons work, or a Bluetooth gamepad. Touch controls were not asked for; do not build them before the user asks.
+- **The history was rewritten (2026-11-12)** so that every commit has the author `34659544+dupuqub@users.noreply.github.com` instead of the user's personal address; the files of every commit are the same, the commit ids all changed (ids written in old conversations no longer exist). The old commits may still be stored at GitHub, unreferenced, until its own cleanup; the user was told and decided **it is not a concern** ("it is not terrible to have the email too"). Do not rewrite the history again without him asking. The agent's commits must keep the noreply address (`git config user.email` in the clone).
+- **The user's own clone on his PC is stale** (it has the old history). He does not want to deal with it now. When he wants to work from the PC again: delete the folder and clone again (do not pull or merge the old clone into the new history), and set `git config --global user.email` to the noreply address before committing. The `varpg.bat` for Windows is still owed, once he says where the clone lives.
+- **No license was chosen** (so nobody may reuse the code). The code and the content that will be sold (weapons, blueprints, as data) are two separate choices; raise it when he talks about opening the project to others, not before.
+- **What is public is everything in the repository**, this file included (the business reasoning, the mistakes of the agents, the relic screenshot). The user was told and accepted it; write here knowing strangers can read it.
+
 ## How to run
 
 Open `index.html` in the browser. The scripts are plain (no modules), so no server is needed.
