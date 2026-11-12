@@ -310,7 +310,7 @@ An actor **in the state** holds **its own value for everything it uses** (the us
 
 ### Weapons and equipment (the user, 2026-11-11; the full reference is `docs/weapons.md`)
 
-Read `docs/weapons.md` before touching anything about weapons: it keeps the user's vision (which earlier summaries had lost), the old project's model (`docs/reference/old-project-state.json` and `old-project-hud.jpg`) and the open questions. The decisions, short:
+Read `docs/weapons.md` before touching anything about weapons: it keeps the user's vision (which earlier summaries had lost), the old project's model, kept only as **relics, never as rules** (`docs/reference/`, read its `README.md`: `relic-old-project-state.json` and `relic-old-project-hud.jpg`) and the open questions. The decisions, short:
 
 - **Four weapon slots (`ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`), auto-aim, one part per slot.** There are armor-only parts that cannot take a weapon; a weapon comes as the arm or shoulder itself and replaces the armor-only part. Shoulders and arms need not be weapons (wings, shields): the same parts and specs.
 - **Modularity is the business goal** (blueprints and mechas are what is sold): a weapon is a recipe in data made of a few pieces (trigger, what is born, how it behaves, its own trigger, effect and emissions), so a new weapon needs no new code. A grenade or a mine is an object, a bullet is a hitbox that moves, a cluster rocket emits on its end.

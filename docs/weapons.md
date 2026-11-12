@@ -2,10 +2,10 @@
 
 Written 2026-11-11 from the conversation with the user, after several summaries of earlier conversations had lost parts of it. It records what he said and decided, what the old project did, and what the agent proposed. It has **no numbers of the new game** (those live in `src/data.js`, each with its reason). When a point here is decided in code, move it to `AGENTS.md` and leave a short pointer.
 
-Reference material from the old project, kept as it was:
+Relics of the old project, kept as they were (**relics, not truths about this project**; see `docs/reference/README.md`):
 
-- `docs/reference/old-project-state.json`: the state file of the old project (parts, specs, mods, one weapon, the final values).
-- `docs/reference/old-project-hud.jpg`: a screenshot of the old project. Weapon status is shown at each slot (`ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`): type, magazine, storage, interval, reload. The booster and the halo (shield) have their own boxes. Resin (a resource) is at the top left. The worms are the enemies, and the small orange dash near one of them is a bullet in flight.
+- `docs/reference/relic-old-project-state.json`: the state file of the old project (parts, specs, mods, one weapon, the final values).
+- `docs/reference/relic-old-project-hud.jpg`: a screenshot of the old project. Weapon status is shown at each slot (`ShoulderL`, `ShoulderR`, `ArmL`, `ArmR`): type, magazine, storage, interval, reload. The booster and the halo (shield) have their own boxes. Resin (a resource) is at the top left. The worms are the enemies, and the small orange dash near one of them is a bullet in flight.
 
 ## Why it matters (the user's business reasoning)
 
