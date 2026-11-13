@@ -1434,7 +1434,7 @@ function fireWeapons(state, player) {
 // much, and what the resistance took off" with numbers: balancing weapons, finding why the avatar died, and data for a model.
 // It is { hits, totals }:
 //   hits    the last constants.audit.keepHits hits, oldest first (the rest are only counted in the totals). A hit is
-//           { frame, source, attack, target, parts, total, minimumApplied, shield, health }: parts is what resolveDamage said per
+//           { frame (the frame the screen shows when the hit is seen: the state after its step; review 2026-11-13, point 6), source, attack, target, parts, total, minimumApplied, shield, health }: parts is what resolveDamage said per
 //           type of damage ({ type, amount, points, fromShield, reduction, after }), total what it cost, minimumApplied whether
 //           the minimum damage was what counted, shield and health what the target really lost of each.
 //   totals  by "kind:attack" (the kind is the source without its number or place: "biter:bite", "avatar:repeater-arm",
@@ -1446,7 +1446,7 @@ function createAudit() {
 
 function recordHit(audit, state, source, attack, target, resolved, taken) {
   audit.hits.push({
-    frame: state.frame,
+    frame: state.frame + 1, // the frame the hit is seen in: state.frame counts up at the end of the step, so the state the screen shows after this step says state.frame + 1
     source,
     attack,
     target,

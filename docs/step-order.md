@@ -19,7 +19,7 @@ The code carries the same numbers in the comments of `step`. If one of the two c
 | 6 | Destruction (`removeDestroyed`) | Whoever has no health left leaves the scene, in one place. | At the end, so nothing is removed while a loop walks the list. |
 | 7 | The shield | The quiet frames count and the shield regenerates when the wait is over. | After the damage of this step. |
 
-The frame counter goes up at the very end.
+The frame counter goes up at the very end. So everything that happens inside the step from frame n is **seen** in the state of frame n + 1, the one the screen shows after the step; the audit writes a hit with that frame (`recordHit`, review of 2026-11-13, point 6; test 159), so a paused screen and the audit say the same number.
 
 ## Rules that follow from the order
 

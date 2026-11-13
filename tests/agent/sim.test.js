@@ -3506,7 +3506,7 @@ test("158 a Biter that died in the step does not strike: its decision to strike 
   assert.deepStrictEqual(plain(result.flags), [false, false]);
 });
 
-test("159 the audit writes every hit with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance) and a bullet on a Biter, and the totals add them up by kind of hit", () => {
+test("159 the audit writes every hit with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance), with the frame the screen shows when it is seen (the state after its step), and a bullet on a Biter, and the totals add them up by kind of hit", () => {
   const result = run(`
     ${ALONE_BITERS}
     ${ARMED}
@@ -3516,8 +3516,10 @@ test("159 the audit writes every hit with its numbers: a bite on the avatar (pun
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0;
     b.attacks.bite.windupFrames = 0;
+    const frameBefore = s.frame;
     step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
     const bite = JSON.parse(JSON.stringify(audit.hits[0]));
+    const frames = { before: frameBefore, after: s.frame };
 
     const t = armed(0);
     const target = t.s.actors[1];
@@ -3525,10 +3527,13 @@ test("159 the audit writes every hit with its numbers: a bite on the avatar (pun
     const shots = createAudit();
     for (let i = 0; i < 60 && shots.hits.length === 0; i++) step(t.s, { move: { x: 0, y: 0 } }, t.bp, null, shots);
     const bullet = JSON.parse(JSON.stringify(shots.hits[0]));
-    return { bite, bullet, biteTotals: JSON.parse(JSON.stringify(audit.totals)), bulletTotals: JSON.parse(JSON.stringify(shots.totals)), health: avatar.health.now };
+    return { bite, frames, bullet, biteTotals: JSON.parse(JSON.stringify(audit.totals)), bulletTotals: JSON.parse(JSON.stringify(shots.totals)), health: avatar.health.now };
   `, QUIET);
   const bite = plain(result.bite);
-  assert.deepStrictEqual([bite.source, bite.attack, bite.target, bite.frame], ["biter_0", "bite", "avatar_1", 0]);
+  assert.deepStrictEqual([bite.source, bite.attack, bite.target], ["biter_0", "bite", "avatar_1"]);
+  // The frame of a hit is the frame the screen shows when it is seen: the state after the step it happened in (0 before, 1 after).
+  assert.deepStrictEqual(plain(result.frames), { before: 0, after: 1 });
+  assert.strictEqual(bite.frame, result.frames.after);
   assert.strictEqual(bite.parts.length, 1);
   const part = bite.parts[0];
   assert.deepStrictEqual([part.type, part.points, part.fromShield], ["puncture", 10, 0]);
