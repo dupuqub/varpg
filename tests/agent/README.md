@@ -260,6 +260,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 166 | The blow comes even if the target is gone during the windup: it lands on nothing and the recovery begins at the same step. | Same rule as the Biter's strike (test 158 and the windup test); step F of the sword. |
 | 167 | The combat blueprint has the sword arm (right) and the repeater arm (left): 7750 kg loaded, one sword and one weapon in the avatar of Chamber 2. | The user's decision: the sword is the second arm, the right one; step G of the sword (the tests of the repeater keep their own blueprint, without the sword). |
 | 168 | AGENTS.md opens with the two foundations (go slowly; break big tasks into small closed steps), before any other section. | The user: these two are "the base of everything". |
+| 169 | The first dash cannot touch an object, for every blueprint in the data, with the shield full. The dash is played, not computed, in an empty world: the starter blueprint dashes 142.5 px in 19 frames, the combat blueprint 147.45 px in 21 (heavier, so slower to fall back to its top speed), both born with the radius of the ring (16 x 1.8 = 28.8). With the largest object of the layer (32): 147.45 + 28.8 + 32 = 208.25, below the safe radius of 220. With the old safe radius of 200 both blueprints break the promise (203.3 and 208.25). | Review of 2026-11-13, point 1 (issue 4): the ring of the shield and the heavier blueprint had made the old 200 too small. |
 
 ### Benchmark of the grid (not a test)
 

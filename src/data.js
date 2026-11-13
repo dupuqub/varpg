@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 45;
+const DEFINITIONS_VERSION = 46;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -396,7 +396,7 @@ const DEFINITIONS = {
         small: {
           cellSize: 256, // guess: the world is cut into squares of this size (4 cells of the collision grid), with at most one object in each
           chancePercent: 35, // target: about 11 objects on a 1920 x 1080 screen = (1920 x 1080 / 256 / 256) squares x 0.35 (enough to dodge, too few to wall you in)
-          safeRadius: 200, // guess: bigger than the first dash (142 px) plus the avatar radius (16) and the largest radius of an object (32) = 190, so the very first dash cannot hit an object. No object closer than this to the start (0, 0)
+          safeRadius: 220, // rule, rounded up: bigger than the longest first dash of any blueprint (147.45 px, the combat blueprint, heavier and so slower to fall back to its top speed) plus the avatar radius at birth, which is the ring of a full shield (28.8, not the body of 16), plus the largest radius of an object (32) = 208.25, so the very first dash cannot hit an object; test 169 plays the dash of every blueprint and checks it. (It was 200, from the starter dash and the body radius, before the shield had a ring.) No object closer than this to the start (0, 0)
           kinds: ["rock", "shroom"], // which objects the seed places: each square that has an object picks one of these with the same chance (guess: no reason yet for one to be rarer; the user's decision: 50/50 for now, a correction for later)
         },
       },

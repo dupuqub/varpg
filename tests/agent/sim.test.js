@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 45, hash: "7b6076b08cad22ef" };
+const DATA_FINGERPRINT = { version: 46, hash: "536cf2ad19d3c135" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3773,4 +3773,55 @@ test("168 AGENTS.md opens with the two foundations (go slowly; break big tasks i
   assert.ok(text.slice(first).startsWith("\n## The two foundations"), "the first section must be the two foundations");
   const section = text.slice(first, text.indexOf("\n## ", first + 5));
   assert.ok(/Go slowly and deliberately/.test(section) && /Break every big task into small steps/.test(section));
+});
+
+// ---- The first dash and the safe ground around the start (review 2026-11-13, point 1; issue 4) ----
+// The promise of safeRadius: the very first dash, straight from the start, cannot touch an object. The avatar is born with a
+// full shield, so its radius at that moment is the ring, not the body; and the blueprint decides the top speed, so a heavier
+// mecha dashes farther before it is back at its top speed. So the dash is not computed by a formula here: it is played, for
+// every blueprint in the data, in a world with no objects and nobody else, with the real shield.
+function firstDash(where) {
+  return plain(run(`
+    const result = {};
+    for (const name of Object.keys(DEFINITIONS).filter((key) => key.endsWith("Blueprint"))) {
+      const blueprint = DEFINITIONS[name];
+      const s = createChamber2State(1, 1, blueprint);
+      const avatar = s.actors.find((actor) => actor.id === AVATAR_ID);
+      const radius = avatar.radius; // at birth: the ring, when the blueprint has a shield
+      step(s, { move: { x: 1, y: 0 }, dash: true }, blueprint);
+      let frames = 1;
+      while (Math.abs(avatar.move.velocity.x) > avatar.speed && frames < 600) {
+        step(s, { move: { x: 1, y: 0 }, dash: false }, blueprint);
+        frames += 1;
+      }
+      result[name] = { radius, distance: avatar.position.x, frames };
+    }
+    const layers = DEFINITIONS.terrain.objects.layers;
+    const safe = Object.keys(layers).map((id) => ({ id, safeRadius: layers[id].safeRadius, largest: objectMargin(layers[id]) }));
+    return { dashes: result, safe };
+  `, where));
+}
+// Every pair of a blueprint and a layer whose promise is broken: dash + radius at birth + largest object of the layer >= safeRadius.
+function brokenPromises(measured) {
+  const broken = [];
+  for (const [name, dash] of Object.entries(measured.dashes)) {
+    for (const layer of measured.safe) {
+      const needed = dash.distance + dash.radius + layer.largest;
+      if (!(needed < layer.safeRadius)) broken.push(name + " in " + layer.id + ": " + needed + " >= " + layer.safeRadius);
+    }
+  }
+  return broken;
+}
+const EMPTY_SHIELDED = (patch = (text) => text) => loadGame((text) => patch(text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }").replace(/biters: \{ count: \d+ \}/, "biters: { count: 0 }")), { shield: true });
+
+test("169 the first dash cannot touch an object, for every blueprint in the data, with the shield full: the starter dashes 142.5 px and the combat 147.45 px, born at the ring (28.8), so with the largest object (32) the safe radius must be above 208.25", () => {
+  const measured = firstDash(EMPTY_SHIELDED());
+  assert.deepStrictEqual(measured.dashes.starterBlueprint, { radius: 28.8, distance: 142.5, frames: 19 });
+  assert.deepStrictEqual(measured.dashes.combatBlueprint, { radius: 28.8, distance: 147.45, frames: 21 });
+  assert.deepStrictEqual(measured.safe.map((layer) => layer.largest), [32]);
+  assert.deepStrictEqual(brokenPromises(measured), []);
+
+  // The check can fail: with the old safe radius of 200 both blueprints break it (203.3 and 208.25).
+  const old = firstDash(EMPTY_SHIELDED((text) => patchOnce(text, "safeRadius: 220,", "safeRadius: 200,")));
+  assert.strictEqual(brokenPromises(old).length, 2);
 });
