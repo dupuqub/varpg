@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 47;
+const DEFINITIONS_VERSION = 48;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -31,6 +31,11 @@ const DEFINITIONS = {
 
   actors: {
     avatar: {
+      // tags / ignores (the user, 2026-11-13; see "Tags of exclusion" in AGENTS.md): tags say what the thing is, ignores the tags its
+      //   body and its attacks do not hurt. By default every enemy ignores "enemy" (no enemy hurts another enemy), and "object"
+      //   (an enemy and the scenery hurt nobody between themselves, as today); the avatar ignores "ally" (its own hitboxes are born on it).
+      tags: ["ally"],
+      ignores: ["ally"],
       name: "Avatar",
       // The maximum health, the resistance, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
@@ -76,6 +81,8 @@ const DEFINITIONS = {
     //   16 frames (0.27 s). 0.0625: a stop in 32 frames (0.53 s), twice the time of speeding up, so it slides. Powers
     //   of two, like the avatar's. A Dummy always wants to walk, so its deceleration waits for the day one stops.
     dummy: {
+      tags: ["enemy"],
+      ignores: ["enemy", "object"],
       name: "Dummy",
       size: { min: 8, max: 16 },
       weightPerRadius: 100,
@@ -120,6 +127,8 @@ const DEFINITIONS = {
     //     frame it is born and is gone; who is not there then is not hit; what the eye sees afterwards is a trace in the visual
     //     state, see constants.visual). A hitbox hurts once.
     biter: {
+      tags: ["enemy"],
+      ignores: ["enemy", "object"],
       name: "Biter",
       size: { min: 12, max: 20 },
       weightPerRadius: 100,
@@ -167,6 +176,8 @@ const DEFINITIONS = {
     //   value): the weight goes from 100 x 16 = 1600 kg to 100 x 32 = 3200 kg.
     // healthRange: the user's first numbers, "between 10 and 20" for a Rock of the first map.
     rock: {
+      tags: ["object"],
+      ignores: ["enemy"],
       name: "Rock",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
@@ -179,6 +190,8 @@ const DEFINITIONS = {
     // bounce (the user's values): 0.2 at the smallest radius and 1 at the largest, in a straight line:
     //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
     shroom: {
+      tags: ["object"],
+      ignores: ["enemy"],
       name: "Shroom",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,

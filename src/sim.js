@@ -108,6 +108,16 @@ function isAvatar(actor) {
   return actor.id === AVATAR_ID;
 }
 
+// The tags of a thing (what it is: "ally", "enemy", "object") and the tags its body and attacks ignore, from its recipe
+// (the user, 2026-11-13; "Tags of exclusion" in AGENTS.md). They are the same for every thing of a type, so the state does not carry them.
+function tagsOf(thing) {
+  return definitionOf(thing).tags;
+}
+
+function ignoredTagsOf(thing) {
+  return definitionOf(thing).ignores;
+}
+
 // The definitions of the parts of a blueprint. An unknown id fails loudly.
 function partsOf(blueprint) {
   return blueprint.parts.map((id) => {

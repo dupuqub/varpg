@@ -1417,8 +1417,8 @@ test("73 the objects are the rock and the Shroom, each complete and with its own
     assert.strictEqual(object.weightPerRadius * object.size.max, 3200, id);
   }
   // Nothing is in an entry without being used: no fixed health, no initial state, no placeholder.
-  assert.deepStrictEqual(Object.keys(objects.rock), ["name", "size", "weightPerRadius", "healthRange"]);
-  assert.deepStrictEqual(Object.keys(objects.shroom), ["name", "size", "weightPerRadius", "healthRange", "bounce"]); // only the Shroom bounces
+  assert.deepStrictEqual(Object.keys(objects.rock), ["tags", "ignores", "name", "size", "weightPerRadius", "healthRange"]);
+  assert.deepStrictEqual(Object.keys(objects.shroom), ["tags", "ignores", "name", "size", "weightPerRadius", "healthRange", "bounce"]); // only the Shroom bounces
   assert.deepStrictEqual(objects.shroom.bounce, { min: 0.2, max: 1 });
 });
 
@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 47, hash: "a84fbddec862cc2b" };
+const DATA_FINGERPRINT = { version: 48, hash: "15200e62b798b5e3" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3979,4 +3979,23 @@ test("175 the screen writes the two descriptive lines of the combat audit: start
   assert.ok(body("playGame").includes("audit.push(combatAuditResumeLine(state.frame))"), "playGame must write the resume line");
   assert.ok(!body("stepBack").includes("audit"), "stepBack must not touch the log");
   assert.ok(!body("stepForward").includes("audit"), "stepForward must not touch the log itself (a new step goes through stepLive, which the rules write from)");
+});
+
+// ---- Tags of exclusion (the user, 2026-11-13; step B) ----
+test("176 every type has tags and a list of ignored tags in its recipe: the avatar is ally and ignores ally; the Biter and the Dummy are enemy and ignore enemy and object; the rock and the Shroom are object and ignore enemy; tagsOf and ignoredTagsOf read them, from the recipe (the state carries none)", () => {
+  const result = run(`
+    const types = ["avatar", "dummy", "biter", "rock", "shroom"];
+    const table = {};
+    for (const type of types) table[type] = { tags: tagsOf({ type }), ignores: ignoredTagsOf({ type }) };
+    return { table, state: Object.keys(createChamber2State(1, 1, createRun(1, DEFINITIONS.combatBlueprint).blueprint).actors[1]) };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.table, {
+    avatar: { tags: ["ally"], ignores: ["ally"] },
+    dummy: { tags: ["enemy"], ignores: ["enemy", "object"] },
+    biter: { tags: ["enemy"], ignores: ["enemy", "object"] },
+    rock: { tags: ["object"], ignores: ["enemy"] },
+    shroom: { tags: ["object"], ignores: ["enemy"] },
+  });
+  assert.ok(!r.state.includes("tags") && !r.state.includes("ignores"), "an actor of the state must carry no tags: " + r.state);
 });
