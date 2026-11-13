@@ -2,6 +2,8 @@
 
 const screens = document.querySelectorAll(".screen");
 
+document.getElementById("build-label").textContent = "BUILD " + buildText();
+
 function showScreen(id) {
   for (const screen of screens) {
     screen.hidden = screen.id !== id;

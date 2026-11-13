@@ -126,12 +126,20 @@ function dataText() {
 
 // refreshLine = a line about how fast the browser calls us (it is measured
 // over time, so the caller gives it).
+// What the entry screen and ENVIRONMENT say about the build: the commit and the time of the publication (or "local"), and the
+// version of the data (which changes whenever a number or a rule of the data changes).
+function buildText() {
+  const when = BUILD.date === "" ? "" : ` \u00B7 ${BUILD.date}`;
+  return `${BUILD.commit}${when} \u00B7 data v${DEFINITIONS_VERSION}`;
+}
+
 function environmentText(refreshLine) {
   const pads = navigator.getGamepads
     ? Array.from(navigator.getGamepads()).filter((pad) => pad && pad.connected)
     : [];
   return [
     "ENVIRONMENT",
+    `build: ${buildText()}`,
     `user agent: ${navigator.userAgent}`,
     `screen: ${screen.width} x ${screen.height}, device pixel ratio ${window.devicePixelRatio}`,
     `window: ${window.innerWidth} x ${window.innerHeight}`,
