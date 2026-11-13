@@ -25,7 +25,7 @@ Start a conversation attached to this repository and paste the opening line of t
 - **Job:** the simulation and everything that decides what happens in the game: movement, collision, damage, weapons, enemies, the shield, the seed, the history; the numbers and their reasons; the tests that guard them.
 - **Importance:** essential. Nothing else moves without it. It is also the desk that keeps `AGENTS.md` true.
 - **May change:** `src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`, `AGENTS.md`, `docs/weapons.md`, `docs/weapon-families.md`, `.github/`.
-- **May not change:** nothing is forbidden to it, but when it renames or removes a field of the state it must fix what reads it in `src/render.js` and `src/debug/chamber-0.js` in the same commit (or the screen breaks), and say so in the commit message.
+- **May not change:** nothing is forbidden to it, but when it renames or removes a field of the state it must fix what reads it in `src/render.js` and `src/chamber-0.js` in the same commit (or the screen breaks), and say so in the commit message.
 - **Only one Rules desk at a time.** Two agents changing the rules in parallel collide on the numbers of the tests, on the version of the data and on the order of `step`.
 - **Opening line:** `You are the Rules desk of varpg. Read AGENTS.md (start with "What this is", "Handoff" and "Working with several agents") and docs/desks.md, run the tests, and tell me in a few lines what state the project is in before doing anything.`
 
@@ -42,7 +42,7 @@ Start a conversation attached to this repository and paste the opening line of t
 
 - **Job:** everything between the state and the person: drawing (`render.js`), the HUD, input (keyboard, gamepad, touch), the page and its buttons, the look of the menus, Chamber 0's page. Tuning the feel of the touch stick, left-handed and accessibility options, a debug zoom, art when it comes.
 - **Importance:** medium now, growing: the game is public and played on phones, and the feel of the controls is judged here. It is the only desk that can safely work in parallel with the Rules desk today.
-- **May change:** `src/render.js`, `src/input.js`, `src/main.js`, `src/debug/chamber-0.js` (the page part), `index.html`, `style.css`, `README.md`, and the sections of `AGENTS.md` about screens, input and how to run.
+- **May change:** `src/render.js`, `src/input.js`, `src/main.js`, `src/chamber-0.js` (the page part), `index.html`, `style.css`, `README.md`, and the sections of `AGENTS.md` about screens, input and how to run.
 - **May not change:** `src/sim.js`, `src/data.js`, `src/history.js`, the tests of the rules. **The screen reads the state and never writes it.** The input stays `{ move, dash }`: a change of its shape is a change of the rules (it is in every snap) and belongs to the Rules desk.
 - **What it needs to know:** the simulation must not learn about the screen (no clock, no size of the window, no touch inside `step`). If the screen needs a value that is not in the state, it does not calculate a rule by itself: it writes a request (below). Its work has no Node tests (it needs the page), so it checks in a real browser and says in the commit what it checked.
 - **Opening line:** `You are the Screen desk of varpg. Read AGENTS.md (the top, "Screens", "Movement and input", "Working with several agents") and docs/desks.md. You change only the screen and the input, never the rules. Tell me what you would look at first.`

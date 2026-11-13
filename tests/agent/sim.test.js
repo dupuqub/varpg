@@ -3352,7 +3352,7 @@ test("152 every function or constant that the \"Code layout\" of AGENTS.md names
   const layout = agents.slice(agents.indexOf("## Code layout"), agents.indexOf("## Ideas"));
   assert.ok(layout.length > 1000, "the Code layout section was not found in AGENTS.md");
   const names = new Set([...layout.matchAll(/`([A-Za-z_][A-Za-z0-9_]*)`/g)].map((match) => match[1]));
-  const code = fs.readdirSync(SRC, { recursive: true }).filter((name) => name.endsWith(".js")).map((name) => fs.readFileSync(path.join(SRC, name), "utf8")).join("\n");
+  const code = fs.readdirSync(SRC).map((name) => fs.readFileSync(path.join(SRC, name), "utf8")).join("\n");
   const missing = [...names].filter((name) => !new RegExp("(function|const|let)\\s+" + name + "\\b").test(code));
   assert.ok(names.size > 50, "too few names were read from the Code layout: " + names.size);
   assert.deepStrictEqual(missing, []);
