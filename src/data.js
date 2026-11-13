@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 43;
+const DEFINITIONS_VERSION = 44;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -377,9 +377,10 @@ const DEFINITIONS = {
   starterBlueprint: {
     parts: ["shoulder-r", "shoulder-l", "arm-r", "arm-l", "head", "torso", "legs", "generator", "booster"],
   },
-  // The blueprint of Chamber 2 (combat): the starter with the repeater arm in place of the plain Arm L.
+  // The blueprint of Chamber 2 (combat): the starter with the sword arm in place of the plain Arm R and the repeater arm in
+  // place of the plain Arm L (the user, 2026-11-13: the sword is the right arm). Loaded it weighs 5350 + 2400 of ammunition = 7750 kg, under the 8000 of the Torso.
   combatBlueprint: {
-    parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"],
+    parts: ["shoulder-r", "shoulder-l", "sword-arm", "repeater-arm", "head", "torso", "legs", "generator", "booster"],
   },
 
   // How the ground is filled (provisional values, to be tuned). The seed places the objects, every one of them.

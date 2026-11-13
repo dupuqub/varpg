@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 43, hash: "5876c29bcd178cf6" };
+const DATA_FINGERPRINT = { version: 44, hash: "eb108685c31b44b5" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2924,7 +2924,7 @@ const PIERCE_THREE = loadGame((text) => text.replace("chancePercent: 35", "chanc
 // they stay where the test puts them and do not bite). `bp` is the blueprint to give to step.
 const ARMED = `
   function armed(...numbers) {
-    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
     const bp = run.blueprint;
     const s = createChamber2State(1, 1, bp);
     s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter_" + n))];
@@ -2934,7 +2934,7 @@ const ARMED = `
   const idle = { move: { x: 0, y: 0 } };
 `;
 
-test("133 the combat blueprint carries a repeater arm in place of the plain Arm L: it weighs 5150 kg plus 400 rounds of 6 kg (7550 loaded, under the 8000 of the Torso), the avatar starts with the weapon full and the speed that weight gives; the starter blueprint has no weapon at all", () => {
+test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests of the repeater play with this one, without the sword): it weighs 5150 kg plus 400 rounds of 6 kg (7550 loaded, under the 8000 of the Torso), the avatar starts with the weapon full and the speed that weight gives; the starter blueprint has no weapon at all", () => {
   const result = run(`
     ${ARMED}
     const { s, bp } = armed();
@@ -3139,7 +3139,7 @@ test("140 a weapon must be sound when the data loads: only the closest rule, who
 test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with the avatar standing among 40 Biters give the same state twice and a clean cross-check, rounds are spent, the mecha is lighter, and Biters die", () => {
   const result = run(`
     const play = () => {
-      const r = createRun(1, DEFINITIONS.combatBlueprint);
+      const r = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, r.blueprint);
       const h = createHistory(s, r.blueprint);
       for (let i = 0; i < 900; i++) {
@@ -3184,7 +3184,7 @@ test("142 the body slam follows the weight the avatar has now: it is made once a
 
 test("143 the weight of the avatar comes from the parts of the blueprint and the rounds in its own weapon state, so the two cannot disagree: an avatar made armed and stepped with a plain blueprint still carries its ammunition, and one made plain carries none", () => {
   const result = run(`
-    const armed = createRun(1, DEFINITIONS.combatBlueprint).blueprint;
+    const armed = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] }).blueprint;
     const plain = createRun(1).blueprint;
     const a = createChamber2State(1, 1, armed); step(a, { move: { x: 0, y: 0 } }, plain);
     const b = createChamber2State(1, 1, plain); step(b, { move: { x: 0, y: 0 } }, armed);
@@ -3408,7 +3408,7 @@ test("154 the Radar is the only truth about what can be aimed at: the Head gives
 test("155 the visual state holds no truth: 600 frames of Chamber 2 with it and without it give exactly the same state, and the cross-check is clean", () => {
   const result = run(`
     const play = (withVisual) => {
-      const run = createRun(1, DEFINITIONS.combatBlueprint);
+      const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, run.blueprint);
       const visual = withVisual ? createVisual() : null;
       const history = createHistory(s, run.blueprint, visual);
@@ -3552,7 +3552,7 @@ const CAPPED = loadGame((text) => text.replace("keepHits: 100", "keepHits: 10"))
 test("160 the audit holds no truth and is bounded: 600 frames of Chamber 2 with it and without it give the same state; only the last hits are kept (here 10; the totals count all); the history keeps a copy per snap, and going back shows the audit of that frame", () => {
   const result = run(`
     const play = (withAudit) => {
-      const run = createRun(1, DEFINITIONS.combatBlueprint);
+      const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, run.blueprint);
       const audit = withAudit ? createAudit() : null;
       const history = createHistory(s, run.blueprint, null, audit);
@@ -3750,4 +3750,19 @@ test("166 the blow comes even if the target is gone during the windup (as the Bi
     return { phase: sword.phase, frames: sword.frames, actors: s.actors.length, hitboxes: s.hitboxes.length };
   `);
   assert.deepStrictEqual(plain(result), { phase: "recovery", frames: 18, actors: 1, hitboxes: 0 });
+});
+
+test("167 the combat blueprint has the sword arm (the right arm) and the repeater arm (the left): 5350 kg plus 2400 of ammunition is 7750, under the 8000 of the Torso, and the avatar of Chamber 2 starts with one sword and one weapon", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    const avatar = s.actors[0];
+    return { parts: run.blueprint.parts, loaded: totalWeight(run.blueprint), capacity: avatar.capacity ?? null, melees: avatar.melees.map((m) => m.part), weapons: avatar.weapons.map((w) => w.part), attacks: Object.keys(avatar.attacks) };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.parts, ["shoulder-r", "shoulder-l", "sword-arm", "repeater-arm", "head", "torso", "legs", "generator", "booster"]);
+  assert.strictEqual(r.loaded, 7750);
+  assert.deepStrictEqual(r.melees, ["sword-arm"]);
+  assert.deepStrictEqual(r.weapons, ["repeater-arm"]);
+  assert.ok(r.attacks.includes("sword-arm") && r.attacks.includes("repeater-arm"));
 });
