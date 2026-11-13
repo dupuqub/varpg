@@ -287,6 +287,27 @@ function assertValidDefinitions() {
     const smallest = Math.min(...Object.values(DEFINITIONS.actors).filter((actor) => actor.size).map((actor) => actor.size.min));
     if (bullet.speed >= bullet.radius + smallest) throw new Error("The bullet of " + where + " moves " + bullet.speed + " px per frame and could skip over an actor of radius " + smallest);
   }
+  // The melee of a part (a sword): a known target rule, whole frames, a cone that fits in a half turn, and a damage by type like the attacks.
+  for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
+    const melee = part.melee;
+    if (!melee) continue;
+    const where = "the melee of the part " + id;
+    if (part.weapon) throw new Error("The part " + id + " has weapon and melee: a part is one or the other");
+    if (melee.target !== "closest") throw new Error("The target of " + where + " is " + melee.target + ", and the only rule is closest");
+    if (!Number.isInteger(melee.reach) || melee.reach < 1) throw new Error("The reach of " + where + " must be a whole number of pixels, 1 or more, and it is " + melee.reach);
+    if (!(melee.angleDegrees > 0 && melee.angleDegrees <= 180)) throw new Error("The angleDegrees of " + where + " must be above 0 and at most 180 (half of it is the opening to each side, at most 90), and it is " + melee.angleDegrees);
+    for (const field of ["windupFrames", "recoveryFrames"]) {
+      if (!Number.isInteger(melee[field]) || melee[field] < 1) throw new Error("The " + field + " of " + where + " must be a whole number of frames, 1 or more, and it is " + melee[field]);
+    }
+    if (!(melee.aimCorrection >= 0 && melee.aimCorrection <= 1)) throw new Error("The aimCorrection of " + where + " must go from 0 (never turns) to 1, and it is " + melee.aimCorrection);
+    const types = Object.keys(melee.damage ?? {});
+    if (types.length === 0) throw new Error("The damage of " + where + " is missing: { type: { flat, perWeight } }");
+    for (const type of types) {
+      const amount = melee.damage[type];
+      if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of " + where + " has " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
+      if (!(amount.flat >= 0 && amount.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(amount));
+    }
+  }
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {

@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 42;
+const DEFINITIONS_VERSION = 43;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -332,6 +332,33 @@ const DEFINITIONS = {
         reloadFrames: 90,
         rounds: { weight: 6, magazine: 30, reserve: 370 },
         projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 },
+      },
+    },
+    // The sword arm (the user, 2026-11-13): a melee weapon, the second arm. It takes the place of the plain Arm R (the right arm;
+    // the repeater is the left). It is not a "weapon" (that is the recipe of a gun, with rounds): it is "melee", and it has no ammunition.
+    // All the numbers are GUESSES to be tuned by playing, erring upward (the user, 2026-11-11: "better to look overpowered than a rubber duck").
+    // weight 850: the plain arm's 650 plus 200 for the blade (guess).
+    // melee.target "closest": the Radar of the Head decides who can be aimed at; the swing starts when that target is within the reach of the strike.
+    // melee.reach 90: guess, about five and a half bodies of the avatar (radius 16), measured from the edge of the body. Far enough to be felt, short enough that the Biter must come to you.
+    // melee.angleDegrees 90: guess, a quarter of a circle in front (45 to each side); the user: any overlap with the cone hits.
+    // melee.windupFrames 12: guess, 0.2 s, so the blow is read by the eye (the Biter has 15).
+    // melee.recoveryFrames 18: guess, 0.3 s; with the windup, a swing every 30 frames, two a second.
+    // melee.aimCorrection 0.1: guess; the aim is locked when the windup starts, but each frame of the windup it moves 10% of the way toward
+    //   the direction of the target (the user: "some room for correction"). No trigonometry: blend the two directions and make the result length 1.
+    // melee.damage puncture 30 = flat 30 + perWeight 0 (guess: a Biter has 30 health, so one blow kills it; err upward). The weight does not
+    //   change the sword for now (the user, 2026-11-13), but the number is written { flat, perWeight } so a node of the skill tree can raise perWeight later.
+    "sword-arm": {
+      name: "Sword arm",
+      weight: 850,
+      specs: {},
+      melee: {
+        target: "closest",
+        reach: 90,
+        angleDegrees: 90,
+        windupFrames: 12,
+        recoveryFrames: 18,
+        aimCorrection: 0.1,
+        damage: { puncture: { flat: 30, perWeight: 0 } },
       },
     },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },

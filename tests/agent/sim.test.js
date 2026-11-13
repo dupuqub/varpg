@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 42, hash: "94b6ab1c6a587366" };
+const DATA_FINGERPRINT = { version: 43, hash: "5876c29bcd178cf6" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3641,4 +3641,19 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
   assert.deepStrictEqual(r.inside.traceCone, r.inside.cone);
   assert.deepStrictEqual(r.inside.tip, { x: 16, y: 0 }); // born at the edge of the owner, like every hitbox
   assert.strictEqual(r.inside.left, 0); // one frame: gone
+});
+
+test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
+  const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
+  assert.deepStrictEqual(sword.melee, { target: "closest", reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { puncture: { flat: 30, perWeight: 0 } } });
+  assert.strictEqual(sword.weapon, undefined);
+  const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
+  bad("reach: 90,", "reach: 0,", /reach of the melee/);
+  bad("angleDegrees: 90,", "angleDegrees: 200,", /angleDegrees of the melee/);
+  bad("windupFrames: 12,", "windupFrames: 0,", /windupFrames of the melee/);
+  bad("recoveryFrames: 18,", "recoveryFrames: 1.5,", /recoveryFrames of the melee/);
+  bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
+  bad("damage: { puncture: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: 0 } },", /not a type of damage/);
+  bad("damage: { puncture: { flat: 30, perWeight: 0 } },", "damage: { puncture: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
+  bad("      melee: {", "      weapon: { target: \"closest\", intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
