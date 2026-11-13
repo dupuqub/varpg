@@ -53,6 +53,7 @@ let fpsSince = null;
 // and the run goes on from there with new inputs (the agent's default, to be confirmed by the user).
 let paused = false;
 let viewIndex = 0;
+let audit = null; // the audit of the hits (src/sim.js): the rules write every hit into it and never read it
 let visual = null; // the visual state (src/sim.js): traces for the eye; the rules write it and never read it
 
 function startChamber(id) {
@@ -67,7 +68,8 @@ function startChamber(id) {
     throw new Error("The canvas is " + canvas.width + " x " + canvas.height + " and the rules expect " + state.grid.screenWidth + " x " + state.grid.screenHeight);
   }
   visual = createVisual();
-  runHistory = createHistory(state, run.blueprint, visual);
+  audit = createAudit();
+  runHistory = createHistory(state, run.blueprint, visual, audit);
   paused = false;
   viewIndex = 0;
   lastTimestamp = null;
@@ -124,8 +126,8 @@ function loop(timestamp) {
 // One step of the live game with the input of now, saved in the history. The shown snap is then the last one.
 function stepLive() {
   const input = readInput();
-  step(state, input, run.blueprint, visual);
-  recordFrame(runHistory, state, input, visual);
+  step(state, input, run.blueprint, visual, audit);
+  recordFrame(runHistory, state, input, visual, audit);
   viewIndex = runHistory.snaps.length - 1;
 }
 
@@ -149,6 +151,7 @@ function stepBack() {
   viewIndex -= 1;
   state = stateFromSnap(runHistory, viewIndex);
   visual = visualFromSnap(runHistory, viewIndex);
+  audit = auditFromSnap(runHistory, viewIndex);
   draw(context, state, run.blueprint, fps, visual);
   updateControls();
 }
@@ -160,6 +163,7 @@ function stepForward() {
     viewIndex += 1;
     state = stateFromSnap(runHistory, viewIndex);
     visual = visualFromSnap(runHistory, viewIndex);
+    audit = auditFromSnap(runHistory, viewIndex);
   } else {
     stepLive();
   }

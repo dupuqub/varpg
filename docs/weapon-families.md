@@ -56,7 +56,7 @@ The user's reasoning: the sword slashes for more damage per target; the spear hi
 
 ## Before the first melee weapon (a checklist, in order)
 
-1. **Store the record of a hit.** `resolveDamage` already makes it; nothing keeps it. Without it, balancing sword against spear is blind and the user's transparency axis has nothing to show.
+1. **Store the record of a hit.** *(Done 2026-11-13: the audit, see `AGENTS.md`.)* It used to be that `resolveDamage` made it and nothing kept it. Without it, balancing sword against spear is blind and the user's transparency axis has nothing to show.
 2. **Merge the two "make a hitbox" copies** into one function that takes the owner, the attack and a direction, and reads a hitbox recipe (shape, size, frames, motion, pierce). Rename the weapon's `projectile` field to something that fits all families (it is the hitbox recipe).
 3. **A bench of weapons** (see below). It is what turns "I think the spear is balanced" into a number.
 4. **Circle at a chosen point** and **attached hitboxes**, since they are small and the sword needs the second one.

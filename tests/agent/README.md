@@ -250,6 +250,8 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 156 | A trace is born at age 0 where a one-frame hitbox was born, ages one frame per step and goes at 12; a bullet leaves none; the history keeps the visual state per snap and going back shows that frame's traces. | The user's decision: the eye sees what the rules no longer need (a one-frame bite), and stepping back must show it too. |
 | 157 | Things are born after everyone has moved: a bullet fired in a step where the avatar dashes is born at the avatar's final position, toward the target as seen from there, and the bite of a Biter is born toward the avatar's final position. | The user's decision, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really are. |
 | 158 | A Biter that died in the step does not strike: its decision triggers nothing (only the living Biter leaves a trace) and the flag goes down anyway. | The user's decision, 2026-11-13: the Biter dies and does not attack; the flag triggers nothing. |
+| 159 | The audit writes every hit with its numbers: a bite on the avatar (puncture against 10 points of resistance: reduction 10/110, total, shield and health lost), a bullet on a Biter, and the totals by kind of hit. | The user's axis of transparency: who hurt whom, with what, for how much, and what the resistance took off. |
+| 160 | The audit holds no truth and is bounded: the same state with it and without it, only the last hits kept (10 in the test; the totals count all), a copy per snap in the history and going back shows that frame's audit. | Same rule as the visual state; the states stay cheap and a replay does not count a hit twice. |
 
 ### Benchmark of the grid (not a test)
 

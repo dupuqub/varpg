@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 41;
+const DEFINITIONS_VERSION = 42;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -224,6 +224,11 @@ const DEFINITIONS = {
     //   about the same from 60 to 100 with the Dummies of today; it is to be measured again when the actors change.
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 },
+
+    // The audit of the hits (the user, 2026-11-13; see createAudit in src/sim.js).
+    // audit.keepHits 100: guess, a few seconds of a crowd fight (40 Biters give the avatar a few hits a second, and the weapons add
+    //   theirs); the older hits are gone from the list but stay counted in the totals, which are never cut.
+    audit: { keepHits: 100 },
 
     // The visual state (the user, 2026-11-13): what the eye sees for longer than the rules need (see createVisual in src/sim.js).
     // visual.traceFrames 12: guess, 0.2 s: long enough to see where a one-frame hitbox was (a bite, later a sword), short

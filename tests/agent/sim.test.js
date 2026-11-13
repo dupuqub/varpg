@@ -1681,13 +1681,13 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
     overlap();
     face(d, 180); // walking toward the avatar
     const blueprint = createRun(1).blueprint;
-    touchActors(s, [key], d, avatar, key, blueprint); // was touching: no new angle, no hit
+    touchActors(s, [key], d, avatar, key); // was touching: no new angle, no hit
     const kept = d.wander.turns;
     const healthKept = [d.health.now, avatar.health.now];
     const gap = Math.hypot(d.position.x - avatar.position.x, d.position.y - avatar.position.y) - (16 + d.radius);
     const avatarPushed = avatar.position.x; // the avatar's share of the 5 px overlap: the Dummy's weight over the sum
     overlap();
-    touchActors(s, [], d, avatar, key, blueprint); // new contact: a new angle, and a hit
+    touchActors(s, [], d, avatar, key); // new contact: a new angle, and a hit
     return { kept, healthKept, health: [d.health.now, avatar.health.now], turned: d.wander.turns, gap, avatarPushed, expectedPush: -5 * d.weight / (d.weight + avatar.weight), contacts: s.contacts };
   `, EMPTY);
   assert.strictEqual(result.kept, 0);
@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 41, hash: "fc71f8b0490459db" };
+const DATA_FINGERPRINT = { version: 42, hash: "94b6ab1c6a587366" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3504,4 +3504,78 @@ test("158 a Biter that died in the step does not strike: its decision to strike 
   `, QUIET);
   assert.strictEqual(result.traces, 1); // only the living Biter struck
   assert.deepStrictEqual(plain(result.flags), [false, false]);
+});
+
+test("159 the audit writes every hit with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance) and a bullet on a Biter, and the totals add them up by kind of hit", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    ${ARMED}
+    const audit = createAudit();
+    const s = aloneBiters(0);
+    const avatar = s.actors[0];
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    b.attacks.bite.windupFrames = 0;
+    step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
+    const bite = JSON.parse(JSON.stringify(audit.hits[0]));
+
+    const t = armed(0);
+    const target = t.s.actors[1];
+    target.position.x = 250; target.position.y = 0;
+    const shots = createAudit();
+    for (let i = 0; i < 60 && shots.hits.length === 0; i++) step(t.s, { move: { x: 0, y: 0 } }, t.bp, null, shots);
+    const bullet = JSON.parse(JSON.stringify(shots.hits[0]));
+    return { bite, bullet, biteTotals: JSON.parse(JSON.stringify(audit.totals)), bulletTotals: JSON.parse(JSON.stringify(shots.totals)), health: avatar.health.now };
+  `, QUIET);
+  const bite = plain(result.bite);
+  assert.deepStrictEqual([bite.source, bite.attack, bite.target, bite.frame], ["biter_0", "bite", "avatar_1", 0]);
+  assert.strictEqual(bite.parts.length, 1);
+  const part = bite.parts[0];
+  assert.deepStrictEqual([part.type, part.points, part.fromShield], ["puncture", 10, 0]);
+  assert.ok(Math.abs(part.reduction - 10 / 110) < 1e-12);
+  assert.ok(Math.abs(part.after - part.amount * (1 - 10 / 110)) < 1e-12);
+  assert.ok(Math.abs(bite.total - part.after) < 1e-12 && bite.minimumApplied === false);
+  assert.strictEqual(bite.shield, 0);
+  assert.ok(Math.abs(bite.health - bite.total) < 1e-9, "health lost " + bite.health);
+  assert.ok(Math.abs(result.health - (100 - bite.total)) < 1e-9);
+  const totals = plain(result.biteTotals)["biter:bite"];
+  assert.deepStrictEqual([Object.keys(plain(result.biteTotals)), totals.hits, totals.minimumApplied, totals.shield], [["biter:bite"], 1, 0, 0]);
+  assert.ok(Math.abs(totals.total - bite.total) < 1e-12 && Math.abs(totals.health - bite.total) < 1e-9);
+  const bullet = plain(result.bullet);
+  assert.deepStrictEqual([bullet.source, bullet.attack, bullet.target, bullet.total, bullet.parts[0].points], ["avatar_1", "repeater-arm", "biter_0", 10, 0]);
+  assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
+});
+
+// A game whose audit keeps only the last 10 hits.
+const CAPPED = loadGame((text) => text.replace("keepHits: 100", "keepHits: 10"));
+
+test("160 the audit holds no truth and is bounded: 600 frames of Chamber 2 with it and without it give the same state; only the last hits are kept (here 10; the totals count all); the history keeps a copy per snap, and going back shows the audit of that frame", () => {
+  const result = run(`
+    const play = (withAudit) => {
+      const run = createRun(1, DEFINITIONS.combatBlueprint);
+      const s = createChamber2State(1, 1, run.blueprint);
+      const audit = withAudit ? createAudit() : null;
+      const history = createHistory(s, run.blueprint, null, audit);
+      for (let i = 0; i < 600; i++) {
+        const input = { move: { x: 0, y: 0 } };
+        step(s, input, run.blueprint, null, audit);
+        recordFrame(history, s, input, null, audit);
+      }
+      return { state: JSON.stringify(s), check: crossCheck(history), audit, history };
+    };
+    const a = play(true);
+    const b = play(false);
+    const counted = Object.values(a.audit.totals).reduce((sum, t) => sum + t.hits, 0);
+    const back = auditFromSnap(a.history, 0);
+    const front = auditFromSnap(a.history, a.history.snaps.length - 1);
+    return { same: a.state === b.state, check: a.check, kept: a.audit.hits.length, keep: DEFINITIONS.constants.audit.keepHits, counted, backLast: back.hits[back.hits.length - 1].frame, frontLast: front.hits[front.hits.length - 1].frame, copy: back !== a.history.audits[0], none: auditFromSnap(b.history, 0) };
+  `, CAPPED);
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.check, null);
+  assert.strictEqual(result.keep, 10);
+  assert.strictEqual(result.kept, 10);
+  assert.ok(result.counted > result.keep, "the totals must count more hits than the list keeps: " + result.counted);
+  assert.ok(result.backLast < result.frontLast, "the oldest snap shows an older last hit: " + result.backLast + " vs " + result.frontLast);
+  assert.strictEqual(result.copy, true);
+  assert.strictEqual(result.none, null);
 });

@@ -510,6 +510,26 @@ function damageOf(attacker, hit, target) {
   return resolveDamage(finalAttack(attacker, hit), target).total;
 }
 
+// The name of a thing in the audit: the id of an actor, or the type and the place of an object.
+function nameOf(thing) {
+  return thing.id !== undefined ? thing.id : thing.type + " " + objectKey(thing);
+}
+
+// A body slam of the attacker on an actor: resolved, applied and recorded in the audit (when there is one).
+function slamActor(state, audit, attacker, hit, target) {
+  const resolved = resolveDamage(finalAttack(attacker, hit), target);
+  const taken = applyDamage(target, resolved.total);
+  if (audit !== null) recordHit(audit, state, nameOf(attacker), "bodySlam", nameOf(target), resolved, taken);
+}
+
+// A body slam of the attacker on an object: resolved, applied and recorded. Returns true if the object broke.
+function slamObject(state, audit, attacker, hit, object) {
+  const resolved = resolveDamage(finalAttack(attacker, hit), object);
+  const broken = damageObject(state, object, resolved.total);
+  if (audit !== null) recordHit(audit, state, nameOf(attacker), "bodySlam", nameOf(object), resolved, { shield: 0, health: resolved.total });
+  return broken;
+}
+
 // Whether a collision between two things is a hit at all (the user's rule, 2026-11-10): the body slam hurts only where
 // the avatar is one of the two sides, in both directions. The avatar hurts actors and objects, and actors and objects
 // hurt the avatar; an actor against an object, an object against an actor, or two actors, hurt nobody. The weight of
@@ -520,15 +540,19 @@ function bodySlamHurts(a, b) {
 
 // Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).
 // Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate.
+// Returns what was taken from each: { shield, health } (the health it really lost: it stops at 0).
 function applyDamage(actor, damage) {
   let left = damage;
+  let absorbed = 0;
   if (actor.shield) {
-    const absorbed = Math.min(actor.shield.now, left);
+    absorbed = Math.min(actor.shield.now, left);
     actor.shield.now -= absorbed;
     left -= absorbed;
     if (damage > 0) actor.shield.quiet = 0;
   }
+  const before = actor.health.now;
   actor.health.now = Math.max(0, actor.health.now - left);
+  return { shield: absorbed, health: before - actor.health.now };
 }
 
 // An actor counts as faster than its top speed only above this margin, so the
@@ -802,7 +826,7 @@ function objectsNear(state, actor) {
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
 // Returns true if the actor met an object it was not touching in the last frame (and the object is still there),
 // so an actor that reacts to a new contact can (the Dummy turns).
-function collideWithObjects(state, actor, lastContacts) {
+function collideWithObjects(state, actor, lastContacts, audit = null) {
   let metSomethingNew = false;
   for (const object of objectsNear(state, actor)) {
     const contact = contactBetween(actor, object);
@@ -825,8 +849,8 @@ function collideWithObjects(state, actor, lastContacts) {
 
     if (collides && isNewContact && bodySlamHurts(actor, object)) {
       const hit = { impact: -goingIn };
-      applyDamage(actor, damageOf(object, hit, actor));
-      if (damageObject(state, object, damageOf(actor, hit, object))) continue; // the object broke: no collision
+      slamActor(state, audit, object, hit, actor);
+      if (slamObject(state, audit, actor, hit, object)) continue; // the object broke: no collision
     }
     if (isNewContact) metSomethingNew = true;
 
@@ -983,7 +1007,7 @@ function pushShare(a, b) {
 // 3. If the contact is new, each of the two reacts in its own way (reactToNewContact: a Dummy picks a new angle, a Biter
 //    does nothing), hit or not. A pair that was already touching still pushes, but does not hurt and does not react.
 // Returns true if they touched (so the cells of both must be written again).
-function touchActors(state, lastContacts, dummy, other, key) {
+function touchActors(state, lastContacts, dummy, other, key, audit = null) {
   const contact = contactBetween(dummy, other);
   if (contact === null) return false;
   const { normalX, normalY, overlap } = contact;
@@ -995,8 +1019,8 @@ function touchActors(state, lastContacts, dummy, other, key) {
     const closing = -((dummy.move.velocity.x - other.move.velocity.x) * normalX + (dummy.move.velocity.y - other.move.velocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
       const hit = { impact: closing };
-      applyDamage(dummy, damageOf(other, hit, dummy));
-      applyDamage(other, damageOf(dummy, hit, other));
+      slamActor(state, audit, other, hit, dummy);
+      slamActor(state, audit, dummy, hit, other);
     }
   }
 
@@ -1087,7 +1111,7 @@ function nextInCells(inCell, cells, after) {
 //   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
 //   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
 //   list made before.
-function collideActors(state, lastContacts) {
+function collideActors(state, lastContacts, audit = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.move && !isAvatar(actor));
 
@@ -1105,7 +1129,7 @@ function collideActors(state, lastContacts) {
     const dummy = dummies[i];
 
     if (shareCell(dummy.cells, player.cells)) {
-      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID)) {
+      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, audit)) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
@@ -1113,7 +1137,7 @@ function collideActors(state, lastContacts) {
 
     let j = nextInCells(inCell, dummy.cells, i);
     while (j !== -1) {
-      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id)) {
+      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, audit)) {
         refreshCells(i);
         refreshCells(j);
       }
@@ -1273,6 +1297,45 @@ function fireWeapons(state, player) {
   }
 }
 
+// ---- The audit of the hits (the user, 2026-11-13) ----
+// A third object beside the state, like the visual state and for the same reasons: the rules WRITE every hit into it and never
+// read it, so erasing it changes no decision and the states stay cheap to save. It answers "who hurt whom, with what, for how
+// much, and what the resistance took off" with numbers: balancing weapons, finding why the avatar died, and data for a model.
+// It is { hits, totals }:
+//   hits    the last constants.audit.keepHits hits, oldest first (the rest are only counted in the totals). A hit is
+//           { frame, source, attack, target, parts, total, minimumApplied, shield, health }: parts is what resolveDamage said per
+//           type of damage ({ type, amount, points, fromShield, reduction, after }), total what it cost, minimumApplied whether
+//           the minimum damage was what counted, shield and health what the target really lost of each.
+//   totals  by "kind:attack" (the kind is the source without its number or place: "biter:bite", "avatar:repeater-arm",
+//           "avatar:bodySlam", "rock:bodySlam"): { hits, total, shield, health, minimumApplied } added up over the whole run.
+// The history keeps a copy per snap (outside the cross-check), so stepping back shows the audit of that frame.
+function createAudit() {
+  return { hits: [], totals: {} };
+}
+
+function recordHit(audit, state, source, attack, target, resolved, taken) {
+  audit.hits.push({
+    frame: state.frame,
+    source,
+    attack,
+    target,
+    parts: resolved.parts.map((part) => ({ ...part })),
+    total: resolved.total,
+    minimumApplied: resolved.minimumApplied,
+    shield: taken.shield,
+    health: taken.health,
+  });
+  const keep = DEFINITIONS.constants.audit.keepHits;
+  if (audit.hits.length > keep) audit.hits.splice(0, audit.hits.length - keep);
+  const key = source.replace(/_\d+$/, "").replace(/ .*$/, "") + ":" + attack; // "biter_3" is a biter, "rock 12,4" is a rock
+  const totals = audit.totals[key] ?? (audit.totals[key] = { hits: 0, total: 0, shield: 0, health: 0, minimumApplied: 0 });
+  totals.hits += 1;
+  totals.total += resolved.total;
+  totals.shield += taken.shield;
+  totals.health += taken.health;
+  if (resolved.minimumApplied) totals.minimumApplied += 1;
+}
+
 // ---- The visual state (the user, 2026-11-13) ----
 // A second state, beside the real one, only for what the eye sees for longer than the rules need. It holds no source of truth: the
 // rules write into it and NEVER read it, the screen reads it, and erasing it changes no decision. It is not in the snaps of the
@@ -1354,7 +1417,7 @@ function hitboxHurts(ownerId, target) {
 // every other actor, anyone else's hurt only the avatar (so those look only at the avatar). Things with no health left
 // are not hit (a corpse does not spend a pierce). A bullet is slower than the radii it must not skip over (see the
 // validation of weapons), so it cannot jump a target between two frames.
-function resolveHitboxes(state) {
+function resolveHitboxes(state, audit = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   for (const hitbox of state.hitboxes) {
     hitbox.position.x += hitbox.velocity.x;
@@ -1363,7 +1426,9 @@ function resolveHitboxes(state) {
     for (const target of targets) {
       if (!hitboxHurts(hitbox.owner, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
       if (contactBetween(hitbox, target) === null) continue;
-      applyDamage(target, resolveDamage(hitbox.damage, target).total);
+      const resolved = resolveDamage(hitbox.damage, target);
+      const taken = applyDamage(target, resolved.total);
+      if (audit !== null) recordHit(audit, state, hitbox.owner, hitbox.attack, target.id, resolved, taken);
       hitbox.struck.push(target.id);
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here
@@ -1489,11 +1554,12 @@ function cellIndex(coordinate, cellSize) {
 }
 
 // Advances the state by one frame. Changes the state in place.
+// audit = the audit of the hits (createAudit), optional like the visual state: the rules write every hit into it and never read it.
 // visual = the visual state (createVisual), optional: the rules WRITE into it (a trace when a hitbox is born) and never read it, so
 // a run with it and a run without it give the same state (a test proves it).
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 // blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
-function step(state, input, blueprint, visual = null) {
+function step(state, input, blueprint, visual = null, audit = null) {
   if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
@@ -1551,7 +1617,7 @@ function step(state, input, blueprint, visual = null) {
     if (!isAvatar(actor)) wrapIntoWindow(actor, player, state.grid);
 
     // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
-    const metSomethingNew = collideWithObjects(state, actor, lastContacts);
+    const metSomethingNew = collideWithObjects(state, actor, lastContacts, audit);
     if (metSomethingNew) reactToNewContact(state, actor);
   }
 
@@ -1562,7 +1628,7 @@ function step(state, input, blueprint, visual = null) {
   // 4. The actors collide with each other (the ones that move with the avatar, and among themselves) and each one reacts to
   // a new contact in its own way. The collision reads the cells from the actors, and writes them again for everyone it
   // pushes, so at the end of the step they are still right.
-  collideActors(state, lastContacts);
+  collideActors(state, lastContacts, audit);
 
   // 4b. Things are born (the user, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really
   // are): the strikes the minds decided in 1b (emitStrikes), and the shots of the weapons of the avatar, which count down, reload
@@ -1573,7 +1639,7 @@ function step(state, input, blueprint, visual = null) {
   fireWeapons(state, player);
 
   // 5. The hitboxes hurt, once each, and lose a frame.
-  resolveHitboxes(state);
+  resolveHitboxes(state, audit);
 
   // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor).
   removeDestroyed(state);

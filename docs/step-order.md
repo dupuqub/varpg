@@ -27,6 +27,7 @@ The frame counter goes up at the very end.
 - **A hitbox lives its frames** (the bite and the sword: one, so it is born, hurts and is gone in one step); a bullet has no frames (`framesLeft` null).
 - **Whoever died in this step does not strike** (4b skips an actor with no health, and still lowers the flag).
 - **The visual state is written, never read, by the rules.** `step` ages its traces at the very start (so a trace born in this step is drawn at age 0), and `spawnHitbox` writes a trace when a hitbox that lives its frames is born. A run with it and a run without it give the same state (test 155).
+- **The audit is written, never read, by the rules** (`recordHit`, called wherever damage is applied: the body slams in stages 2 and 4, the hitboxes in stage 5). A run with it and a run without it give the same state (test 160).
 - **Simultaneous hits are decided by the order of the list** (deterministic, but arbitrary): two things that kill each other in the same step resolve in list order.
 
 ## Room left on purpose

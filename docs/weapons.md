@@ -57,7 +57,7 @@ Today's hitbox of the Biter is the simplest case of this: no velocity, immediate
 
 ## Order the agent proposes (not yet agreed in full)
 
-1. Store the record of a hit (`resolveDamage` already makes it; nothing keeps it). Weapons will be the third source of damage.
+1. Store the record of a hit (done 2026-11-13: the audit; see `AGENTS.md`). Weapons will be the third source of damage.
 2. Wire the avatar's side of hitboxes: `hitboxHurts` says the avatar's hitboxes hurt everyone else, but the code only checks the avatar as a target.
 3. A **bench of weapons**: one weapon against N targets for T seconds, returning damage and kills. The deterministic engine makes it possible; it is how combinations are balanced and how the ML side will get its data.
 4. First weapon: the repeater (targeting, a traveling hitbox, damage on actors, destruction, ammunition and its weight).
@@ -82,4 +82,4 @@ Preparation for swords, spears and hammers (an experiment, not decisions): `docs
 - Does a bullet stop at a rock or a Shroom? Today it passes over objects.
 - A bullet must be slower than the smallest radius it should not skip (the data checks it at load). Fast bullets will need a swept test.
 - The avatar at zero health stays and keeps firing; what its death does is still open.
-- Order proposed earlier and still ahead: store the record of a hit, a bench of weapons, then grenade, mine and the emission at the end of a life.
+- Order proposed earlier and still ahead (the record of a hit is done): a bench of weapons, then grenade, mine and the emission at the end of a life.

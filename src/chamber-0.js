@@ -81,6 +81,34 @@ function simulationCheckText() {
   ].join("\n");
 }
 
+// The combat report: the combat blueprint plays 900 frames (15 seconds) standing still among the 40 Biters of Chamber 2, with the
+// audit on, and the text says what every kind of hit did (the totals) and the last hits one by one. The same run gives the same text
+// everywhere (the simulation is deterministic).
+function combatReportText() {
+  const frames = 900;
+  const run = createRun(1, DEFINITIONS.combatBlueprint);
+  const state = createChamber2State(run.id, 1, run.blueprint);
+  const audit = createAudit();
+  const idle = { move: { x: 0, y: 0 }, dash: false };
+  for (let i = 0; i < frames; i++) step(state, idle, run.blueprint, null, audit);
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const number = (value) => value.toFixed(2);
+  const rows = Object.entries(audit.totals).map(([kind, t]) =>
+    `  ${kind}: ${t.hits} hits, ${number(t.total)} damage (${number(t.shield)} to the shield, ${number(t.health)} to health), the minimum counted in ${t.minimumApplied}`);
+  const last = audit.hits.slice(-10).map((hit) =>
+    `  frame ${hit.frame}: ${hit.source} ${hit.attack} -> ${hit.target}: ${hit.parts.map((p) => `${p.type} ${number(p.amount)} - ${(p.reduction * 100).toFixed(1)}% (${p.points} points, ${p.fromShield} from the shield) = ${number(p.after)}`).join(", ")}; total ${number(hit.total)}${hit.minimumApplied ? " (minimum)" : ""}; shield ${number(hit.shield)}, health ${number(hit.health)}`);
+  return [
+    "COMBAT REPORT",
+    `build: ${buildText()}`,
+    `the combat blueprint, ${frames} frames standing still among the Biters of Chamber 2`,
+    `at the end: health ${number(player.health.now)}/${player.health.max}, shield ${number(player.shield.now)}/${player.shield.max}, Biters alive ${state.actors.length - 1}`,
+    "totals by kind of hit:",
+    ...rows,
+    `the last ${last.length} hits of ${audit.hits.length} kept:`,
+    ...last,
+  ].join("\n");
+}
+
 // The objects on the first screen (960 px each way from the starting point), to
 // compare with the numbers drawn above the objects in Chamber 1.
 function objectsText(seed) {
@@ -188,6 +216,10 @@ document.getElementById("tool-environment").addEventListener("click", () => {
 
 document.getElementById("tool-simulation").addEventListener("click", () => {
   showOutput(simulationCheckText());
+});
+
+document.getElementById("tool-combat").addEventListener("click", () => {
+  showOutput(combatReportText());
 });
 
 document.getElementById("tool-data").addEventListener("click", () => {
