@@ -36,7 +36,7 @@ jobs:
           cp -r src site/src
       - name: Stamp the build (the commit and the time) over src/version.js of the site
         run: |
-          printf 'const BUILD = { commit: "%s", date: "%s" };\n' "${GITHUB_SHA::7}" "$(date -u +'%Y-%m-%d %H:%M UTC')" > site/src/version.js
+          printf 'const BUILD = { commit: "%s", date: "%s" };\n' "${GITHUB_SHA::7}" "$(TZ=America/Sao_Paulo date +'%Y-%m-%d %H:%M GMT-3')" > site/src/version.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
