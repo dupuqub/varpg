@@ -253,6 +253,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 159 | The audit writes every hit with its numbers: a bite on the avatar (puncture against 10 points of resistance: reduction 10/110, total, shield and health lost), a bullet on a Biter, and the totals by kind of hit. | The user's axis of transparency: who hurt whom, with what, for how much, and what the resistance took off. |
 | 160 | The audit holds no truth and is bounded: the same state with it and without it, only the last hits kept (10 in the test; the totals count all), a copy per snap in the history and going back shows that frame's audit. | Same rule as the visual state; the states stay cheap and a replay does not count a hit twice. |
 | 161 | A circle touches a cone when it overlaps it at all (exact test, no trigonometry in the rules): center inside, only the arc, only a straight edge, only the tip; and the misses (behind, beyond, to the side, touching exactly). | The user's decision: hit = any overlap, as in the bite; step A of the sword. |
+| 162 | A cone is a hitbox shape: it points where it was born to point, hurts a target that overlaps it by any part (even half), not one behind or beyond, lives one frame, and its trace carries the shape. | The user's decision: fixed cone, one frame, any overlap hits; step B of the sword. |
 
 ### Benchmark of the grid (not a test)
 

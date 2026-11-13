@@ -2669,7 +2669,7 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now), hurts in that same step and
   // is gone (it lives one frame); the trace it leaves in the visual state is where it was born; the freeze begins.
   assert.strictEqual(born.hitboxes, 0);
-  assert.deepStrictEqual(plain(born.traces), [{ position: { x: 21, y: 0 }, radius: 20, age: 0, frames: 12 }]);
+  assert.deepStrictEqual(plain(born.traces), [{ position: { x: 21, y: 0 }, radius: 20, cone: null, age: 0, frames: 12 }]);
   assert.ok(Math.abs(born.health - (100 - resisted(born.bite, 10))) < 1e-9, "the bite hurt the avatar once: " + born.health);
   assert.deepStrictEqual([rows[15][1], rows[15][2], plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
   // Steps 17 to 25 it is frozen (frames 9 down to 1) and wants no movement; at step 26 the freeze is over and it chases.
@@ -3452,7 +3452,7 @@ test("156 a trace is born at age 0 where a one-frame hitbox was born, gets one f
     return { afterShot, born, ages, backTraces: back.traces.length, forwardTraces: forward.traces.length, copy: back !== history.visuals[0] };
   `);
   assert.strictEqual(result.afterShot, 0);
-  assert.deepStrictEqual(plain(result.born), [{ position: plain(result.born)[0].position, radius: 20, age: 0, frames: 12 }]);
+  assert.deepStrictEqual(plain(result.born), [{ position: plain(result.born)[0].position, radius: 20, cone: null, age: 0, frames: 12 }]);
   assert.deepStrictEqual(plain(result.ages), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, null, null]);
   assert.strictEqual(result.backTraces, 0);
   assert.strictEqual(result.forwardTraces, 1);
@@ -3608,4 +3608,37 @@ test("161 a circle touches a cone when it overlaps it at all: center inside, onl
     onlyEdge: true, edgeMiss: false, onlyTip: true, tipMiss: false, behind: false, beyondTheEdgeLength: false,
     lowerEdge: true, lowerEdgeMiss: false, pointedUp: true, pointedUpSideMiss: false,
   });
+});
+
+test("162 a cone is a hitbox shape: born pointing where it was told (and staying so), it hurts a target that overlaps it by any part, once, and not one outside; its trace carries the shape", () => {
+  const result = run(`
+    ${ARMED}
+    ${ALONE_BITERS}
+    const c = 0.7071067811865476;
+    const cone = { reach: 100, cosHalf: c, sinHalf: c };
+    const swing = (x, y) => {
+      const visual = createVisual();
+      const t = armed(0);
+      const avatar = t.s.actors[0];
+      avatar.position.x = 0; avatar.position.y = 0;
+      const target = t.s.actors[1];
+      target.position.x = x; target.position.y = y;
+      const before = target.health.now;
+      t.s.hitboxes = [];
+      spawnHitbox(t.s, avatar, "repeater-arm", 1, 0, { radius: 0, frames: 1, speed: 0, pierce: null, cone }, visual);
+      const born = JSON.parse(JSON.stringify(t.s.hitboxes[0]));
+      resolveHitboxes(t.s);
+      return { hurt: target.health.now < before, struck: born.struck, cone: born.cone, tip: born.position, traceCone: visual.traces[0].cone, left: t.s.hitboxes.length };
+    };
+    return { inside: swing(60, 0), halfInside: swing(60, 60), outside: swing(-60, 0), beyond: swing(160, 0) };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.inside.hurt, true);
+  assert.strictEqual(r.halfInside.hurt, true, "a target half inside is hit");
+  assert.strictEqual(r.outside.hurt, false);
+  assert.strictEqual(r.beyond.hurt, false);
+  assert.deepStrictEqual(r.inside.cone, { dirX: 1, dirY: 0, reach: 100, cosHalf: 0.7071067811865476, sinHalf: 0.7071067811865476 });
+  assert.deepStrictEqual(r.inside.traceCone, r.inside.cone);
+  assert.deepStrictEqual(r.inside.tip, { x: 16, y: 0 }); // born at the edge of the owner, like every hitbox
+  assert.strictEqual(r.inside.left, 0); // one frame: gone
 });

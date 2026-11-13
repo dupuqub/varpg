@@ -1378,7 +1378,8 @@ function createVisual() {
 }
 
 function traceHitbox(visual, hitbox) {
-  visual.traces.push({ position: { x: hitbox.position.x, y: hitbox.position.y }, radius: hitbox.radius, age: 0, frames: DEFINITIONS.constants.visual.traceFrames });
+  // A cone leaves its shape too (the eye draws a slice, not a circle); a round hitbox leaves cone: null.
+  visual.traces.push({ position: { x: hitbox.position.x, y: hitbox.position.y }, radius: hitbox.radius, cone: hitbox.cone === null ? null : { ...hitbox.cone }, age: 0, frames: DEFINITIONS.constants.visual.traceFrames });
 }
 
 function ageVisual(visual) {
@@ -1426,6 +1427,9 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     attack: attackName,
     position: { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius },
     radius: shape.radius,
+    // null: a round hitbox. Otherwise a cone (the strike of a sword): the tip is the position, "dir" is where it points
+    // (fixed when it is born: it does not turn after), and it hurts what overlaps the slice (circleTouchesCone).
+    cone: shape.cone ? { dirX: towardX, dirY: towardY, reach: shape.cone.reach, cosHalf: shape.cone.cosHalf, sinHalf: shape.cone.sinHalf } : null,
     framesLeft: shape.frames,
     damage: { ...attack.now },
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
@@ -1439,6 +1443,12 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
 // Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
 // side and everything else the other, and nobody hurts their own side): the hitbox of the avatar hurts what is not the
 // avatar, the hitbox of anything else hurts the avatar.
+// Does this hitbox touch this actor? A round one by the circles, a cone by its slice. Any overlap counts.
+function hitboxTouches(hitbox, target) {
+  if (!hitbox.cone) return contactBetween(hitbox, target) !== null; // no cone (null, or a hitbox built by hand without the field): round
+  const cone = hitbox.cone;
+  return circleTouchesCone(hitbox.position.x, hitbox.position.y, cone.dirX, cone.dirY, cone.reach, cone.cosHalf, cone.sinHalf, target.position.x, target.position.y, target.radius);
+}
 function hitboxHurts(ownerId, target) {
   return (ownerId === AVATAR_ID) !== isAvatar(target);
 }
@@ -1456,7 +1466,7 @@ function resolveHitboxes(state, audit = null) {
     const targets = hitbox.owner === AVATAR_ID ? state.actors : [player];
     for (const target of targets) {
       if (!hitboxHurts(hitbox.owner, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
-      if (contactBetween(hitbox, target) === null) continue;
+      if (!hitboxTouches(hitbox, target)) continue;
       const resolved = resolveDamage(hitbox.damage, target);
       const taken = applyDamage(target, resolved.total);
       if (audit !== null) recordHit(audit, state, hitbox.owner, hitbox.attack, target.id, resolved, taken);
