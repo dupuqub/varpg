@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 38;
+const DEFINITIONS_VERSION = 39;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -294,8 +294,8 @@ const DEFINITIONS = {
     "shoulder-l": { name: "Shoulder L", weight: 450, specs: {} },
     "arm-r": { name: "Arm R", weight: 650, specs: {} },
     "arm-l": { name: "Arm L", weight: 650, specs: {} },
-    // head.radar 520: guess, the old range of the repeater (a bit under half the height of the screen), so the reach of the aim does not change; the user's rule (2026-11-13): the Radar is the only truth about what can be aimed at.
-    head: { name: "Head", weight: 200, specs: { health: 15, radar: 520 } },
+    // head.radar 312: the user's rule (2026-11-13): the Radar is the only truth about what can be aimed at. The number: the user, "start smaller, it can grow with play time, take 40% off" from the old range of the repeater, 520 x 0.6 = 312 px (about a quarter of the screen height, 1080).
+    head: { name: "Head", weight: 200, specs: { health: 15, radar: 312 } },
     torso: { name: "Torso", weight: 900, specs: { health: 55, resistance: { blunt: 20, puncture: 10 }, speed: 0.5, capacity: 8000 } },
     // The repeater arm (the user, 2026-11-11): the weapon is the arm itself and takes the place of the plain Arm L. A
     // machine gun, slow at first, with limited ammunition that weighs: the mecha gets lighter and faster as it fires.

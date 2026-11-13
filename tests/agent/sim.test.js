@@ -2833,7 +2833,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 38, hash: "46980baf7608e3d2" };
+const DATA_FINGERPRINT = { version: 39, hash: "4b1098f7678f8414" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2966,7 +2966,7 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
     const tie = closestTarget(t.s, t.s.actors[0], 520).id;
 
     const u = armed(0);
-    u.s.actors[1].position.x = 300; u.s.actors[1].position.y = 400; // 500 away: the 3-4-5 triangle, in range
+    u.s.actors[1].position.x = 180; u.s.actors[1].position.y = 240; // 300 away: the 3-4-5 triangle, inside the Radar (312)
     step(u.s, idle, u.bp);
     return { first, second, third, tie, bullet: JSON.parse(JSON.stringify(u.s.hitboxes)), avatarRadius: u.s.actors[0].radius, avatar: u.s.actors[0].position };
   `);
@@ -2987,7 +2987,7 @@ test("135 the repeater fires every 10 frames while it has a target and a round, 
     ${ARMED}
     const t = armed(0);
     const b = t.s.actors[1];
-    b.position.x = 400; b.position.y = 0;
+    b.position.x = 250; b.position.y = 0;
     const shots = [];
     let rounds = t.s.actors[0].weapons[0].magazine;
     for (let i = 1; i <= 31; i++) {
@@ -3011,7 +3011,7 @@ test("136 every round fired makes the mecha 6 kg lighter and its top speed a lit
     const t = armed(0);
     const avatar = t.s.actors[0];
     const w = avatar.weapons[0];
-    t.s.actors[1].position.x = 400; t.s.actors[1].position.y = 0;
+    t.s.actors[1].position.x = 250; t.s.actors[1].position.y = 0;
     t.s.actors[1].health.now = 1000000; t.s.actors[1].health.max = 1000000; // a target that lasts: it is shot all the time
     const samples = [];
     for (let i = 1; i <= 21; i++) { step(t.s, idle, t.bp); if (i === 1 || i === 11 || i === 21) samples.push([w.magazine + w.reserve, avatar.weight, avatar.speed]); }
@@ -3375,7 +3375,7 @@ test("153 a bullet has no life in frames: it flies past the old range (520 px) a
   assert.ok(Math.abs(result.alive * 8 - result.edge) <= 8, "it left at " + result.alive * 8 + " px, the edge is " + result.edge);
 });
 
-test("154 the Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (520 px), the weapon has no range of its own, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing", () => {
+test("154 the Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (312 px), the weapon has no range of its own, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing", () => {
   const result = run(`
     ${ARMED}
     const shotsAt = (x, makeBlueprint) => {
@@ -3387,12 +3387,12 @@ test("154 the Radar is the only truth about what can be aimed at: the Head gives
     };
     const base = armed(0);
     const noHead = (bp) => ({ ...bp, parts: bp.parts.filter((id) => id !== "head") });
-    return { radar: base.s.actors[0].radar, inside: shotsAt(500), outside: shotsAt(560), none: shotsAt(100, noHead), recipeHasRange: "range" in DEFINITIONS.parts["repeater-arm"].weapon, starter: createRun(1).blueprint && createChamber1State(1, 1, createRun(1).blueprint).actors[0].radar };
+    return { radar: base.s.actors[0].radar, inside: shotsAt(300), outside: shotsAt(340), none: shotsAt(100, noHead), recipeHasRange: "range" in DEFINITIONS.parts["repeater-arm"].weapon, starter: createRun(1).blueprint && createChamber1State(1, 1, createRun(1).blueprint).actors[0].radar };
   `);
-  assert.strictEqual(result.radar, 520);
+  assert.strictEqual(result.radar, 312);
   assert.strictEqual(result.inside, 1);
-  assert.strictEqual(result.outside, 0); // 560 is beyond 520 plus the radius of a Biter
+  assert.strictEqual(result.outside, 0); // 340 is beyond 312 plus the radius of a Biter
   assert.strictEqual(result.none, 0);
   assert.strictEqual(result.recipeHasRange, false);
-  assert.strictEqual(result.starter, 520);
+  assert.strictEqual(result.starter, 312);
 });

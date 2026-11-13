@@ -245,7 +245,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 151 | The shield specs are checked when the data loads: resistance only to known types of damage, the wait a whole number of frames 1 or more, the maximum 0 or more. | What must not exist cannot be made. |
 | 152 | Every function or constant that the "Code layout" section of `AGENTS.md` names exists in `src/`. | Several agents read that map first; it must not point to something that is gone (it once named `createHitbox` after it was merged away). |
 | 153 | A bullet has no life in frames: it flies past the old range of 520 px and goes only when its center leaves the window of the grid around the avatar (the spent pierce and the bite's frames are tests 122 and 138). | The user's decision, 2026-11-12: projectiles die only when they leave the grid. |
-| 154 | The Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (520 px), the repeater has no range, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing. | The user's rule, 2026-11-13: the Radar, not the weapon, decides what can be targeted. |
+| 154 | The Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (312 px), the repeater has no range, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing. | The user's rule, 2026-11-13: the Radar, not the weapon, decides what can be targeted. |
 
 ### Benchmark of the grid (not a test)
 
