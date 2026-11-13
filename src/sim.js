@@ -51,6 +51,7 @@ function finalizeObject(type, rolls, blueprint, id) {
 // and for an actor with a dash its recharge time and its maximum of charges.
 function finalizeStatic(actor, blueprint) {
   actor.radius = finalRadius(actor, blueprint);
+  if (actor.shield) actor.bodyRadius = actor.radius; // the body, static; actor.radius becomes the ring in finalizeDynamic
   actor.weight = finalWeight(actor, blueprint);
   actor.bounce = finalBounce(actor, blueprint);
   actor.attacks = finalAttacks(actor);
@@ -153,7 +154,6 @@ function writeShield(actor, blueprint) {
   for (const type of DEFINITIONS.damageTypes) {
     shield.resistance[type] = isAvatar(actor) ? partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0) : 0;
   }
-  actor.bodyRadius = actor.radius; // the radius of the body itself; actor.radius is the one that collides, and follows the shield
 }
 
 // Whether the shield still has something left (and so is felt: it adds resistance and the ring is out).
@@ -382,10 +382,13 @@ function finalMaxHealth(actor, blueprint) {
   return isAvatar(actor) ? fromParts(actor, blueprint, "health") : actor.health.max;
 }
 
-// The radius of an object, in pixels: what the seed rolled for it, or the base radius of its recipe (the
-// avatar). The size is a final value like the others, so a part or an effect can change it later.
+// The radius of the body of an object, in pixels: what the seed rolled for it, or the base radius of its recipe (the
+// avatar). The size is a final value like the others, so a part or an effect can change it later. It is static. An actor
+// with a shield keeps it apart, in bodyRadius, because its actor.radius is dynamic (the ring follows the shield, see
+// finalShieldRadius): so the body is read from bodyRadius when there is one, and calling the static list again never takes
+// the ring for the body (review of 2026-11-13, point 3; test 171).
 function finalRadius(object, blueprint) {
-  return object.radius ?? definitionOf(object).radius;
+  return object.bodyRadius ?? object.radius ?? definitionOf(object).radius;
 }
 
 // How fast the avatar speeds up toward its wanted speed, in pixels per frame, every frame. Base from the recipe.

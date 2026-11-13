@@ -3877,3 +3877,25 @@ test("170 the reach of the sword is counted from the center of the avatar, so th
   assert.strictEqual(r.biterHurt, true);
   assert.deepStrictEqual(r.after, r.before); // the avatar's own cone hurts neither it nor its shield
 });
+
+// ---- The static list can be called again (review 2026-11-13, point 3; issue 5) ----
+// The radius of an actor with a shield is in both lists: static (the body) and dynamic (the ring follows the shield). When the
+// static list read the body from actor.radius, calling it again on a living avatar took the ring for the body, and each call
+// made a ring of the ring. Nothing calls it twice today; the first thing that changes the avatar during a run will.
+test("171 calling the static and dynamic lists again on a living avatar changes nothing: with the real shield the body stays 16 and the ring 28.8, twice over, and the whole avatar is the same as after one call", () => {
+  const result = run(`
+    const blueprint = DEFINITIONS.combatBlueprint;
+    const avatar = createAvatar(blueprint);
+    const once = JSON.parse(JSON.stringify(avatar));
+    const radii = [];
+    for (let i = 0; i < 2; i++) {
+      finalizeStatic(avatar, blueprint);
+      finalizeDynamic(avatar, blueprint);
+      radii.push([avatar.bodyRadius, avatar.radius]);
+    }
+    return { once, again: JSON.parse(JSON.stringify(avatar)), radii };
+  `, SWORD_SHIELDED);
+  const r = plain(result);
+  assert.deepStrictEqual(r.radii, [[16, 28.8], [16, 28.8]]);
+  assert.deepStrictEqual(r.again, r.once);
+});
