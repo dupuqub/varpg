@@ -14,7 +14,7 @@ The code carries the same numbers in the comments of `step`. If one of the two c
 | 2 | Movement | Each actor that moves walks, in list order, and collides with the still things (objects). | |
 | 3 | Cells | The grid cells each actor covers are written. | The actor collision reads them. |
 | 4 | Collision between actors | Actors push each other by weight and hurt each other with the body slam; each reacts to a new contact. | After everyone moved. |
-| 4b | Things are born | Every hitbox is born here, through `spawnHitbox`: the strikes the minds decided in 1b (`emitStrikes`) and the shots of the avatar's weapons (`fireWeapons`). | The user's rule (2026-11-13): the actor moves and only then the hitbox is born, so it is where the bodies really are. |
+| 4b | Things are born | Every hitbox is born here, through `spawnHitbox`: the strikes the minds decided in 1b (`emitStrikes`), the shots of the avatar's weapons (`fireWeapons`) and the blows of its swords (`swingMelees`), in that order. | The user's rule (2026-11-13): the actor moves and only then the hitbox is born, so it is where the bodies really are. |
 | 5 | Hitboxes hurt (`resolveHitboxes`) | Each hitbox moves by its velocity, hurts what it touches (each thing once), loses a frame, and goes when its frames or its pierce are spent, or (a bullet) when it leaves the window of the grid. | After birth, so a one-frame hitbox is born and tested in the same step. |
 | 6 | Destruction (`removeDestroyed`) | Whoever has no health left leaves the scene, in one place. | At the end, so nothing is removed while a loop walks the list. |
 | 7 | The shield | The quiet frames count and the shield regenerates when the wait is over. | After the damage of this step. |

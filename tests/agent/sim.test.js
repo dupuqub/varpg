@@ -3658,7 +3658,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("      melee: {", "      weapon: { target: \"closest\", intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
-test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of puncture), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
+test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
   const result = run(`
     const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
     function swordGame(x, y) {

@@ -501,7 +501,7 @@ function finalAttack(attacker, hit) {
 }
 
 // How a packet hurts a target, in the order the terms are applied, so the damage can be explained (the damage trace
-// the user wants will read this record; nothing keeps it yet). For each type with an amount:
+// the user wants will read this record; the audit keeps it, see recordHit). For each type with an amount:
 //   reduction = points / (points + resistanceScale), points = the resistance of the target to that type;
 //   after = amount x (1 - reduction).
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
@@ -1286,8 +1286,6 @@ function weaponStates(blueprint) {
   return states;
 }
 
-// The attack of each weapon of an actor, by the id of its part: { base, now, projectile } (the projectile numbers, among
-// them pierce, are copied so each can change in a run).
 // The state of every melee weapon of the avatar (a sword): where it is in its swing. "idle" waits for a target within reach;
 // "windup" counts the frames before the blow (the aim is locked in dirX, dirY when it starts); "recovery" counts the frames after it.
 function meleeStates(blueprint) {
@@ -1297,6 +1295,9 @@ function meleeStates(blueprint) {
   }
   return states;
 }
+
+// The attack of each weapon of an actor, by the id of its part: { base, now, projectile } (the projectile numbers, among
+// them pierce, are copied so each can change in a run).
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
@@ -1337,9 +1338,6 @@ function closestTarget(state, player, range) {
   return best;
 }
 
-// One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
-// there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
-// and has a target fires one bullet at it (born one body ahead of the avatar, moving at the speed of the weapon).
 // One frame of every sword of the avatar. Idle: the closest target the Radar sees, if it is within the reach of the strike
 // (the gap between the body and the target, as in the bite), starts the windup and locks the aim toward it. Windup: counts
 // down and, at the last frame, the cone is born (spawnHitbox, fixed, one frame, hurting what it overlaps) and the recovery begins.
@@ -1391,6 +1389,10 @@ function swingMelees(state, player, visual) {
     sword.frames = attack.windupFrames;
   }
 }
+
+// One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
+// there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
+// and has a target fires one bullet at it (born one body ahead of the avatar, moving at the speed of the weapon).
 function fireWeapons(state, player) {
   for (const weapon of player.weapons) {
     const recipe = DEFINITIONS.parts[weapon.part].weapon;
@@ -1535,15 +1537,16 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
   if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
 }
 
-// Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
-// side and everything else the other, and nobody hurts their own side): the hitbox of the avatar hurts what is not the
-// avatar, the hitbox of anything else hurts the avatar.
 // Does this hitbox touch this actor? A round one by the circles, a cone by its slice. Any overlap counts.
 function hitboxTouches(hitbox, target) {
   if (!hitbox.cone) return contactBetween(hitbox, target) !== null; // no cone (null, or a hitbox built by hand without the field): round
   const cone = hitbox.cone;
   return circleTouchesCone(hitbox.position.x, hitbox.position.y, cone.dirX, cone.dirY, cone.reach, cone.cosHalf, cone.sinHalf, target.position.x, target.position.y, target.radius);
 }
+
+// Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
+// side and everything else the other, and nobody hurts their own side): the hitbox of the avatar hurts what is not the
+// avatar, the hitbox of anything else hurts the avatar.
 function hitboxHurts(ownerId, target) {
   return (ownerId === AVATAR_ID) !== isAvatar(target);
 }
@@ -1767,8 +1770,8 @@ function step(state, input, blueprint, visual = null, audit = null) {
   collideActors(state, lastContacts, audit);
 
   // 4b. Things are born (the user, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really
-  // are): the strikes the minds decided in 1b (emitStrikes), and the shots of the weapons of the avatar, which count down, reload
-  // and fire at the closest target (fireWeapons). Every hitbox is born here, in one place, with the same function (spawnHitbox).
+  // are): the strikes the minds decided in 1b (emitStrikes), the shots of the weapons of the avatar, which count down, reload
+  // and fire at the closest target (fireWeapons), and the blows of its swords (swingMelees). Every hitbox is born here, in one place, with the same function (spawnHitbox).
   // A hitbox that follows its owner (an aura, an orbiting blade, a beam: none exists yet) would be placed again right here,
   // before the next step, so nothing in the order of the step stands in its way.
   emitStrikes(state, player, visual);
