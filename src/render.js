@@ -159,8 +159,21 @@ function drawTraces(context, visual, player) {
   context.lineWidth = 3;
   for (const trace of visual.traces) {
     context.strokeStyle = `rgba(255, 210, 63, ${0.8 * (1 - trace.age / trace.frames)})`;
+    const x = trace.position.x - player.position.x + width / 2;
+    const y = trace.position.y - player.position.y + height / 2;
     context.beginPath();
-    context.arc(trace.position.x - player.position.x + width / 2, trace.position.y - player.position.y + height / 2, trace.radius, 0, Math.PI * 2);
+    if (trace.cone === null) {
+      context.arc(x, y, trace.radius, 0, Math.PI * 2);
+    } else {
+      // A cone (the strike of a sword): a slice from its tip, as wide as its opening, as long as its reach. Trigonometry is fine
+      // here: this only draws, the rules never read it (and the rules have their own deterministic functions).
+      const cone = trace.cone;
+      const middle = Math.atan2(cone.dirY, cone.dirX);
+      const half = Math.atan2(cone.sinHalf, cone.cosHalf);
+      context.moveTo(x, y);
+      context.arc(x, y, cone.reach, middle - half, middle + half);
+      context.closePath();
+    }
     context.stroke();
   }
 }
