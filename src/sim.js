@@ -1456,7 +1456,8 @@ function fireWeapons(state, player) {
 //           the frame the screen shows when the hit is seen (the state after its step).
 //   resume  the simulation resumed from frame X after a pause (written by the screen, which is where play is pressed), so
 //           that a frame written twice, or an actor dying twice, can be understood: { frame, event }.
-//   start   a run begins: { frame, event, run, chamber }, so one log can hold several runs of the same session.
+//   start   a chamber begins: { frame, event, run, chamber }. Each chamber starts a new log (the user, 2026-11-13, issue 18), and this
+//           line says which run and chamber the lines after it belong to.
 function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
   return JSON.stringify({
     frame,
