@@ -1699,13 +1699,21 @@ function resolveHitboxes(state, audit = null) {
   for (const hitbox of state.hitboxes) {
     hitbox.position.x += hitbox.velocity.x;
     hitbox.position.y += hitbox.velocity.y;
-    for (const target of state.actors) {
-      if (!hitboxHurts(hitbox, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
+    // What it may touch: the actors, then the objects near it (the same rule for both, the user, 2026-11-13: a shot hurts a Rock or a
+    // Shroom as the body slam does: the damage is resolved against the object and taken off its health, and a broken one is gone).
+    const reach = Math.max(hitbox.radius, hitbox.cone ? hitbox.cone.reach : 0);
+    const { x, y } = hitbox.position;
+    const objects = objectsReaching(state.seed, x - reach, y - reach, x + reach, y + reach).filter((object) => !isObjectBroken(state, object));
+    for (const target of [...state.actors, ...objects]) {
+      const isObject = target.id === undefined;
+      const name = nameOf(target);
+      if (!hitboxHurts(hitbox, target) || (!isObject && target.health.now <= 0) || hitbox.struck.includes(name)) continue;
       if (!hitboxTouches(hitbox, target)) continue;
       const resolved = resolveDamage(hitbox.damage, target);
-      const taken = applyDamage(target, resolved.total);
-      if (audit !== null) recordHit(audit, state, hitbox.owner, hitbox.attack, target.id, resolved, taken);
-      hitbox.struck.push(target.id);
+      const taken = isObject ? { shield: 0, health: resolved.total } : applyDamage(target, resolved.total);
+      if (isObject) damageObject(state, target, resolved.total);
+      if (audit !== null) recordHit(audit, state, hitbox.owner, hitbox.attack, name, resolved, taken);
+      hitbox.struck.push(name);
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here
         break;

@@ -4323,3 +4323,36 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
   assert.strictEqual(indexed.audit, plain.audit);
   assert.ok(indexed.audit.length > 0, "the run must have fought, or the comparison proves little");
 });
+
+// ---- Hitboxes and objects ----
+test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock of seed 1 takes its damage off the rock (resolved against the rock's resistances, written in damagedObjects, one line in the combat audit with the rock's name), hurts it once however many frames it stays, does nothing to a rock far from it, does nothing when its list ignores object (the same shot, the tag is what protected the rock), and a rock that broke is no longer hit; a pierce of 0 ends the hitbox on the rock", () => {
+  const code = (ignores, pierce, damage) => `
+    const s = createChamber1State();
+    const audit = createAudit();
+    const avatar = s.actors[0];
+    avatar.position.x = 900; avatar.position.y = 900; // out of the way
+    const name = "shot"; // Chamber 1 has no weapon: the avatar is given one by hand
+    avatar.attacks.shot = { base: { puncture: 6 }, now: { puncture: 6 }, projectile: null, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"] };
+    ${ignores ? "avatar.attacks[name].ignores = " + JSON.stringify(ignores) + ";" : ""}
+    spawnHitbox(s, avatar, name, 1, 0, { radius: 10, frames: 3, speed: 0, pierce: ${pierce} });
+    Object.assign(s.hitboxes[0].damage, ${JSON.stringify(damage ?? null)} ?? {});
+    s.hitboxes[0].position.x = ${ROCK.x}; s.hitboxes[0].position.y = ${ROCK.y};
+    for (let i = 0; i < 3; i++) step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
+    return { rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, audit: audit.slice(), hitboxes: s.hitboxes.length, struck: s.hitboxes[0]?.struck ?? null };
+  `;
+  const hit = run(code(null, "null"));
+  assert.ok(hit.rock < ROCK.health, "the shot must hurt the rock: " + hit.rock);
+  const lines = hit.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit");
+  assert.strictEqual(lines.length, 1, "the shot hurts the rock once, however many frames it stays");
+  assert.strictEqual(lines[0].target, "rock small:0,1");
+  assert.ok(Math.abs(lines[0].health - (ROCK.health - hit.rock)) < 1e-9);
+  const far = run(code(null, "null").replace("s.hitboxes[0].position.x = " + ROCK.x, "s.hitboxes[0].position.x = " + (ROCK.x + 500)));
+  assert.strictEqual(far.rock, ROCK.health);
+  const protectedRock = run(code(["self", "object"], "null"));
+  assert.strictEqual(protectedRock.rock, ROCK.health, "with object in the list the rock is not hurt");
+  const huge = run(code(null, "null", { puncture: 1000 }));
+  assert.strictEqual(huge.rock, 0, "a rock that breaks stays at 0");
+  assert.strictEqual(huge.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit").length, 1, "a broken rock is not hit again");
+  const pierced = run(code(null, "0"));
+  assert.strictEqual(pierced.hitboxes, 0, "a pierce of 0 ends the hitbox on the first thing it hurts, the rock");
+});
