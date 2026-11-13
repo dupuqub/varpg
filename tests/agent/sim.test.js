@@ -2716,9 +2716,9 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
-    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null }); // 100 px away: a miss
+    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"] }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
-    return { rule: [hitboxHurts(avatar.id, avatar), hitboxHurts(avatar.id, b), hitboxHurts(b.id, avatar), hitboxHurts(b.id, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
+    return { rule: [hitboxHurts({ ignores: ignoredTagsOf(avatar) }, avatar), hitboxHurts({ ignores: ignoredTagsOf(avatar) }, b), hitboxHurts({ ignores: ignoredTagsOf(b) }, avatar), hitboxHurts({ ignores: ignoredTagsOf(b) }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
   assert.deepStrictEqual(plain(result.rule), [false, true, true, false]);
   assert.strictEqual(result.health, 100);
@@ -3114,7 +3114,7 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
     w.magazine = 1; w.reserve = 0;
     for (let i = 0; i < 40; i++) step(t.s, idle, t.bp);
     const avatar = t.s.actors[0];
-    return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts(avatar.id, avatar) };
+    return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts({ ignores: ignoredTagsOf(avatar) }, avatar) };
   `, PIERCE_ONE);
   assert.deepStrictEqual(plain(result.ids), ["avatar_1", "biter_1"]); // the weak one is gone
   assert.strictEqual(result.behind, 20); // the bullet had a pierce left because the dead one did not spend it... and hurt this one
@@ -3370,7 +3370,7 @@ test("153 a bullet has no life in frames: it flies past the old range (520 px) a
   const result = run(`
     ${ARMED}
     const { s, bp } = armed();
-    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0 });
+    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0, ignores: ["ally"] });
     s.hitboxes = [bullet(s.actors[0].position.x)];
     const edge = s.grid.windowWidth * s.grid.cellSize / 2;
     s.actors[0].position.y = 0;
@@ -4022,4 +4022,32 @@ test("177 a list of ignored tags covers a target when the target has any of them
   const expected = [];
   for (const type of ["dummy", "biter", "rock", "shroom"]) expected.push("avatar>" + type, type + ">avatar");
   assert.deepStrictEqual(trues, expected.sort());
+});
+
+// ---- Tags of exclusion: the hitboxes (step D) ----
+test("178 a hitbox carries a copy of its owner's ignored tags from its birth and hurts only what has none of them: a bite born over a neighbor Biter hurts nobody (enemies ignore enemy), the same hitbox with the tag taken out of its list hurts that Biter (so the tag is what protected it), and the copy is its own list, not the recipe's", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, a, b] = s.actors;
+    avatar.position.x = 900; avatar.position.y = 900;
+    a.position.x = 0; a.position.y = 0;
+    b.position.x = 30; b.position.y = 0;
+    step(s, { move: { x: 0, y: 0 } });
+    s.hitboxes = [];
+    spawnHitbox(s, a, "bite", 1, 0, { radius: 40, frames: 3, speed: 0, pierce: null });
+    const born = s.hitboxes[0];
+    const copy = { ignores: [...born.ignores], same: born.ignores === definitionOf(a).ignores };
+    const before = b.health.now;
+    step(s, { move: { x: 0, y: 0 } });
+    const protectedHealth = b.health.now;
+    born.ignores = [];
+    born.struck = [];
+    step(s, { move: { x: 0, y: 0 } });
+    return { copy, before, protectedHealth, afterExceptions: b.health.now };
+  `, QUIET);
+  const r = plain(result);
+  assert.deepStrictEqual(r.copy, { ignores: ["enemy", "object"], same: false });
+  assert.strictEqual(r.protectedHealth, r.before);
+  assert.ok(r.afterExceptions < r.before, "without the tag in its list the bite hurts the neighbor: " + r.afterExceptions);
 });

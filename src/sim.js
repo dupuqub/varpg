@@ -1589,6 +1589,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
+    ignores: [...ignoredTagsOf(owner)], // the tags it does not hurt: a copy of its owner's list at its birth (the owner may be gone before it ends)
   };
   state.hitboxes.push(hitbox);
   if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
@@ -1601,26 +1602,24 @@ function hitboxTouches(hitbox, target) {
   return circleTouchesCone(hitbox.position.x, hitbox.position.y, cone.dirX, cone.dirY, cone.reach, cone.cosHalf, cone.sinHalf, target.position.x, target.position.y, target.radius);
 }
 
-// Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
-// side and everything else the other, and nobody hurts their own side): the hitbox of the avatar hurts what is not the
-// avatar, the hitbox of anything else hurts the avatar.
-function hitboxHurts(ownerId, target) {
-  return (ownerId === AVATAR_ID) !== isAvatar(target);
+// Whether a hitbox hurts a target (the user, 2026-11-13, "Tags of exclusion" in AGENTS.md): it does unless the target has a tag that
+// the hitbox ignores (hitbox.ignores, copied from its owner's recipe when it was born). With today's recipes this is the old side
+// rule: the avatar's hitboxes hurt what is not the avatar, and an enemy's hitboxes hurt only the avatar (no enemy hurts another).
+function hitboxHurts(hitbox, target) {
+  return !ignoresTarget(hitbox.ignores, tagsOf(target));
 }
 
 // Every living hitbox moves by its velocity, hurts what it touches (each thing once: struck), and loses a frame; the ones
-// with no frames left, or that crossed all they could, are gone. The side rule is hitboxHurts: the avatar's hitboxes hurt
-// every other actor, anyone else's hurt only the avatar (so those look only at the avatar). Things with no health left
+// with no frames left, or that crossed all they could, are gone. The rule is hitboxHurts (the tags a hitbox ignores). Things with no health left
 // are not hit (a corpse does not spend a pierce). A bullet is slower than the radii it must not skip over (see the
 // validation of weapons), so it cannot jump a target between two frames.
 function resolveHitboxes(state, audit = null) {
-  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID); // the window of a bullet is centered on it
   for (const hitbox of state.hitboxes) {
     hitbox.position.x += hitbox.velocity.x;
     hitbox.position.y += hitbox.velocity.y;
-    const targets = hitbox.owner === AVATAR_ID ? state.actors : [player];
-    for (const target of targets) {
-      if (!hitboxHurts(hitbox.owner, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
+    for (const target of state.actors) {
+      if (!hitboxHurts(hitbox, target) || target.health.now <= 0 || hitbox.struck.includes(target.id)) continue;
       if (!hitboxTouches(hitbox, target)) continue;
       const resolved = resolveDamage(hitbox.damage, target);
       const taken = applyDamage(target, resolved.total);
