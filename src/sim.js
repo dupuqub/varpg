@@ -36,6 +36,7 @@ function finalizeObject(type, rolls, blueprint, id) {
   object.bounce = finalBounce(object, blueprint);
   if (object.resistance) writeResistance(object, blueprint); // only a thing whose recipe starts with a resistance has one (the avatar)
   object.attacks = finalAttacks(object);
+  object.tags = [...(recipe.tags ?? [])]; // what it is, written into the thing like every other value (the user, 2026-11-13, issue 20): a summoned Biter can be "ally"
   return object;
 }
 
@@ -108,10 +109,11 @@ function isAvatar(actor) {
   return actor.id === AVATAR_ID;
 }
 
-// The tags of a thing (what it is: "ally", "enemy", "object") and the tags its body and attacks ignore, from its recipe
-// (the user, 2026-11-13; "Tags of exclusion" in AGENTS.md). They are the same for every thing of a type, so the state does not carry them.
+// The tags of a thing (what it is: "ally", "enemy", "object") are written into the thing when it is made (finalizeObject, from its
+// recipe) and read from the thing, never from its type: anything can change side (the user, 2026-11-13, issue 20). The tags its body
+// and attacks ignore are still read from the recipe (they move into the thing in the next steps of issue 20).
 function tagsOf(thing) {
-  return definitionOf(thing).tags;
+  return thing.tags;
 }
 
 function ignoredTagsOf(thing) {
