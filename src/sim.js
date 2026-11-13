@@ -1132,7 +1132,7 @@ function collideActors(state, lastContacts) {
 // (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
 // deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
-function think(state, actor, player, visual) {
+function think(state, actor, player) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
@@ -1144,9 +1144,10 @@ function think(state, actor, player, visual) {
   const towardX = distance === 0 ? 1 : dx / distance;
   const towardY = distance === 0 ? 0 : dy / distance;
 
-  // The strike: the hitbox is born toward where the avatar is now, and the freeze after it begins.
+  // The strike: the mind decides it here, before anyone moves (ai.strike), and the freeze after it begins. The hitbox itself is
+  // born later in the step, after everyone has moved (emitStrikes), so it is born where the bodies really are.
   const strike = () => {
-    spawnHitbox(state, actor, ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null }, visual);
+    ai.strike = true;
     ai.phase = "freeze";
     ai.frames = attack.freezeFrames;
     direction.x = 0;
@@ -1289,6 +1290,22 @@ function traceHitbox(visual, hitbox) {
 function ageVisual(visual) {
   for (const trace of visual.traces) trace.age += 1;
   visual.traces = visual.traces.filter((trace) => trace.age < trace.frames);
+}
+
+// The strikes that the minds decided in this step (think sets ai.strike): for each one the hitbox is born now, toward where the
+// avatar is after everyone has moved, and the flag goes down. Called by step after the movement and the collisions.
+function emitStrikes(state, player, visual) {
+  for (const actor of state.actors) {
+    if (!actor.ai || !actor.ai.strike) continue;
+    const attack = actor.attacks[actor.ai.attack];
+    const dx = player.position.x - actor.position.x;
+    const dy = player.position.y - actor.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
+    const towardY = distance === 0 ? 0 : dy / distance;
+    spawnHitbox(state, actor, actor.ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null }, visual);
+    actor.ai.strike = false;
+  }
 }
 
 // ---- Hitboxes ----
@@ -1488,11 +1505,8 @@ function step(state, input, blueprint, visual = null) {
 
   // 1b. The minds: every actor that has `ai` decides where to go and whether to strike (think), before anyone moves.
   for (const actor of state.actors) {
-    if (actor.ai) think(state, actor, player, visual);
+    if (actor.ai) think(state, actor, player);
   }
-
-  // 1c. The weapons of the avatar count down, reload, and fire at the closest target (fireWeapons).
-  fireWeapons(state, player);
 
   // 2. Movement: every actor that has "move" walks, in list order.
   // The velocity does not jump to the wanted value: it speeds up toward it
@@ -1547,6 +1561,14 @@ function step(state, input, blueprint, visual = null) {
   // a new contact in its own way. The collision reads the cells from the actors, and writes them again for everyone it
   // pushes, so at the end of the step they are still right.
   collideActors(state, lastContacts);
+
+  // 4b. Things are born (the user, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really
+  // are): the strikes the minds decided in 1b (emitStrikes), and the shots of the weapons of the avatar, which count down, reload
+  // and fire at the closest target (fireWeapons). Every hitbox is born here, in one place, with the same function (spawnHitbox).
+  // A hitbox that follows its owner (an aura, an orbiting blade, a beam: none exists yet) would be placed again right here,
+  // before the next step, so nothing in the order of the step stands in its way.
+  emitStrikes(state, player, visual);
+  fireWeapons(state, player);
 
   // 5. The hitboxes hurt, once each, and lose a frame.
   resolveHitboxes(state);

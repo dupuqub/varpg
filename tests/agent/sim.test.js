@@ -2836,7 +2836,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 40, hash: "51e0480429f042ee" };
+const DATA_FINGERPRINT = { version: 41, hash: "fc71f8b0490459db" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3454,4 +3454,35 @@ test("156 a trace is born at age 0 where a one-frame hitbox was born, gets one f
   assert.strictEqual(result.backTraces, 0);
   assert.strictEqual(result.forwardTraces, 1);
   assert.strictEqual(result.copy, true);
+});
+
+test("157 things are born after everyone has moved: a bullet fired in a step where the avatar dashes is born at the avatar's final position, toward the target as seen from there, and the bite of a Biter is born toward the avatar's final position", () => {
+  const result = run(`
+    ${ARMED}
+    ${ALONE_BITERS}
+    const t = armed(0);
+    const target = t.s.actors[1];
+    target.position.x = 0; target.position.y = -250;
+    const avatar = t.s.actors[0];
+    step(t.s, { move: { x: 1, y: 0 }, dash: true }, t.bp);
+    const bullet = t.s.hitboxes.find((h) => h.attack === "repeater-arm");
+    const dx = target.position.x - avatar.position.x, dy = target.position.y - avatar.position.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const expected = { x: avatar.position.x + (dx / d) * (avatar.radius + 8), y: avatar.position.y + (dy / d) * (avatar.radius + 8) };
+
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    b.attacks.bite.windupFrames = 0;
+    const visual = createVisual();
+    s.actors[0].position.x = 0;
+    step(s, { move: { x: 0, y: -1 }, dash: true }, undefined, visual); // the avatar leaves upward while the Biter strikes
+    const ax = s.actors[0].position.x, ay = s.actors[0].position.y;
+    const bx = ax - b.position.x, by = ay - b.position.y;
+    const bd = Math.sqrt(bx * bx + by * by);
+    return { bullet: bullet.position, expected, trace: visual.traces[0].position, biteExpected: { x: b.position.x + (bx / bd) * b.radius, y: b.position.y + (by / bd) * b.radius }, moved: avatar.position.x };
+  `, QUIET);
+  assert.ok(result.moved > 5, "the avatar did not dash: " + result.moved);
+  assert.ok(Math.abs(result.bullet.x - result.expected.x) < 1e-9 && Math.abs(result.bullet.y - result.expected.y) < 1e-9, JSON.stringify([result.bullet, result.expected]));
+  assert.ok(Math.abs(result.trace.x - result.biteExpected.x) < 1e-9 && Math.abs(result.trace.y - result.biteExpected.y) < 1e-9, JSON.stringify([result.trace, result.biteExpected]));
 });

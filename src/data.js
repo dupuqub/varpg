@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 40;
+const DEFINITIONS_VERSION = 41;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -140,7 +140,7 @@ const DEFINITIONS = {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
         crushes: false, // the same potential behavior as every actor's, off
-        ai: { attack: "bite", phase: "chase", frames: 0 }, // which attack it uses, what it is doing (chase, windup, freeze), and the frames left of the windup or the freeze
+        ai: { attack: "bite", phase: "chase", frames: 0, strike: false }, // which attack it uses, what it is doing (chase, windup, freeze), the frames left of the windup or the freeze, and strike: the mind decided to strike in this frame (the hitbox is born after everyone has moved, see emitStrikes in src/sim.js)
         move: {
           direction: { x: 0, y: 0 }, // what it wants: toward the avatar, or still while it holds the freeze
           velocity: { x: 0, y: 0 }, // how it is really moving: it is born still and speeds up

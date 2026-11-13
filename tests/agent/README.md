@@ -248,6 +248,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 154 | The Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (312 px), the repeater has no range, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing. | The user's rule, 2026-11-13: the Radar, not the weapon, decides what can be targeted. |
 | 155 | The visual state holds no truth: 600 frames of Chamber 2 with it and without it give exactly the same state, and the cross-check is clean. | The user's rule, 2026-11-13: the rules write the visual state and never read it; erasing it changes no decision. |
 | 156 | A trace is born at age 0 where a one-frame hitbox was born, ages one frame per step and goes at 12; a bullet leaves none; the history keeps the visual state per snap and going back shows that frame's traces. | The user's decision: the eye sees what the rules no longer need (a one-frame bite), and stepping back must show it too. |
+| 157 | Things are born after everyone has moved: a bullet fired in a step where the avatar dashes is born at the avatar's final position, toward the target as seen from there, and the bite of a Biter is born toward the avatar's final position. | The user's decision, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really are. |
 
 ### Benchmark of the grid (not a test)
 
