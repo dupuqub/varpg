@@ -1463,6 +1463,25 @@ function combatAuditStartLine(frame, run, chamber) {
   return JSON.stringify({ frame, event: "start", run, chamber });
 }
 
+// The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,
+// resume) are skipped. Totals are by "kind:attack" (the kind is the source without its number or place: "biter_3" is "biter",
+// "rock 12,4" is "rock"): { hits, total, shield, health, minimumApplied } added up over every line given.
+function combatAuditTotals(lines) {
+  const totals = {};
+  for (const line of lines) {
+    const entry = JSON.parse(line);
+    if (entry.event !== "hit") continue;
+    const key = entry.source.replace(/_\d+$/, "").replace(/ .*$/, "") + ":" + entry.attack;
+    const t = totals[key] ?? (totals[key] = { hits: 0, total: 0, shield: 0, health: 0, minimumApplied: 0 });
+    t.hits += 1;
+    t.total += entry.total;
+    t.shield += entry.shield;
+    t.health += entry.health;
+    if (entry.minimumApplied) t.minimumApplied += 1;
+  }
+  return totals;
+}
+
 // ---- The audit of the hits (the user, 2026-11-13) ----
 // A third object beside the state, like the visual state and for the same reasons: the rules WRITE every hit into it and never
 // read it, so erasing it changes no decision and the states stay cheap to save. It answers "who hurt whom, with what, for how

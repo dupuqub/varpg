@@ -3930,3 +3930,25 @@ test("172 the combat audit writes one line per event, each a single JSON object 
   assert.deepStrictEqual(JSON.parse(r.resume), { frame: 450, event: "resume" });
   assert.deepStrictEqual(JSON.parse(r.start), { frame: 0, event: "start", run: 1, chamber: "chamber-2" });
 });
+
+test("173 the combat audit totals are read from the lines: two bites and a bullet and a start and a resume give two kinds (\"biter:bite\" with 2 hits, \"avatar:repeater-arm\" with 1), summing total, shield and health and counting the minimum; the start and resume lines count for nothing, and an empty log gives no totals", () => {
+  const result = run(`
+    const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
+    const hit = (frame, source, attack, target, total, shield, health, minimumApplied) =>
+      combatAuditHitLine(frame, source, attack, target, { parts: [part], total, minimumApplied }, { shield, health });
+    const lines = [
+      combatAuditStartLine(0, 1, "chamber-2"),
+      hit(10, "biter_3", "bite", "avatar_1", 8, 3, 5, false),
+      hit(11, "avatar_1", "repeater-arm", "biter_7", 4, 0, 4, true),
+      combatAuditResumeLine(5),
+      hit(6, "biter_12", "bite", "avatar_1", 2, 0, 2, true),
+    ];
+    return { totals: combatAuditTotals(lines), empty: combatAuditTotals([]) };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.totals, {
+    "biter:bite": { hits: 2, total: 10, shield: 3, health: 7, minimumApplied: 1 },
+    "avatar:repeater-arm": { hits: 1, total: 4, shield: 0, health: 4, minimumApplied: 1 },
+  });
+  assert.deepStrictEqual(r.empty, {});
+});
