@@ -65,7 +65,7 @@ Today's hitbox of the Biter is the simplest case of this: no velocity, immediate
 
 ## Built so far (2026-11-11): the repeater
 
-A part `repeater-arm` in the combat blueprint (Chamber 2): auto-aim at the closest actor in range, a cadence, a magazine and a reserve, a reload, **ammunition that weighs** (the mecha lightens and speeds up as it fires; reloading changes no weight), and a bullet that is a hitbox that travels, with a **pierce** that counts how many times it crosses (0 crosses nothing). The capacity of the Torso is 8 t. Numbers err upward on purpose and are tuned later.
+A part `repeater-arm` in the combat blueprint (Chamber 2): auto-aim at the closest actor inside the Radar of the avatar (the Head; the weapon has no range, the user 2026-11-13), a cadence, a magazine and a reserve, a reload, **ammunition that weighs** (the mecha lightens and speeds up as it fires; reloading changes no weight), and a bullet that is a hitbox that travels, with a **pierce** that counts how many times it crosses (0 crosses nothing). The capacity of the Torso is 8 t. Numbers err upward on purpose and are tuned later.
 
 ## Decided since
 

@@ -13,7 +13,7 @@ Written 2026-11-12 at the user's request ("create information that helps you bui
 
 - **Hitbox** (`state.hitboxes`): `{ owner, attack, position, radius, framesLeft, damage (a packet), velocity, struck, pierceLeft }`. A circle. Born with the packet frozen. Hurts each target once (`struck`). `pierceLeft` is a whole number (0 = ends at the first hit) or `null` (does not end on a hit: a bite). `resolveHitboxes` moves it, tests it against the targets and removes it. `hitboxHurts(ownerId, target)` is the side rule.
 - **Phases of a mind** (`think`, the Biter): `chase`, `windup` (still), strike (a hitbox is born), `freeze` (still). The frames of each are data in the attack.
-- **Weapon of the avatar** (`fireWeapons`): interval, magazine, reserve, reload, auto-aim at the closest actor in range, one bullet per shot. Damage is an attack `{ base, now, projectile }`; `now` is recalculated every frame (the place where mods and the skill tree enter).
+- **Weapon of the avatar** (`fireWeapons`): interval, magazine, reserve, reload, auto-aim at the closest actor inside the Radar (the Head, no range of the weapon), one bullet per shot. Damage is an attack `{ base, now, projectile }`; `now` is recalculated every frame (the place where mods and the skill tree enter).
 - **Packets and resistance** (`resolveDamage`): damage by type, resisted by points per type, a minimum of 1. Every weapon below should only produce packets.
 - **Weight** matters: the avatar's weight is dynamic (ammunition), speed depends on it, and the user's rule is that weight is the center of contact damage.
 - **One function makes every hitbox now:** `spawnHitbox` (Biter bite and bullet both use it; the two copies were merged).

@@ -2833,7 +2833,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 37, hash: "a6d4a5b07ed7dfb2" };
+const DATA_FINGERPRINT = { version: 38, hash: "46980baf7608e3d2" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3116,7 +3116,7 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
 
 test("140 a weapon must be sound when the data loads: only the closest rule, whole numbers, known types of damage, a bullet that is slower than the smallest radius it must not skip over", () => {
   const bad = (from, to) => assert.throws(() => loadGame((text) => text.replace(from, to)), /weapon of the part repeater-arm|projectile of the weapon|bullet of the weapon|rounds of the weapon/);
-  bad('target: "closest",\n        range: 520', 'target: "farthest",\n        range: 520');
+  bad('target: "closest",\n        intervalFrames', 'target: "farthest",\n        intervalFrames');
   bad("reloadFrames: 90", "reloadFrames: 0");
   bad("intervalFrames: 10", "intervalFrames: 1.5");
   bad("rounds: { weight: 6, magazine: 30, reserve: 370 }", "rounds: { weight: 1.5, magazine: 30, reserve: 370 }");
@@ -3373,4 +3373,26 @@ test("153 a bullet has no life in frames: it flies past the old range (520 px) a
   `);
   assert.ok(result.alive * 8 > 520, "it lived " + result.alive + " frames");
   assert.ok(Math.abs(result.alive * 8 - result.edge) <= 8, "it left at " + result.alive * 8 + " px, the edge is " + result.edge);
+});
+
+test("154 the Radar is the only truth about what can be aimed at: the Head gives the avatar a radius (520 px), the weapon has no range of its own, an actor beyond the Radar is not shot at and one inside is, and a blueprint with no Head sees nothing", () => {
+  const result = run(`
+    ${ARMED}
+    const shotsAt = (x, makeBlueprint) => {
+      const t = armed(0);
+      if (makeBlueprint) { t.bp = makeBlueprint(t.bp); t.s = createChamber2State(1, 1, t.bp); t.s.actors = [t.s.actors[0], t.s.actors.find((a) => a.id === "biter_0")]; t.s.actors[1].ai.phase = "freeze"; t.s.actors[1].ai.frames = 1000000; }
+      t.s.actors[1].position.x = x; t.s.actors[1].position.y = 0;
+      step(t.s, idle, t.bp);
+      return t.s.hitboxes.filter((h) => h.attack === "repeater-arm").length;
+    };
+    const base = armed(0);
+    const noHead = (bp) => ({ ...bp, parts: bp.parts.filter((id) => id !== "head") });
+    return { radar: base.s.actors[0].radar, inside: shotsAt(500), outside: shotsAt(560), none: shotsAt(100, noHead), recipeHasRange: "range" in DEFINITIONS.parts["repeater-arm"].weapon, starter: createRun(1).blueprint && createChamber1State(1, 1, createRun(1).blueprint).actors[0].radar };
+  `);
+  assert.strictEqual(result.radar, 520);
+  assert.strictEqual(result.inside, 1);
+  assert.strictEqual(result.outside, 0); // 560 is beyond 520 plus the radius of a Biter
+  assert.strictEqual(result.none, 0);
+  assert.strictEqual(result.recipeHasRange, false);
+  assert.strictEqual(result.starter, 520);
 });

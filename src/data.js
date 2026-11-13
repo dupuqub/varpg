@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 37;
+const DEFINITIONS_VERSION = 38;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -53,6 +53,7 @@ const DEFINITIONS = {
         // The shield (the user's decision, 2026-11-12): a health that regenerates, from the Generator (see "parts" below). now/max is the
         // user's mold; quiet counts the frames since the avatar last took damage; the rest is written at the start of the run from the parts.
         shield: { now: 0, max: 0, quiet: 0, delayFrames: 0, regenPerFrame: 0, resistance: {} },
+        radar: 0, // px, written at the start of the run from the parts (the Head): the circle around the avatar of what the weapons can aim at
         move: {
           direction: { x: 0, y: 0 }, // what the actor wants: vector with length 0 to 1
           velocity: { x: 0, y: 0 }, // how it is really moving, in pixels per frame
@@ -266,7 +267,8 @@ const DEFINITIONS = {
   //   dashCharges how many charges of dash the blueprint has at most (the Booster)
   //   rechargeFrames frames a spent dash charge takes to come back (the Booster)
   //   capacity  kg the blueprint can carry (the Torso)
-  // Radar, Magnet, the shield (Generator) and the weapons are not here: nothing uses them yet.
+  //   radar     px, the radius of the Radar (the Head): the only truth about what the automatic weapons can aim at (the user, 2026-11-13)
+  // Magnet is not here: nothing uses it yet.
   // weight: anchor, the proportions of the user's old project (0.2 / 0.3 / 0.1 / 0.4 / 0.6 / 0.1 / 0.1,
   //   total 2.3) scaled to a total of 5000 kg (two large cars), rounded to tens.
   // health: target, the old proportions (Head 20, Torso 80, Legs 40 = 1 : 4 : 2) scaled to a total of 100,
@@ -292,14 +294,15 @@ const DEFINITIONS = {
     "shoulder-l": { name: "Shoulder L", weight: 450, specs: {} },
     "arm-r": { name: "Arm R", weight: 650, specs: {} },
     "arm-l": { name: "Arm L", weight: 650, specs: {} },
-    head: { name: "Head", weight: 200, specs: { health: 15 } },
+    // head.radar 520: guess, the old range of the repeater (a bit under half the height of the screen), so the reach of the aim does not change; the user's rule (2026-11-13): the Radar is the only truth about what can be aimed at.
+    head: { name: "Head", weight: 200, specs: { health: 15, radar: 520 } },
     torso: { name: "Torso", weight: 900, specs: { health: 55, resistance: { blunt: 20, puncture: 10 }, speed: 0.5, capacity: 8000 } },
     // The repeater arm (the user, 2026-11-11): the weapon is the arm itself and takes the place of the plain Arm L. A
     // machine gun, slow at first, with limited ammunition that weighs: the mecha gets lighter and faster as it fires.
     // weight 800: the plain arm's 650 plus 150 for the gun (guess).
     // weapon.target: "closest", the only rule of auto-aim for now.
     // The user (2026-11-11): "err upward first, better to look overpowered than a rubber duck"; the numbers are tuned later.
-    // weapon.range 520: guess, a bit under half the height of the screen, so it only fires at what is near.
+    // (the weapon has no range any more: the Radar of the Head decides what can be aimed at, see parts.head)
     // weapon.intervalFrames 10: guess, 6 shots a second (the old project's 0.3 s was 18 frames; raised on purpose).
     // weapon.reloadFrames 90: guess, 1.5 s.
     // weapon.rounds: weight 6 kg each and 400 of them (magazine 30, reserve 370), guess: 2400 kg of ammunition, so firing
@@ -314,7 +317,6 @@ const DEFINITIONS = {
       specs: {},
       weapon: {
         target: "closest",
-        range: 520,
         intervalFrames: 10,
         reloadFrames: 90,
         rounds: { weight: 6, magazine: 30, reserve: 370 },

@@ -5,6 +5,7 @@ const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
 const ACTOR_COLORS = { dummy: "#3d8bff", biter: "#e0453a" }; // by actor type (not the avatar): a new actor type needs its color here
+const RADAR_COLOR = "rgba(255, 255, 255, 0.6)"; // the circle of the Radar: white, no fill
 const HITBOX_COLOR = "#ffd23f"; // the hitboxes are yellow circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
@@ -34,6 +35,15 @@ function draw(context, state, blueprint, fps) {
     context.lineWidth = 3;
     context.beginPath();
     context.arc(width / 2, height / 2, player.radius, 0, Math.PI * 2);
+    context.stroke();
+  }
+
+  // The Radar (the Head): a white circle with no fill, the edge of what the weapons can aim at. Drawn only when there is one.
+  if (player.radar > 0) {
+    context.strokeStyle = RADAR_COLOR;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.arc(width / 2, height / 2, player.radar, 0, Math.PI * 2);
     context.stroke();
   }
 

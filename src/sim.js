@@ -59,6 +59,7 @@ function finalizeStatic(actor, blueprint) {
   actor.deceleration = finalDeceleration(actor, blueprint);
   actor.health.max = finalMaxHealth(actor, blueprint);
   if (actor.shield) writeShield(actor, blueprint);
+  if (actor.radar !== undefined) actor.radar = fromParts(actor, blueprint, "radar"); // the radius of the Radar: the only truth about what can be aimed at
   if (actor.dash) {
     actor.dash.rechargeFrames = finalDashRechargeFrames(actor, blueprint);
     actor.dash.charges.max = finalDashMaxCharges(actor, blueprint);
@@ -205,7 +206,7 @@ function assertValidBlueprint(blueprint) {
 
 // The specs a part can have: the ones the rules read (see "parts" in src/data.js). Anything else is refused when the
 // definitions load.
-const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges", "rechargeFrames", "capacity", "shieldMax", "shieldDelayFrames", "shieldRegenPerFrame", "shieldResistance"];
+const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges", "rechargeFrames", "capacity", "radar", "shieldMax", "shieldDelayFrames", "shieldRegenPerFrame", "shieldResistance"];
 
 // Fails loudly if a definition breaks a rule of the library. It runs once, when this file is loaded, so a
 // bad definition stops the game before the first frame.
@@ -265,15 +266,14 @@ function assertValidDefinitions() {
       }
     }
   }
-  // The weapon of a part: whole numbers where the rules count, known types of damage, and a bullet that lives long enough to
-  // reach the range and is slower than the smallest radius it must not skip over (so it cannot jump a target in one frame).
+  // The weapon of a part: whole numbers where the rules count, known types of damage, and a bullet that is slower than the smallest radius it must not skip over (so it cannot jump a target in one frame).
   for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
     const weapon = part.weapon;
     if (!weapon) continue;
     const where = "the weapon of the part " + id;
     if (weapon.target !== "closest") throw new Error("The target of " + where + " is " + weapon.target + ", and the only rule is closest");
     const whole = (value, least) => Number.isInteger(value) && value >= least;
-    if (!whole(weapon.range, 1) || !whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The range, intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
+    if (!whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
     const rounds = weapon.rounds;
     if (!rounds || !whole(rounds.weight, 0) || !whole(rounds.magazine, 1) || !whole(rounds.reserve, 0)) throw new Error("The rounds of " + where + " need a whole weight (0 or more), a magazine (1 or more) and a reserve (0 or more)");
     const bullet = weapon.projectile;
@@ -1194,7 +1194,7 @@ function think(state, actor, player) {
 // and the weapon is the arm or shoulder itself). The avatar carries the state of each weapon it has (avatar.weapons):
 // { part, magazine, reserve, interval, reload }: the rounds in the magazine and in the reserve, the frames left until it can
 // fire again (interval) and until the reload ends (reload, 0 when not reloading). Everything is whole numbers.
-// The weapons aim by themselves: the target is the closest actor in range (the first in the list on a tie, so it is the
+// The weapons aim by themselves: the target is the closest actor inside the Radar of the avatar (the user, 2026-11-13: the Radar, from the Head, is the only truth about what can be aimed at; a weapon has no range of its own) (the first in the list on a tie, so it is the
 // same everywhere). Every round weighs (see carriedWeight). The damage of a weapon is an attack of the avatar like any
 // other ({ base, now }), so what changes it later (mods, the skill tree) has the same place to enter.
 
@@ -1217,8 +1217,10 @@ function addWeaponAttacks(actor) {
   }
 }
 
-// The closest actor (not the avatar, still with health) whose body is within range of the avatar, or null.
+// The closest actor (not the avatar, still with health) whose body is within range of the avatar, or null. The range is the
+// Radar of the avatar; a Radar of 0 (no Head) sees nothing.
 function closestTarget(state, player, range) {
+  if (!(range > 0)) return null;
   let best = null;
   let bestDistance = Infinity;
   for (const actor of state.actors) {
@@ -1256,7 +1258,7 @@ function fireWeapons(state, player) {
       continue;
     }
     if (weapon.interval > 0) continue;
-    const target = closestTarget(state, player, recipe.range);
+    const target = closestTarget(state, player, player.radar);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
