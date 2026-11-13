@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 34;
+const DEFINITIONS_VERSION = 35;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -222,9 +222,11 @@ const DEFINITIONS = {
     // The ring of the shield (the user's idea, 2026-11-12): the avatar's body for collision and for being hit is a circle that goes
     // from the body (shield empty) to the ring (shield full) in a straight line with the share of the shield that is left, so
     // nothing jumps when it fills or drains gradually, and the avatar does not hurt anyone because the ring grew (a hit needs an impact).
-    // ringScale 1.3: anchor, the ring of the old project's screenshot (docs/reference, a relic) is about 57 px across around a mecha
-    //   about 45 px wide, so a little bigger than the body; this is the user's "bigger than the avatar, as in the image".
-    shield: { ringScale: 1.3 },
+    // ringScale 1.8: the user's number (2026-11-12): the ring, shield full, is at least 180% of the size of the avatar, so that
+    //   the shield is seen to be what is hit and not the avatar. (An earlier 1.3 came from the screenshot of the old project, a
+    //   relic, and the user found it too close to the body.) A guess to tune by playing; the ring must stay below the margin
+    //   between the screen and the edge of the window (test 101 checks the actors; the avatar's ring is far under it).
+    shield: { ringScale: 1.8 },
 
     // Pixels per frame taken off the top speed for each kg the avatar carries.
     // target: a 5000 kg mecha loses 5000 x 0.0002 = 1 px/frame; anchor: the user's example, a part that

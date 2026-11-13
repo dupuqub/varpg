@@ -2833,7 +2833,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 34, hash: "41706ec8305f3a88" };
+const DATA_FINGERPRINT = { version: 35, hash: "2351d2e9b9006f47" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3191,11 +3191,11 @@ test("143 the weight of the avatar comes from the parts of the blueprint and the
 // ---- The shield (the user, 2026-11-12) ----
 // The real Generator (shield: true), the world as QUIET (no objects, six Biters). The shield: a health that regenerates, from the
 // Generator; it absorbs first; it adds resistance while it has something left; the ring (the radius of the avatar for collision
-// and for being hit) goes from the body to 1.3 times the body in a straight line with the shield that is left.
+// and for being hit) goes from the body to 1.8 times the body in a straight line with the shield that is left.
 const SHIELDED = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }"), { shield: true });
 const IDLE = "const idle = { move: { x: 0, y: 0 }, dash: false };";
 
-test("144 the Generator gives the avatar its shield: 40, a wait of 180 frames, 0.25 back per frame, and 11 points of resistance to each type while it lasts; it is born full and not waiting, and its radius is the ring, 16 x 1.3", () => {
+test("144 the Generator gives the avatar its shield: 40, a wait of 180 frames, 0.25 back per frame, and 11 points of resistance to each type while it lasts; it is born full and not waiting, and its radius is the ring, 16 x 1.8", () => {
   const result = run(`
     const avatar = createAvatar(createRun(1).blueprint);
     const without = createAvatar({ parts: createRun(1).blueprint.parts.filter((id) => id !== "generator") });
@@ -3203,7 +3203,7 @@ test("144 the Generator gives the avatar its shield: 40, a wait of 180 frames, 0
   `, SHIELDED);
   assert.deepStrictEqual(plain(result.shield), { now: 40, max: 40, quiet: 180, delayFrames: 180, regenPerFrame: 0.25, resistance: { blunt: 11, puncture: 11 } });
   assert.strictEqual(result.bodyRadius, 16);
-  assert.ok(Math.abs(result.radius - 16 * 1.3) < 1e-12);
+  assert.ok(Math.abs(result.radius - 16 * 1.8) < 1e-12);
   assert.strictEqual(result.without.shield.max, 0); // no Generator, no shield: and the radius is the body
   assert.strictEqual(result.without.radius, 16);
 });
@@ -3265,7 +3265,7 @@ test("147 the shield waits 180 quiet frames after any damage and then gives back
   assert.strictEqual(result.back, 39.25);
 });
 
-test("148 the radius of the avatar follows the shield in a straight line, from the body (16, empty) to the ring (20.8, full): half a shield is 18.4, and it is calculated again every frame and stored in the avatar", () => {
+test("148 the radius of the avatar follows the shield in a straight line, from the body (16, empty) to the ring (28.8, full): half a shield is 22.4, and it is calculated again every frame and stored in the avatar", () => {
   const result = run(`
     ${IDLE}
     const s = createChamber2State(1, 1);
@@ -3279,8 +3279,8 @@ test("148 the radius of the avatar follows the shield in a straight line, from t
     }
     return { radii, body: avatar.bodyRadius };
   `, SHIELDED);
-  assert.ok(Math.abs(result.radii[0] - 20.8) < 1e-12);
-  assert.ok(Math.abs(result.radii[1] - 18.4) < 1e-12);
+  assert.ok(Math.abs(result.radii[0] - 28.8) < 1e-12);
+  assert.ok(Math.abs(result.radii[1] - 22.4) < 1e-12);
   assert.strictEqual(result.radii[2], 16);
   assert.strictEqual(result.body, 16); // the body itself never changes
 });
