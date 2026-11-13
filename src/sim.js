@@ -1366,16 +1366,19 @@ function addWeaponAttacks(actor) {
   }
 }
 
-// The closest actor (not the avatar, still with health) whose body is within range of the avatar, or null. The range is the
-// Radar of the avatar; a Radar of 0 (no Head) sees nothing.
-function closestTarget(state, player, range) {
+// The target of an action (the user, 2026-11-13, issue 13): the rule target.pick applied to the things that carry target.tag, within
+// range of "from" (their body reaches it: the distance to the center minus their radius), or null when there is none. The tag is
+// absolute, not relative to who acts. The only rule today is "closest" (the first in the list on a tie, so runs stay reproducible).
+// "living": whoever has no health is not a target; the Biter passes false (it still chases the avatar at zero health: what the death
+// of the avatar does is open, issue 13). A range of 0 (no Head, no Radar) sees nothing.
+function pickTarget(state, from, target, range, living = true) {
   if (!(range > 0)) return null;
   let best = null;
   let bestDistance = Infinity;
   for (const actor of state.actors) {
-    if (isAvatar(actor) || actor.health.now <= 0) continue;
-    const dx = actor.position.x - player.position.x;
-    const dy = actor.position.y - player.position.y;
+    if (!tagsOf(actor).includes(target.tag) || (living && actor.health.now <= 0)) continue;
+    const dx = actor.position.x - from.position.x;
+    const dy = actor.position.y - from.position.y;
     const distance = dx * dx + dy * dy;
     const reach = range + actor.radius;
     if (distance <= reach * reach && distance < bestDistance) {
@@ -1398,7 +1401,7 @@ function swingMelees(state, player, visual) {
       // Room to correct (the user, 2026-11-13): the aim was locked when the windup began, but each frame it moves a part
       // (attack.aimCorrection) of the way toward where the closest target is now. No trigonometry: blend the two directions and
       // give the result length 1 again. Opposite directions would blend to nothing: then the aim stays as it was.
-      const aimed = closestTarget(state, player, player.radar);
+      const aimed = pickTarget(state, player, attack.target, player.radar);
       if (aimed !== null && attack.aimCorrection > 0) {
         const dx = aimed.position.x - player.position.x;
         const dy = aimed.position.y - player.position.y;
@@ -1425,7 +1428,7 @@ function swingMelees(state, player, visual) {
       if (sword.frames > 0) continue;
       sword.phase = "idle";
     }
-    const target = closestTarget(state, player, player.radar);
+    const target = pickTarget(state, player, attack.target, player.radar);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
@@ -1459,14 +1462,14 @@ function fireWeapons(state, player) {
       continue;
     }
     if (weapon.interval > 0) continue;
-    const target = closestTarget(state, player, player.radar);
+    const attack = player.attacks[weapon.part];
+    const target = pickTarget(state, player, attack.target, player.radar);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     const towardY = distance === 0 ? 0 : dy / distance;
-    const attack = player.attacks[weapon.part];
     spawnHitbox(state, player, weapon.part, towardX, towardY, { radius: attack.projectile.radius, frames: null, speed: attack.projectile.speed, pierce: attack.projectile.pierce });
     weapon.magazine -= 1;
     weapon.interval = recipe.intervalFrames;

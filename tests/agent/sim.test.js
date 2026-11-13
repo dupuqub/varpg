@@ -2964,14 +2964,14 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
     a.position.x = 400; a.position.y = 0;      // 400 away
     b.position.x = 0;   b.position.y = -200;   // 200 away: the closest
     c.position.x = 900; c.position.y = 0;      // out of range (520 + its radius)
-    const first = closestTarget(t.s, t.s.actors[0], 520).id;
+    const first = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520).id;
     b.health.now = 0;                          // the closest has no health: the next one
-    const second = closestTarget(t.s, t.s.actors[0], 520).id;
+    const second = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520).id;
     a.health.now = 0;
-    const third = closestTarget(t.s, t.s.actors[0], 520);
+    const third = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520);
     b.health.now = 30; a.health.now = 30;
     a.position.x = 0; a.position.y = -200;     // the same distance as b: a is first in the list, so it is the target
-    const tie = closestTarget(t.s, t.s.actors[0], 520).id;
+    const tie = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520).id;
 
     const u = armed(0);
     u.s.actors[1].position.x = 180; u.s.actors[1].position.y = 240; // 300 away: the 3-4-5 triangle, inside the Radar (312)
@@ -4174,4 +4174,23 @@ test("183 the target of an attack is a record { pick, tag } written into the att
   bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "closest" },', /target of the attack bite of the actor biter/);
   bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "random", tag: "ally" },', /target of the attack bite of the actor biter/);
   bad('          target: { pick: "closest", tag: "ally" },', '          // no target', /target of the attack bite of the actor biter/);
+});
+
+test("184 pickTarget picks among the things that carry the tag, whoever asks: from the avatar the closest enemy (a Biter), from a Biter the closest ally (the avatar, never another Biter, however close), nothing for a tag that nobody carries, and the dead are skipped unless living is false", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, a, b] = s.actors;
+    avatar.position.x = 0; avatar.position.y = 0;
+    a.position.x = 100; a.position.y = 0;
+    b.position.x = 110; b.position.y = 0;
+    const pick = (from, tag, living) => pickTarget(s, from, { pick: "closest", tag }, 1000, living)?.id ?? null;
+    const out = { fromAvatar: pick(avatar, "enemy"), fromBiter: pick(b, "ally"), nobody: pick(avatar, "ghost") };
+    avatar.health.now = 0;
+    out.deadAvatarSkipped = pick(b, "ally");
+    out.deadAvatarChased = pick(b, "ally", false);
+    return { out, ids: [avatar.id, a.id, b.id] };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.out, { fromAvatar: r.ids[1], fromBiter: r.ids[0], nobody: null, deadAvatarSkipped: null, deadAvatarChased: r.ids[0] });
 });
