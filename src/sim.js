@@ -1323,7 +1323,7 @@ function meleeStates(blueprint) {
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
-    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile };
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
   }
   // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
   // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
@@ -1334,6 +1334,7 @@ function addWeaponAttacks(actor) {
     const half = recipe.angleDegrees / 2;
     actor.attacks[melee.part] = {
       base, now: { ...base }, terms: JSON.parse(JSON.stringify(recipe.damage)),
+      ignores: [...recipe.ignores],
       reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
       windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
     };
@@ -1593,7 +1594,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
-    ignores: [...ignoredTagsOf(owner)], // the tags it does not hurt: a copy of its owner's list at its birth (the owner may be gone before it ends)
+    ignores: [...attack.ignores], // the tags it does not hurt: a copy of its attack's list at its birth (the owner may be gone before it ends)
   };
   state.hitboxes.push(hitbox);
   if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
