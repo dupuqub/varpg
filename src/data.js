@@ -21,13 +21,13 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 44;
+const DEFINITIONS_VERSION = 45;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
   // each type on its own). Only the types something uses today: blunt is the body slam, puncture is the Biter's bite.
   // The order here is the order the terms of a hit are calculated and shown. Fire, ice... come when something uses them.
-  damageTypes: ["blunt", "puncture"],
+  damageTypes: ["blunt", "puncture", "slash"], // slash (the user, 2026-11-13): the damage of the sword. No part resists it yet (0 points everywhere): the resistances are still to be decided.
 
   actors: {
     avatar: {
@@ -345,7 +345,7 @@ const DEFINITIONS = {
     // melee.recoveryFrames 18: guess, 0.3 s; with the windup, a swing every 30 frames, two a second.
     // melee.aimCorrection 0.1: guess; the aim is locked when the windup starts, but each frame of the windup it moves 10% of the way toward
     //   the direction of the target (the user: "some room for correction"). No trigonometry: blend the two directions and make the result length 1.
-    // melee.damage puncture 30 = flat 30 + perWeight 0 (guess: a Biter has 30 health, so one blow kills it; err upward). The weight does not
+    // melee.damage slash 30 = flat 30 + perWeight 0 (guess: a Biter has 30 health, so one blow kills it; err upward). The weight does not
     //   change the sword for now (the user, 2026-11-13), but the number is written { flat, perWeight } so a node of the skill tree can raise perWeight later.
     "sword-arm": {
       name: "Sword arm",
@@ -358,7 +358,7 @@ const DEFINITIONS = {
         windupFrames: 12,
         recoveryFrames: 18,
         aimCorrection: 0.1,
-        damage: { puncture: { flat: 30, perWeight: 0 } },
+        damage: { slash: { flat: 30, perWeight: 0 } },
       },
     },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },
