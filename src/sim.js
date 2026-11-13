@@ -1317,7 +1317,7 @@ function think(state, actor) {
     ai.phase = "chase"; // the freeze is over: this frame it already chases
   }
 
-  if (distance - actor.radius - target.radius <= attack.reach) {
+  if (exitGap(actor, attack.exit, distance, target) <= attack.reach) {
     if (attack.windupFrames > 0) {
       ai.phase = "windup";
       ai.frames = attack.windupFrames;
@@ -1453,7 +1453,7 @@ function swingMelees(state, player, visual) {
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance - target.radius > attack.reach) continue; // the reach is counted from the center of the avatar (hitboxOrigin)
+    if (exitGap(player, attack.exit, distance, target) > attack.reach) continue; // the reach is counted from the center of the avatar (hitboxOrigin)
     sword.dirX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     sword.dirY = distance === 0 ? 0 : dy / distance;
     sword.phase = "windup";
@@ -1622,6 +1622,13 @@ function emitStrikes(state, visual) {
 function hitboxOrigin(owner, exit, towardX, towardY) {
   if (exit === "center") return { x: owner.position.x, y: owner.position.y };
   return { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius };
+}
+
+// The gap the reach of an attack is compared with: from where its hitbox is born (its exit) to the edge of the target. "center": from the
+// center of the owner; "front": from one body ahead of it, so the owner's radius comes off. The one place that does this sum, for the
+// Biter's decision to bite (think) and the sword's to swing (swingMelees); "distance" is the one between the two centers.
+function exitGap(owner, exit, distance, target) {
+  return distance - (exit === "front" ? owner.radius : 0) - target.radius;
 }
 
 // The one function that makes a hitbox, for every attack (a bite, a bullet, a sword). Born where hitboxOrigin says,

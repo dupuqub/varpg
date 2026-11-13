@@ -4260,3 +4260,24 @@ test("186 the place of exit is a key of the attack, not a rule about the avatar:
   bad('exit: "front",', '// no exit', /exit of the attack bite of the actor biter/);
   bad('        exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', '        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', /exit of the weapon of the part repeater-arm/);
 });
+
+test("187 the gap that the reach is compared with is counted from the exit of the attack, in one function: from the center the owner's radius does not come off, from the front it does; a Biter at exactly its reach from the avatar starts its windup, and with the exit of its bite changed to center the same position is out of reach by one body (no windup)", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const numbers = { center: exitGap({ radius: 16 }, "center", 100, { radius: 10 }), front: exitGap({ radius: 16 }, "front", 100, { radius: 10 }) };
+    const bite = (exit) => {
+      const s = aloneBiters(0, 1);
+      const [avatar, a] = s.actors;
+      if (exit) a.attacks.bite.exit = exit;
+      avatar.position.x = 0; avatar.position.y = 0;
+      a.position.x = a.attacks.bite.reach + a.radius + avatar.radius; a.position.y = 0;
+      step(s, { move: { x: 0, y: 0 } });
+      return a.ai.phase;
+    };
+    return { numbers, byDefault: bite(null), fromCenter: bite("center") };
+  `, QUIET);
+  const r = plain(result);
+  assert.deepStrictEqual(r.numbers, { center: 90, front: 74 });
+  assert.strictEqual(r.byDefault, "windup");
+  assert.strictEqual(r.fromCenter, "chase");
+});
