@@ -48,7 +48,7 @@ function draw(context, state, blueprint, fps, visual = null) {
   }
 
   if (visual !== null) drawTraces(context, visual, player);
-  drawHitboxes(context, state, player);
+  drawHitboxes(context, state, player, visual);
 
   drawDashStatus(context, player);
   drawHealth(context, player);
@@ -139,11 +139,14 @@ function drawActors(context, state, player) {
 }
 
 // The hitboxes that exist, as yellow circles (only the outline: the bodies stay visible).
-function drawHitboxes(context, state, player) {
+// The hitboxes that live their frames (the bite) are not drawn while there is a visual state: the trace it leaves is what the
+// eye sees (the user, 2026-11-13: "the visual aid should be the visible thing"). The ones that fly (bullets) are drawn live.
+function drawHitboxes(context, state, player, visual = null) {
   const { width, height } = context.canvas;
   context.strokeStyle = HITBOX_COLOR;
   context.lineWidth = 3;
   for (const hitbox of state.hitboxes) {
+    if (visual !== null && hitbox.framesLeft !== null) continue;
     context.beginPath();
     context.arc(hitbox.position.x - player.position.x + width / 2, hitbox.position.y - player.position.y + height / 2, hitbox.radius, 0, Math.PI * 2);
     context.stroke();
