@@ -27,7 +27,7 @@ function readSource(name) {
 // avatar. The Generator keeps its weight, so nothing else changes. The tests of the shield (and test 129, which reads the real
 // file) use the real Generator.
 const GENERATOR_WITH_SHIELD = /generator: \{ name: "Generator", weight: 200, specs: \{[^\n]*\} \},/;
-function loadGame(patchData = null, { shield = false } = {}) {
+function loadGame(patchData = null, { shield = false, patchSim = null } = {}) {
   const context = vm.createContext({});
   for (const name of FILES) {
     let text = readSource(name);
@@ -39,6 +39,11 @@ function loadGame(patchData = null, { shield = false } = {}) {
     if (name === "data.js" && patchData !== null) {
       const patched = patchData(text);
       if (patched === text) throw new Error("A patch of src/data.js changed nothing: the text it looks for is no longer there");
+      text = patched;
+    }
+    if (name === "sim.js" && patchSim !== null) {
+      const patched = patchSim(text);
+      if (patched === text) throw new Error("A patch of src/sim.js changed nothing: the text it looks for is no longer there");
       text = patched;
     }
     vm.runInContext(text, context);
@@ -4280,4 +4285,41 @@ test("187 the gap that the reach is compared with is counted from the exit of th
   assert.deepStrictEqual(r.numbers, { center: 90, front: 74 });
   assert.strictEqual(r.byDefault, "windup");
   assert.strictEqual(r.fromCenter, "chase");
+});
+
+// ---- The index by tag (issue 22) ----
+// The same game with the plain walk over every actor instead of the index: the reference that the index must equal.
+const PLAIN_WALK = loadGame(null, { patchSim: (text) => text.replace("const byTag = tagIndex(state.actors);", "const byTag = null;") });
+
+test("188 the index by tag gives the same answer as the plain walk, tie included, and the same whole run: the same pick for every asker and tag in a crowd (a tie goes to the first in the list), and 900 frames of Chamber 2 with the combat blueprint end in the same state and the same combat audit with the index and with the plain walk", () => {
+  const code = `
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    const audit = createAudit();
+    for (let i = 0; i < 900; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, audit);
+    const crowd = createChamber2State(1, 1, run.blueprint);
+    const index = tagIndex(crowd.actors);
+    const picks = [];
+    for (const from of crowd.actors.slice(0, 12)) {
+      for (const tag of ["ally", "enemy", "vermin", "object", "ghost"]) {
+        for (const living of [true, false]) {
+          const plain = pickTarget(crowd, from, { pick: "closest", tag }, 600, living)?.id ?? null;
+          const indexed = pickTarget(crowd, from, { pick: "closest", tag }, 600, living, index)?.id ?? null;
+          picks.push(plain === indexed);
+        }
+      }
+    }
+    const twins = createChamber2State(1, 1, run.blueprint);
+    twins.actors[2].position = { ...twins.actors[3].position };
+    twins.actors[2].radius = twins.actors[3].radius;
+    const tie = [pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, true)?.id, pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, true, tagIndex(twins.actors))?.id];
+    return { state: JSON.stringify(s), audit: audit.join("\\n"), picks, tie };
+  `;
+  const indexed = run(code);
+  const plain = run(code, PLAIN_WALK);
+  assert.ok(indexed.picks.length === 120 && indexed.picks.every(Boolean), "the index must pick what the plain walk picks");
+  assert.strictEqual(indexed.tie[0], indexed.tie[1]);
+  assert.strictEqual(indexed.state, plain.state);
+  assert.strictEqual(indexed.audit, plain.audit);
+  assert.ok(indexed.audit.length > 0, "the run must have fought, or the comparison proves little");
 });

@@ -1266,14 +1266,14 @@ function collideActors(state, lastContacts, audit = null) {
 // (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
 // deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
-function think(state, actor) {
+function think(state, actor, byTag) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
 
   // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: how far a non-avatar actor
   // sees is open, issue 13; living false: it still chases the avatar at zero health, as before). With none it stands still.
-  const target = pickTarget(state, actor, attack.target, Infinity, false);
+  const target = pickTarget(state, actor, attack.target, Infinity, false, byTag);
   if (target === null) {
     direction.x = 0;
     direction.y = 0;
@@ -1391,12 +1391,29 @@ function addWeaponAttacks(actor) {
 // absolute, not relative to who acts. The only rule today is "closest" (the first in the list on a tie, so runs stay reproducible).
 // "living": whoever has no health is not a target; the Biter passes false (it still chases the avatar at zero health: what the death
 // of the avatar does is open, issue 13). A range of 0 (no Head, no Radar) sees nothing.
-function pickTarget(state, from, target, range, living = true) {
+// "index": the index by tag of this step (tagIndex), or null for the plain walk over every actor. Both give the same answer: the index
+// only skips the actors without the tag, in the same list order, so a tie still goes to the first (the plain walk is the reference in the tests).
+// The actors that carry each tag, in list order, made again at the start of every step and never part of the state (issue 22: one Biter
+// walking every actor to find the avatar made the step 3 to 5 times slower with a crowd). Actors do not change tags or enter or leave
+// the list during a step (they leave at the end, removeDestroyed); if that changes one day the index is rewritten at that moment.
+function tagIndex(actors) {
+  const index = new Map();
+  for (const actor of actors) {
+    for (const tag of tagsOf(actor)) {
+      if (!index.has(tag)) index.set(tag, []);
+      index.get(tag).push(actor);
+    }
+  }
+  return index;
+}
+
+function pickTarget(state, from, target, range, living = true, index = null) {
   if (!(range > 0)) return null;
   let best = null;
   let bestDistance = Infinity;
-  for (const actor of state.actors) {
-    if (!tagsOf(actor).includes(target.tag) || (living && actor.health.now <= 0)) continue;
+  const candidates = index === null ? state.actors : index.get(target.tag) ?? [];
+  for (const actor of candidates) {
+    if ((index === null && !tagsOf(actor).includes(target.tag)) || (living && actor.health.now <= 0)) continue;
     const dx = actor.position.x - from.position.x;
     const dy = actor.position.y - from.position.y;
     const distance = dx * dx + dy * dy;
@@ -1413,7 +1430,7 @@ function pickTarget(state, from, target, range, living = true) {
 // (from the center of the avatar to the edge of the target: the cone is born at the center, see hitboxOrigin), starts the windup and locks the aim toward it. Windup: counts
 // down and, at the last frame, the cone is born (spawnHitbox, fixed, one frame, hurting what it overlaps) and the recovery begins.
 // Recovery: counts down, and the sword is idle again (and may start a new windup in the same frame).
-function swingMelees(state, player, visual) {
+function swingMelees(state, player, visual, byTag) {
   for (const sword of player.melees) {
     const attack = player.attacks[sword.part];
     if (sword.phase === "windup") {
@@ -1421,7 +1438,7 @@ function swingMelees(state, player, visual) {
       // Room to correct (the user, 2026-11-13): the aim was locked when the windup began, but each frame it moves a part
       // (attack.aimCorrection) of the way toward where the closest target is now. No trigonometry: blend the two directions and
       // give the result length 1 again. Opposite directions would blend to nothing: then the aim stays as it was.
-      const aimed = pickTarget(state, player, attack.target, player.radar);
+      const aimed = pickTarget(state, player, attack.target, player.radar, true, byTag);
       if (aimed !== null && attack.aimCorrection > 0) {
         const dx = aimed.position.x - player.position.x;
         const dy = aimed.position.y - player.position.y;
@@ -1448,7 +1465,7 @@ function swingMelees(state, player, visual) {
       if (sword.frames > 0) continue;
       sword.phase = "idle";
     }
-    const target = pickTarget(state, player, attack.target, player.radar);
+    const target = pickTarget(state, player, attack.target, player.radar, true, byTag);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
@@ -1464,7 +1481,7 @@ function swingMelees(state, player, visual) {
 // One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
 // there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
 // and has a target fires one bullet at it (born at the center of the avatar, see hitboxOrigin, moving at the speed of the weapon).
-function fireWeapons(state, player) {
+function fireWeapons(state, player, byTag) {
   for (const weapon of player.weapons) {
     const recipe = DEFINITIONS.parts[weapon.part].weapon;
     if (weapon.interval > 0) weapon.interval -= 1;
@@ -1483,7 +1500,7 @@ function fireWeapons(state, player) {
     }
     if (weapon.interval > 0) continue;
     const attack = player.attacks[weapon.part];
-    const target = pickTarget(state, player, attack.target, player.radar);
+    const target = pickTarget(state, player, attack.target, player.radar, true, byTag);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
@@ -1587,13 +1604,13 @@ function ageVisual(visual) {
 // The strikes that the minds decided in this step (think sets ai.strike): for each one the hitbox is born now, toward where the
 // avatar is after everyone has moved, and the flag goes down (an actor that has no health left strikes nothing). Called by step
 // after the movement and the collisions.
-function emitStrikes(state, visual) {
+function emitStrikes(state, visual, byTag) {
   for (const actor of state.actors) {
     if (!actor.ai || !actor.ai.strike) continue;
     actor.ai.strike = false;
     if (actor.health.now <= 0) continue; // the user, 2026-11-13: whoever died in this step does not strike (the flag triggers nothing)
     const attack = actor.attacks[actor.ai.attack];
-    const target = pickTarget(state, actor, attack.target, Infinity, false); // toward where its target is now, after everyone moved
+    const target = pickTarget(state, actor, attack.target, Infinity, false, byTag); // toward where its target is now, after everyone moved
     if (target === null) continue;
     const dx = target.position.x - actor.position.x;
     const dy = target.position.y - actor.position.y;
@@ -1825,6 +1842,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
   // 0. The dynamic values: every actor calculates them again and carries them for this frame (finalizeDynamic).
   // The static ones were calculated when the actor was made.
   for (const actor of state.actors) finalizeDynamic(actor, blueprint);
+  const byTag = tagIndex(state.actors); // for the targets of this step (issue 22)
 
   // 1. Player input (values are copied, so the state never points into the input).
   player.move.direction.x = input.move.x;
@@ -1832,7 +1850,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
 
   // 1b. The minds: every actor that has `ai` decides where to go and whether to strike (think), before anyone moves.
   for (const actor of state.actors) {
-    if (actor.ai) think(state, actor);
+    if (actor.ai) think(state, actor, byTag);
   }
 
   // 2. Movement: every actor that has "move" walks, in list order.
@@ -1894,9 +1912,9 @@ function step(state, input, blueprint, visual = null, audit = null) {
   // and fire at the closest target (fireWeapons), and the blows of its swords (swingMelees). Every hitbox is born here, in one place, with the same function (spawnHitbox).
   // A hitbox that follows its owner (an aura, an orbiting blade, a beam: none exists yet) would be placed again right here,
   // before the next step, so nothing in the order of the step stands in its way.
-  emitStrikes(state, visual);
-  fireWeapons(state, player);
-  swingMelees(state, player, visual);
+  emitStrikes(state, visual, byTag);
+  fireWeapons(state, player, byTag);
+  swingMelees(state, player, visual, byTag);
 
   // 5. The hitboxes hurt, once each, and lose a frame.
   resolveHitboxes(state, audit);
