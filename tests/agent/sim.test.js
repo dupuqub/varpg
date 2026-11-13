@@ -3579,3 +3579,33 @@ test("160 the audit holds no truth and is bounded: 600 frames of Chamber 2 with 
   assert.strictEqual(result.copy, true);
   assert.strictEqual(result.none, null);
 });
+
+test("161 a circle touches a cone when it overlaps it at all: center inside, only the arc, only a straight edge, only the tip, and the misses (behind, beyond, to the side, touching exactly)", () => {
+  const result = run(`
+    // a cone at the origin pointing right, reach 100, half angle 45 degrees (cos and sin of 45 = 0.7071067811865476)
+    const c = 0.7071067811865476;
+    const hit = (x, y, radius) => circleTouchesCone(0, 0, 1, 0, 100, c, c, x, y, radius);
+    return {
+      centerInside: hit(50, 0, 1),
+      centerInsideNearEdge: hit(50, 49, 1),
+      onlyArc: hit(104, 0, 5),
+      arcMissJustOut: hit(110, 0, 5),
+      arcTouchingExactly: hit(105, 0, 5),
+      onlyEdge: hit(50, 56, 5),
+      edgeMiss: hit(50, 62, 5),
+      onlyTip: hit(-4, 0, 5),
+      tipMiss: hit(-6, 0, 5),
+      behind: hit(-50, 0, 5),
+      beyondTheEdgeLength: hit(100, 100, 5),
+      lowerEdge: hit(50, -56, 5),
+      lowerEdgeMiss: hit(50, -62, 5),
+      pointedUp: circleTouchesCone(0, 0, 0, -1, 100, c, c, 0, -50, 1),
+      pointedUpSideMiss: circleTouchesCone(0, 0, 0, -1, 100, c, c, 50, -10, 1),
+    };
+  `);
+  assert.deepStrictEqual(plain(result), {
+    centerInside: true, centerInsideNearEdge: true, onlyArc: true, arcMissJustOut: false, arcTouchingExactly: false,
+    onlyEdge: true, edgeMiss: false, onlyTip: true, tipMiss: false, behind: false, beyondTheEdgeLength: false,
+    lowerEdge: true, lowerEdgeMiss: false, pointedUp: true, pointedUpSideMiss: false,
+  });
+});

@@ -782,6 +782,37 @@ function crushObject(state, actor, object) {
 
 // ---- Collision with objects ----
 
+// Does a circle touch a cone (a slice of a disc: the strike of a sword)? Exact, with + - * / and Math.sqrt only.
+// The cone: its tip at (tipX, tipY), pointing at the unit vector (dirX, dirY), reaching "reach" far, and opening
+// "half" to each side, given by cosHalf and sinHalf (computed once, with cosDegrees and sinDegrees, never here;
+// the half angle is at most 90 degrees). Any overlap counts, as in the bite: touching exactly does not hit.
+// Two cases: the circle center is inside the angle (then only the arc can stop it: center closer than
+// reach + radius); or it is outside the angle and the circle crosses one of the two straight edges (segments
+// from the tip, reach long). The tip is the end of both edges, so a circle holding the tip is found there.
+function circleTouchesCone(tipX, tipY, dirX, dirY, reach, cosHalf, sinHalf, x, y, radius) {
+  const dx = x - tipX;
+  const dy = y - tipY;
+  const distance2 = dx * dx + dy * dy;
+  const along = dx * dirX + dy * dirY;
+  if (along >= 0 && along * along >= cosHalf * cosHalf * distance2) {
+    const limit = reach + radius;
+    return distance2 < limit * limit;
+  }
+  const edges = [
+    { x: dirX * cosHalf - dirY * sinHalf, y: dirX * sinHalf + dirY * cosHalf },
+    { x: dirX * cosHalf + dirY * sinHalf, y: -dirX * sinHalf + dirY * cosHalf },
+  ];
+  for (const edge of edges) {
+    let t = dx * edge.x + dy * edge.y; // how far along the edge the center projects (the edge has length 1 here)
+    if (t < 0) t = 0;
+    if (t > reach) t = reach;
+    const nearX = dx - edge.x * t;
+    const nearY = dy - edge.y * t;
+    if (nearX * nearX + nearY * nearY < radius * radius) return true;
+  }
+  return false;
+}
+
 // How two circles touch, or null if they do not overlap: the normal (the unit vector from b to a), the distance
 // between the centers and the overlap (how far a must move along the normal to just touch b). Same centers cannot
 // happen in practice; if they did, the normal points to the right, so the result is still the same everywhere.
