@@ -2833,7 +2833,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 35, hash: "2351d2e9b9006f47" };
+const DATA_FINGERPRINT = { version: 36, hash: "cbd50275c030963a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2909,8 +2909,8 @@ test("132 with no windup (windupFrames 0) the Biter strikes in the same step it 
 // ---- The repeater (the user, 2026-11-11): ammunition with weight, cadence, reload, auto-aim, a bullet that travels and pierces ----
 
 // A game with 6 Biters, none of them able to bite, and the pierce 1 variant (a weapon whose bullet crosses one thing).
-const PIERCE_ONE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 1"));
-const PIERCE_THREE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 3"));
+const PIERCE_ONE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("radius: 6, pierce: 0", "radius: 6, pierce: 1"));
+const PIERCE_THREE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("radius: 6, pierce: 0", "radius: 6, pierce: 3"));
 
 // The avatar with the combat blueprint, and the Biters of the given numbers held still (the freeze is made very long, so
 // they stay where the test puts them and do not bite). `bp` is the blueprint to give to step.
@@ -2942,7 +2942,7 @@ test("133 the combat blueprint carries a repeater arm in place of the plain Arm 
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, lifeFrames: 65, pierce: 0 } });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 } });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -2979,7 +2979,7 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
   // Born at the avatar + 16 x (0.6, 0.8), then moved by its velocity in the same step: 8 x (0.6, 0.8).
   assert.ok(Math.abs(bullet.position.x - (0.6 * 16 + 4.8)) < 1e-9 && Math.abs(bullet.position.y - (0.8 * 16 + 6.4)) < 1e-9, JSON.stringify(bullet.position));
   assert.ok(Math.abs(bullet.velocity.x - 4.8) < 1e-9 && Math.abs(bullet.velocity.y - 6.4) < 1e-9);
-  assert.deepStrictEqual([bullet.owner, bullet.attack, bullet.radius, bullet.framesLeft, bullet.damage, bullet.struck, bullet.pierceLeft], ["avatar_1", "repeater-arm", 6, 64, { puncture: 10 }, [], 0]);
+  assert.deepStrictEqual([bullet.owner, bullet.attack, bullet.radius, bullet.framesLeft, bullet.damage, bullet.struck, bullet.pierceLeft], ["avatar_1", "repeater-arm", 6, null, { puncture: 10 }, [], 0]);
 });
 
 test("135 the repeater fires every 10 frames while it has a target and a round, and not at all without a target", () => {
@@ -3114,7 +3114,7 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
   assert.strictEqual(result.rule, false);
 });
 
-test("140 a weapon must be sound when the data loads: only the closest rule, whole numbers, known types of damage, a bullet that lives long enough to reach its range and that is slower than the smallest radius it must not skip over", () => {
+test("140 a weapon must be sound when the data loads: only the closest rule, whole numbers, known types of damage, a bullet that is slower than the smallest radius it must not skip over", () => {
   const bad = (from, to) => assert.throws(() => loadGame((text) => text.replace(from, to)), /weapon of the part repeater-arm|projectile of the weapon|bullet of the weapon|rounds of the weapon/);
   bad('target: "closest",\n        range: 520', 'target: "farthest",\n        range: 520');
   bad("reloadFrames: 90", "reloadFrames: 0");
@@ -3123,9 +3123,8 @@ test("140 a weapon must be sound when the data loads: only the closest rule, who
   bad("rounds: { weight: 6, magazine: 30, reserve: 370 }", "rounds: { weight: 6, magazine: 0, reserve: 370 }");
   bad("damage: { puncture: 10 }, speed", "damage: { fire: 10 }, speed");
   bad("damage: { puncture: 10 }, speed", "damage: { puncture: 0 }, speed");
-  bad("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: -1");
-  bad("lifeFrames: 65, pierce: 0", "lifeFrames: 65, pierce: 0.5");
-  bad("lifeFrames: 65", "lifeFrames: 10"); // 80 px: it never reaches 520
+  bad("radius: 6, pierce: 0", "radius: 6, pierce: -1");
+  bad("radius: 6, pierce: 0", "radius: 6, pierce: 0.5");
   bad("speed: 8, radius: 6", "speed: 20, radius: 6"); // 20 >= 6 + 12: it could skip over a Biter of radius 12
 });
 
@@ -3357,4 +3356,21 @@ test("152 every function or constant that the \"Code layout\" of AGENTS.md names
   const missing = [...names].filter((name) => !new RegExp("(function|const|let)\\s+" + name + "\\b").test(code));
   assert.ok(names.size > 50, "too few names were read from the Code layout: " + names.size);
   assert.deepStrictEqual(missing, []);
+});
+
+test("153 a bullet has no life in frames: it flies past the old range (520 px) and goes only when its center leaves the window of the grid around the avatar; a pierce spent still ends it, and a bite still lives its frames", () => {
+  const result = run(`
+    ${ARMED}
+    const { s, bp } = armed();
+    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0 });
+    s.hitboxes = [bullet(s.actors[0].position.x)];
+    const edge = s.grid.windowWidth * s.grid.cellSize / 2;
+    s.actors[0].position.y = 0;
+    s.hitboxes[0].position.x = s.actors[0].position.x;
+    let alive = 0;
+    while (s.hitboxes.length > 0 && alive < 5000) { step(s, idle, bp); if (s.hitboxes.length > 0) alive += 1; }
+    return { alive, edge };
+  `);
+  assert.ok(result.alive * 8 > 520, "it lived " + result.alive + " frames");
+  assert.ok(Math.abs(result.alive * 8 - result.edge) <= 8, "it left at " + result.alive * 8 + " px, the edge is " + result.edge);
 });

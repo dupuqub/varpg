@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 35;
+const DEFINITIONS_VERSION = 36;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -282,7 +282,7 @@ const DEFINITIONS = {
     //   it all makes the mecha lighter by a fifth of its loaded weight, a speed gain the player can feel, and there is plenty
     //   of ammunition to fire. The loaded mecha is 7550 kg, under the 8000 of the Torso.
     // weapon.projectile: damage puncture 10 (guess: a Biter has 30 health, so 3 hits), speed 8 px per frame (guess: faster
-    //   than the avatar's 3 and the Biter's 2.5), radius 6 (a small bullet), lifeFrames 65 (520 px, the range), pierce 0
+    //   than the avatar's 3 and the Biter's 2.5), radius 6 (a small bullet), no life in frames (the user, 2026-11-12: it dies only when it leaves the window of the grid, or when its pierce is spent), pierce 0
     //   (the user: nothing crosses by default; each crossing is a +1 from the weapon or the skill tree).
     "repeater-arm": {
       name: "Repeater arm",
@@ -294,7 +294,7 @@ const DEFINITIONS = {
         intervalFrames: 10,
         reloadFrames: 90,
         rounds: { weight: 6, magazine: 30, reserve: 370 },
-        projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, lifeFrames: 65, pierce: 0 },
+        projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 },
       },
     },
     legs: { name: "Legs", weight: 1300, specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 } },

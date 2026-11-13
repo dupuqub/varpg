@@ -244,6 +244,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 150 | The cross-check stays clean in a shielded run of 900 frames where the Biters drain the shield, and the shield is plain numbers. | Reproducibility: the new state is part of the snaps. |
 | 151 | The shield specs are checked when the data loads: resistance only to known types of damage, the wait a whole number of frames 1 or more, the maximum 0 or more. | What must not exist cannot be made. |
 | 152 | Every function or constant that the "Code layout" section of `AGENTS.md` names exists in `src/`. | Several agents read that map first; it must not point to something that is gone (it once named `createHitbox` after it was merged away). |
+| 153 | A bullet has no life in frames: it flies past the old range of 520 px and goes only when its center leaves the window of the grid around the avatar (a spent pierce still ends it; a bite still lives its frames). | The user's decision, 2026-11-12: projectiles die only when they leave the grid. |
 
 ### Benchmark of the grid (not a test)
 

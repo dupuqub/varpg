@@ -277,14 +277,13 @@ function assertValidDefinitions() {
     const rounds = weapon.rounds;
     if (!rounds || !whole(rounds.weight, 0) || !whole(rounds.magazine, 1) || !whole(rounds.reserve, 0)) throw new Error("The rounds of " + where + " need a whole weight (0 or more), a magazine (1 or more) and a reserve (0 or more)");
     const bullet = weapon.projectile;
-    if (!bullet || !whole(bullet.radius, 1) || !whole(bullet.lifeFrames, 1) || !whole(bullet.pierce, 0) || !(bullet.speed > 0)) throw new Error("The projectile of " + where + " needs a whole radius and lifeFrames (1 or more), a whole pierce (0 or more) and a speed above 0");
+    if (!bullet || !whole(bullet.radius, 1) || !whole(bullet.pierce, 0) || !(bullet.speed > 0)) throw new Error("The projectile of " + where + " needs a whole radius (1 or more), a whole pierce (0 or more) and a speed above 0");
     const types = Object.keys(bullet.damage ?? {});
     if (types.length === 0) throw new Error("The damage of the projectile of " + where + " is missing");
     for (const type of types) {
       if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of the projectile of " + where + " has " + type + ", which is not a type of damage");
       if (!(bullet.damage[type] > 0)) throw new Error("The damage " + type + " of the projectile of " + where + " must be above 0");
     }
-    if (bullet.speed * bullet.lifeFrames < weapon.range) throw new Error("The bullet of " + where + " lives " + bullet.lifeFrames + " frames at " + bullet.speed + " and never reaches the range " + weapon.range);
     const smallest = Math.min(...Object.values(DEFINITIONS.actors).filter((actor) => actor.size).map((actor) => actor.size.min));
     if (bullet.speed >= bullet.radius + smallest) throw new Error("The bullet of " + where + " moves " + bullet.speed + " px per frame and could skip over an actor of radius " + smallest);
   }
@@ -1265,7 +1264,7 @@ function fireWeapons(state, player) {
     const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     const towardY = distance === 0 ? 0 : dy / distance;
     const attack = player.attacks[weapon.part];
-    spawnHitbox(state, player, weapon.part, towardX, towardY, { radius: attack.projectile.radius, frames: attack.projectile.lifeFrames, speed: attack.projectile.speed, pierce: attack.projectile.pierce });
+    spawnHitbox(state, player, weapon.part, towardX, towardY, { radius: attack.projectile.radius, frames: null, speed: attack.projectile.speed, pierce: attack.projectile.pierce });
     weapon.magazine -= 1;
     weapon.interval = recipe.intervalFrames;
   }
@@ -1330,9 +1329,18 @@ function resolveHitboxes(state) {
       }
       if (hitbox.pierceLeft !== null) hitbox.pierceLeft -= 1;
     }
-    hitbox.framesLeft -= 1;
+    if (hitbox.framesLeft !== null && hitbox.framesLeft > 0) hitbox.framesLeft -= 1;
   }
-  state.hitboxes = state.hitboxes.filter((hitbox) => hitbox.framesLeft > 0);
+  // A hitbox with frames ends when they are spent (or when its pierce is); one with no frames (a bullet, null) lives until
+  // its center leaves the window of the grid around the avatar, the same area the actors wrap in.
+  const width = state.grid.windowWidth * state.grid.cellSize;
+  const height = state.grid.windowHeight * state.grid.cellSize;
+  state.hitboxes = state.hitboxes.filter((hitbox) => {
+    if (hitbox.framesLeft !== null) return hitbox.framesLeft > 0; // spent frames, or ended by its pierce (0)
+    const dx = hitbox.position.x - player.position.x;
+    const dy = hitbox.position.y - player.position.y;
+    return dx >= -width / 2 && dx < width / 2 && dy >= -height / 2 && dy < height / 2;
+  });
 }
 
 // ---- Destruction ----
