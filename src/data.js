@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 36;
+const DEFINITIONS_VERSION = 37;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -206,6 +206,30 @@ const DEFINITIONS = {
     //   attack.damage.blunt.perWeight 0.001 (flat 0): the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly flat + perWeight x weight, the same form as every other attack (the body slam is written like the bite of a Biter).
     //     Walking (3) hits for half of it, a dash (12) for double.
+    // The collision grid and the window of the game (they were in sim.js; they moved here by the user's request, 2026-11-12).
+    // The state keeps a copy of it (state.grid).
+    // - screenWidth, screenHeight: what the player sees, in pixels: the size of the canvas (index.html; src/main.js
+    //   checks that the two agree). The rules need it to know what is off the screen (birthOffset) and the window is
+    //   counted from it. rule: the canvas is 1920 x 1080 (the user's requirement).
+    // - cellSize: side of a cell, in pixels. It does not limit the size of an actor: an actor covers every cell
+    //   its circle reaches (actor.cells), so two actors that touch always share a cell. It only decides how much
+    //   work the grid saves: a cell much smaller than the actors makes each one cover many cells, a cell much larger
+    //   puts many actors in the same cell. Measure with `node tests/agent/benchmark-grid.js`.
+    // - windowWidth, windowHeight: the window around the player, measured in cells (its size in pixels is
+    //   windowWidth x cellSize by windowHeight x cellSize, centered on the player). Each is odd, 3 or more.
+    //   It is the real area of the game: an actor that leaves it comes back on the opposite side (wrapIntoWindow),
+    //   so it must cover all the ground where an actor can be, and some actors are off screen. The
+    //   window is twice the screen (1920 x 1080), so 3840 x 2160 pixels: half
+    //   of it is 1920 x 1080, and the center cell already covers 32. So 30 cells
+    //   on each side across (61 columns) and 17 up and down (35 rows).
+    //   How far outside the screen actors can be is not decided yet (it depends
+    //   on where they spawn). A bigger window costs almost nothing: what costs
+    //   is the number of actors tested, not the area.
+    // cellSize 64: guess, "an imaginary number that looks reasonable" (the user's words). The benchmark found the cost
+    //   about the same from 60 to 100 with the Dummies of today; it is to be measured again when the actors change.
+    // windowWidth x windowHeight = rule: twice the screen (see above).
+    grid: { screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 },
+
     bodySlam: { attack: { damage: { blunt: { flat: 0, perWeight: 0.001 } } }, referenceImpact: 6 },
 
     // How a packet of damage hurts (see resolveDamage in src/sim.js), the same for every hit and every type.
