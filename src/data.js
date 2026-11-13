@@ -339,7 +339,7 @@ const DEFINITIONS = {
     // All the numbers are GUESSES to be tuned by playing, erring upward (the user, 2026-11-11: "better to look overpowered than a rubber duck").
     // weight 850: the plain arm's 650 plus 200 for the blade (guess).
     // melee.target "closest": the Radar of the Head decides who can be aimed at; the swing starts when that target is within the reach of the strike.
-    // melee.reach 90: guess, about five and a half bodies of the avatar (radius 16), measured from the edge of the body. Far enough to be felt, short enough that the Biter must come to you.
+    // melee.reach 90: guess, about five and a half bodies of the avatar (radius 16), measured from the center of the avatar to the edge of the target (the user, 2026-11-13: the cone is born at the center, so neither the body nor the shield changes the reach; the number stayed when the origin moved there from the edge). Far enough to be felt, short enough that the Biter must come to you.
     // melee.angleDegrees 90: guess, a quarter of a circle in front (45 to each side); the user: any overlap with the cone hits.
     // melee.windupFrames 12: guess, 0.2 s, so the blow is read by the eye (the Biter has 15).
     // melee.recoveryFrames 18: guess, 0.3 s; with the windup, a swing every 30 frames, two a second.

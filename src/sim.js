@@ -1339,7 +1339,7 @@ function closestTarget(state, player, range) {
 }
 
 // One frame of every sword of the avatar. Idle: the closest target the Radar sees, if it is within the reach of the strike
-// (the gap between the body and the target, as in the bite), starts the windup and locks the aim toward it. Windup: counts
+// (from the center of the avatar to the edge of the target: the cone is born at the center, see hitboxOrigin), starts the windup and locks the aim toward it. Windup: counts
 // down and, at the last frame, the cone is born (spawnHitbox, fixed, one frame, hurting what it overlaps) and the recovery begins.
 // Recovery: counts down, and the sword is idle again (and may start a new windup in the same frame).
 function swingMelees(state, player, visual) {
@@ -1382,7 +1382,7 @@ function swingMelees(state, player, visual) {
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance - player.radius - target.radius > attack.reach) continue;
+    if (distance - target.radius > attack.reach) continue; // the reach is counted from the center of the avatar (hitboxOrigin)
     sword.dirX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     sword.dirY = distance === 0 ? 0 : dy / distance;
     sword.phase = "windup";
@@ -1392,7 +1392,7 @@ function swingMelees(state, player, visual) {
 
 // One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
 // there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
-// and has a target fires one bullet at it (born one body ahead of the avatar, moving at the speed of the weapon).
+// and has a target fires one bullet at it (born at the center of the avatar, see hitboxOrigin, moving at the speed of the weapon).
 function fireWeapons(state, player) {
   for (const weapon of player.weapons) {
     const recipe = DEFINITIONS.parts[weapon.part].weapon;
@@ -1513,8 +1513,18 @@ function emitStrikes(state, player, visual) {
 // A projectile is a hitbox with a velocity and a pierceLeft (the user's decision: a bullet is just a hitbox that moves).
 // pierce 0 crosses nothing: it ends at the first thing it hits; pierce 1 crosses one thing and ends at the second.
 
-// The one function that makes a hitbox, for every attack (a bite, a bullet, later a slash). Born one body ahead of the
-// owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now. `shape` says what it is:
+// Where a hitbox is born. The user (2026-11-13): "the reach of the sword stays untouched; the point of origin is the center
+// of the avatar/actor". So every hitbox of the avatar (the cone of a sword, a bullet) is born at its center, and its reach is
+// counted from there: neither the body nor the ring of the shield changes it. "Actor" includes the Biter, but its bite born
+// at its center would miss most bites started at the edge of its reach, so it waits for the user's answer (issue 3) and is
+// still born one body ahead of the Biter, toward its target.
+function hitboxOrigin(owner, towardX, towardY) {
+  if (isAvatar(owner)) return { x: owner.position.x, y: owner.position.y };
+  return { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius };
+}
+
+// The one function that makes a hitbox, for every attack (a bite, a bullet, a sword). Born where hitboxOrigin says,
+// toward (towardX, towardY) (a unit vector), with the damage the attack has right now. `shape` says what it is:
 // { radius, frames (how long it lives), speed (0 stays where it was born), pierce (how many things it crosses, or null for a
 // hitbox that does not end when it hits) }.
 function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual = null) {
@@ -1522,7 +1532,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
   const hitbox = {
     owner: owner.id,
     attack: attackName,
-    position: { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius },
+    position: hitboxOrigin(owner, towardX, towardY),
     radius: shape.radius,
     // null: a round hitbox. Otherwise a cone (the strike of a sword): the tip is the position, "dir" is where it points
     // (fixed when it is born: it does not turn after), and it hurts what overlaps the slice (circleTouchesCone).

@@ -2956,7 +2956,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
 });
 
-test("134 the auto-aim picks the closest actor in range (the first in the list on a tie), ignores what is out of range and what has no health, and the bullet is born one body ahead of the avatar moving at 8 toward it", () => {
+test("134 the auto-aim picks the closest actor in range (the first in the list on a tie), ignores what is out of range and what has no health, and the bullet is born at the center of the avatar moving at 8 toward it", () => {
   const result = run(`
     ${ARMED}
     const t = armed(0, 1, 2);
@@ -2984,8 +2984,8 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
   assert.strictEqual(result.tie, "biter_0");
   assert.strictEqual(result.bullet.length, 1);
   const [bullet] = plain(result.bullet);
-  // Born at the avatar + 16 x (0.6, 0.8), then moved by its velocity in the same step: 8 x (0.6, 0.8).
-  assert.ok(Math.abs(bullet.position.x - (0.6 * 16 + 4.8)) < 1e-9 && Math.abs(bullet.position.y - (0.8 * 16 + 6.4)) < 1e-9, JSON.stringify(bullet.position));
+  // Born at the center of the avatar (0, 0) (the user, 2026-11-13), then moved by its velocity in the same step: 8 x (0.6, 0.8).
+  assert.ok(Math.abs(bullet.position.x - 4.8) < 1e-9 && Math.abs(bullet.position.y - 6.4) < 1e-9, JSON.stringify(bullet.position));
   assert.ok(Math.abs(bullet.velocity.x - 4.8) < 1e-9 && Math.abs(bullet.velocity.y - 6.4) < 1e-9);
   assert.deepStrictEqual([bullet.owner, bullet.attack, bullet.radius, bullet.framesLeft, bullet.damage, bullet.struck, bullet.pierceLeft], ["avatar_1", "repeater-arm", 6, null, { puncture: 10 }, [], 0]);
 });
@@ -3471,7 +3471,7 @@ test("157 things are born after everyone has moved: a bullet fired in a step whe
     const bullet = t.s.hitboxes.find((h) => h.attack === "repeater-arm");
     const dx = target.position.x - avatar.position.x, dy = target.position.y - avatar.position.y;
     const d = Math.sqrt(dx * dx + dy * dy);
-    const expected = { x: avatar.position.x + (dx / d) * (avatar.radius + 8), y: avatar.position.y + (dy / d) * (avatar.radius + 8) };
+    const expected = { x: avatar.position.x + (dx / d) * 8, y: avatar.position.y + (dy / d) * 8 }; // born at the center, then one move of 8
 
     const s = aloneBiters(0);
     const b = s.actors[1];
@@ -3639,7 +3639,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
   assert.strictEqual(r.beyond.hurt, false);
   assert.deepStrictEqual(r.inside.cone, { dirX: 1, dirY: 0, reach: 100, cosHalf: 0.7071067811865476, sinHalf: 0.7071067811865476 });
   assert.deepStrictEqual(r.inside.traceCone, r.inside.cone);
-  assert.deepStrictEqual(r.inside.tip, { x: 16, y: 0 }); // born at the edge of the owner, like every hitbox
+  assert.deepStrictEqual(r.inside.tip, { x: 0, y: 0 }); // the avatar's hitboxes are born at its center (the user, 2026-11-13)
   assert.strictEqual(r.inside.left, 0); // one frame: gone
 });
 
@@ -3824,4 +3824,56 @@ test("169 the first dash cannot touch an object, for every blueprint in the data
   // The check can fail: with the old safe radius of 200 both blueprints break it (203.3 and 208.25).
   const old = firstDash(EMPTY_SHIELDED((text) => patchOnce(text, "safeRadius: 220,", "safeRadius: 200,")));
   assert.strictEqual(brokenPromises(old).length, 2);
+});
+
+// ---- Hitboxes of the avatar are born at its center (the user, 2026-11-13; review of that day, point 2; issue 2) ----
+// "The reach of the sword stays untouched; the point of origin is the center of the avatar/actor." The sword tests above play
+// without a shield, where the body is the only radius; this one plays with the real shield, full (the ring) and empty (the body).
+const SWORD_SHIELDED = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace(/biters: \{ count: \d+ \}/, "biters: { count: 1 }"), { shield: true });
+
+test("170 the reach of the sword is counted from the center of the avatar, so the shield does not change it: with the shield full (radius 28.8) or empty (16) a Biter whose edge is 90 px from the center starts the windup and one at 90.5 does not; the cone is born at the center and never hurts the avatar or its shield", () => {
+  const result = run(`
+    const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
+    function swordGame(gap, shieldFull) {
+      const run = createRun(1, { parts: swordParts });
+      const s = createChamber2State(1, 1, run.blueprint);
+      const avatar = s.actors[0];
+      const biter = s.actors[1];
+      biter.ai.phase = "freeze"; biter.ai.frames = 1000000;
+      avatar.position.x = 0; avatar.position.y = 0;
+      if (!shieldFull) avatar.shield.now = 0;
+      biter.position.x = gap + biter.radius; biter.position.y = 0; // its edge is "gap" px from the center of the avatar
+      return { s, bp: run.blueprint, avatar, biter };
+    }
+    const idle = { move: { x: 0, y: 0 } };
+    const phaseAfterOneStep = (gap, shieldFull) => {
+      const g = swordGame(gap, shieldFull);
+      step(g.s, idle, g.bp);
+      return { phase: g.avatar.melees[0].phase, radius: g.avatar.radius };
+    };
+    const blow = swordGame(60, true);
+    const before = { health: blow.avatar.health.now, shield: blow.avatar.shield.now };
+    // The cone lives one frame and is gone by the end of its step, so where it was born is read from its trace (visual state).
+    const visual = createVisual();
+    let tip = null;
+    for (let i = 0; i < 13; i++) {
+      step(blow.s, idle, blow.bp, visual);
+      const trace = visual.traces.find((t) => t.cone && t.age === 0);
+      if (trace) tip = { x: trace.position.x, y: trace.position.y, avatar: { x: blow.avatar.position.x, y: blow.avatar.position.y } };
+    }
+    return {
+      fullAt: phaseAfterOneStep(90, true), fullPast: phaseAfterOneStep(90.5, true),
+      emptyAt: phaseAfterOneStep(90, false), emptyPast: phaseAfterOneStep(90.5, false),
+      tip, before, after: { health: blow.avatar.health.now, shield: blow.avatar.shield.now }, biterHurt: blow.biter.health.now < blow.biter.health.max,
+    };
+  `, SWORD_SHIELDED);
+  const r = plain(result);
+  assert.deepStrictEqual(r.fullAt, { phase: "windup", radius: 28.8 });
+  assert.deepStrictEqual(r.fullPast, { phase: "idle", radius: 28.8 });
+  assert.deepStrictEqual(r.emptyAt, { phase: "windup", radius: 16 });
+  assert.deepStrictEqual(r.emptyPast, { phase: "idle", radius: 16 });
+  assert.ok(r.tip !== null, "the cone was never born");
+  assert.deepStrictEqual({ x: r.tip.x, y: r.tip.y }, r.tip.avatar); // the tip of the cone is the center of the avatar
+  assert.strictEqual(r.biterHurt, true);
+  assert.deepStrictEqual(r.after, r.before); // the avatar's own cone hurts neither it nor its shield
 });
