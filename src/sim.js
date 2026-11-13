@@ -1255,15 +1255,23 @@ function collideActors(state, lastContacts, audit = null) {
 // (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
 // deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
-function think(state, actor, player) {
+function think(state, actor) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
 
-  const dx = player.position.x - actor.position.x;
-  const dy = player.position.y - actor.position.y;
+  // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: how far a non-avatar actor
+  // sees is open, issue 13; living false: it still chases the avatar at zero health, as before). With none it stands still.
+  const target = pickTarget(state, actor, attack.target, Infinity, false);
+  if (target === null) {
+    direction.x = 0;
+    direction.y = 0;
+    return;
+  }
+  const dx = target.position.x - actor.position.x;
+  const dy = target.position.y - actor.position.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
-  // Toward the avatar (if the centers are the same there is no direction: it faces right, so the result is the same everywhere).
+  // Toward the target (if the centers are the same there is no direction: it faces right, so the result is the same everywhere).
   const towardX = distance === 0 ? 1 : dx / distance;
   const towardY = distance === 0 ? 0 : dy / distance;
 
@@ -1298,7 +1306,7 @@ function think(state, actor, player) {
     ai.phase = "chase"; // the freeze is over: this frame it already chases
   }
 
-  if (distance - actor.radius - player.radius <= attack.reach) {
+  if (distance - actor.radius - target.radius <= attack.reach) {
     if (attack.windupFrames > 0) {
       ai.phase = "windup";
       ai.frames = attack.windupFrames;
@@ -1567,14 +1575,16 @@ function ageVisual(visual) {
 // The strikes that the minds decided in this step (think sets ai.strike): for each one the hitbox is born now, toward where the
 // avatar is after everyone has moved, and the flag goes down (an actor that has no health left strikes nothing). Called by step
 // after the movement and the collisions.
-function emitStrikes(state, player, visual) {
+function emitStrikes(state, visual) {
   for (const actor of state.actors) {
     if (!actor.ai || !actor.ai.strike) continue;
     actor.ai.strike = false;
     if (actor.health.now <= 0) continue; // the user, 2026-11-13: whoever died in this step does not strike (the flag triggers nothing)
     const attack = actor.attacks[actor.ai.attack];
-    const dx = player.position.x - actor.position.x;
-    const dy = player.position.y - actor.position.y;
+    const target = pickTarget(state, actor, attack.target, Infinity, false); // toward where its target is now, after everyone moved
+    if (target === null) continue;
+    const dx = target.position.x - actor.position.x;
+    const dy = target.position.y - actor.position.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     const towardY = distance === 0 ? 0 : dy / distance;
@@ -1804,7 +1814,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
 
   // 1b. The minds: every actor that has `ai` decides where to go and whether to strike (think), before anyone moves.
   for (const actor of state.actors) {
-    if (actor.ai) think(state, actor, player);
+    if (actor.ai) think(state, actor);
   }
 
   // 2. Movement: every actor that has "move" walks, in list order.
@@ -1866,7 +1876,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
   // and fire at the closest target (fireWeapons), and the blows of its swords (swingMelees). Every hitbox is born here, in one place, with the same function (spawnHitbox).
   // A hitbox that follows its owner (an aura, an orbiting blade, a beam: none exists yet) would be placed again right here,
   // before the next step, so nothing in the order of the step stands in its way.
-  emitStrikes(state, player, visual);
+  emitStrikes(state, visual);
   fireWeapons(state, player);
   swingMelees(state, player, visual);
 

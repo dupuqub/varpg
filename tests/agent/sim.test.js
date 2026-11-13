@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 53, hash: "8520dfcc8cace95a" };
+const DATA_FINGERPRINT = { version: 54, hash: "f339c119d109a00a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3999,7 +3999,7 @@ test("176 every type has tags and a list of ignored tags for its body (bodyIgnor
   assert.deepStrictEqual(r.table, {
     avatar: { tags: ["ally"], ignores: ["ally"] },
     dummy: { tags: ["enemy"], ignores: ["enemy", "object"] },
-    biter: { tags: ["enemy"], ignores: ["enemy", "object"] },
+    biter: { tags: ["enemy", "vermin"], ignores: ["enemy", "object"] },
     rock: { tags: ["object"], ignores: ["enemy", "object"] },
     shroom: { tags: ["object"], ignores: ["enemy", "object"] },
   });
@@ -4062,7 +4062,7 @@ test("178 a hitbox carries a copy of its owner's ignored tags from its birth and
 
 // ---- Tags of exclusion: the body (step E) ----
 // A game where the Biter ignores only "object": the "enemy" tag is taken out of its list, so Biters hurt each other by contact.
-const BITERS_HURT_BITERS = loadGame((text) => text.replace('biter: {\n      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],', 'biter: {\n      tags: ["enemy"],\n      bodyIgnores: ["object"],'));
+const BITERS_HURT_BITERS = loadGame((text) => text.replace('bodyIgnores: ["enemy", "object"],\n      name: "Biter",', 'bodyIgnores: ["object"],\n      name: "Biter",'));
 
 test("179 the body slam hurts unless the target has a tag that the body ignores, each direction on its own: two Biters meeting head on at speed hurt nobody (enemies ignore enemy), and with the tag taken out of the Biter's list the same meeting hurts both", () => {
   const code = `
@@ -4122,8 +4122,8 @@ test("180 each attack has its own list of ignored tags, and a hitbox copies the 
 // ---- The tag "self" (issue 19): step 19a, a list that is missing is refused ----
 test("181 a list of tags that is missing is refused when the definitions load, with a message that names it: the tags of a thing, its bodyIgnores, the ignores of an attack (the bite), of a weapon and of a melee; an empty list is accepted (it is a choice)", () => {
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', /tags of biter/);
-  bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      tags: ["enemy"],\n      name: "Biter",', /bodyIgnores of biter/);
+  bad('      tags: ["enemy", "vermin"], // its faction is "vermin" (the user, 2026-11-13); nothing reads it yet\n', '', /tags of biter/);
+  bad('      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      name: "Biter",', /bodyIgnores of biter/);
   bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of biter/);
   bad('        ignores: ["self", "ally"], // the tags its bullets do not hurt', '        // the tags its bullets do not hurt', /ignores of the weapon of the part repeater-arm/);
   bad('        ignores: ["self", "ally"], // the tags its blows do not hurt', '        // the tags its blows do not hurt', /ignores of the melee of the part sword-arm/);
@@ -4193,4 +4193,34 @@ test("184 pickTarget picks among the things that carry the tag, whoever asks: fr
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.out, { fromAvatar: r.ids[1], fromBiter: r.ids[0], nobody: null, deadAvatarSkipped: null, deadAvatarChased: r.ids[0] });
+});
+
+test("185 a Biter aims at the closest thing with the tag of its attack's target, not at the avatar by name: with a second Biter made ally and nearer than the avatar, the first Biter walks toward it, and after one step its bite (born later) points at it; with nothing tagged ally in the scene it stands still; the Biter is enemy and vermin", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const setup = () => {
+      const s = aloneBiters(0, 1);
+      const [avatar, a, b] = s.actors;
+      avatar.position.x = 0; avatar.position.y = -500;
+      a.position.x = 0; a.position.y = 0;
+      b.position.x = 200; b.position.y = 0;
+      return { s, avatar, a, b };
+    };
+    const first = setup();
+    step(first.s, { move: { x: 0, y: 0 } });
+    const toAvatar = { x: first.a.move.direction.x, y: first.a.move.direction.y };
+    const second = setup();
+    second.b.tags = ["ally"];
+    step(second.s, { move: { x: 0, y: 0 } });
+    const toNeighbor = { x: second.a.move.direction.x, y: second.a.move.direction.y };
+    const third = setup();
+    third.avatar.tags = [];
+    step(third.s, { move: { x: 0, y: 0 } });
+    return { toAvatar, toNeighbor, alone: { x: third.a.move.direction.x, y: third.a.move.direction.y }, tags: tagsOf(first.a) };
+  `, QUIET);
+  const r = plain(result);
+  assert.ok(r.toAvatar.y < -0.99 && Math.abs(r.toAvatar.x) < 0.01, "toward the avatar, which is above: " + JSON.stringify(r.toAvatar));
+  assert.ok(r.toNeighbor.x > 0.99 && Math.abs(r.toNeighbor.y) < 0.01, "toward the neighbor made ally, to the right: " + JSON.stringify(r.toNeighbor));
+  assert.deepStrictEqual(r.alone, { x: 0, y: 0 });
+  assert.deepStrictEqual(r.tags, ["enemy", "vermin"]);
 });

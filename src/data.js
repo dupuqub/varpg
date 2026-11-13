@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 53;
+const DEFINITIONS_VERSION = 54;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -128,7 +128,7 @@ const DEFINITIONS = {
     //     frame it is born and is gone; who is not there then is not hit; what the eye sees afterwards is a trace in the visual
     //     state, see constants.visual). A hitbox hurts once.
     biter: {
-      tags: ["enemy"],
+      tags: ["enemy", "vermin"], // its faction is "vermin" (the user, 2026-11-13); nothing reads it yet
       bodyIgnores: ["enemy", "object"],
       name: "Biter",
       size: { min: 12, max: 20 },
