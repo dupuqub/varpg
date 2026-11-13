@@ -67,6 +67,10 @@ Today's hitbox of the Biter is the simplest case of this: no velocity, immediate
 
 A part `repeater-arm` in the combat blueprint (Chamber 2): auto-aim at the closest actor inside the Radar of the avatar (the Head; the weapon has no range, the user 2026-11-13), a cadence, a magazine and a reserve, a reload, **ammunition that weighs** (the mecha lightens and speeds up as it fires; reloading changes no weight), and a bullet that is a hitbox that travels, with a **pierce** that counts how many times it crosses (0 crosses nothing). The capacity of the Torso is 8 t. Numbers err upward on purpose and are tuned later.
 
+## Built (2026-11-13): the sword
+The sword arm (`sword-arm`, the right arm; the repeater is the left) is built and in the combat blueprint. Recipe `melee` in `src/data.js` (all numbers are guesses with reasons, to tune by playing): reach 90, a 90-degree cone, windup 12 frames, recovery 18, damage puncture 30 (`flat` 30, `perWeight` 0: the weight does not change it for now, but a node of the skill tree can raise `perWeight`), `aimCorrection` 0.1. How it works: when the closest target the Radar sees is within the reach (gap from the body, like the bite), the windup starts and the aim locks toward it; each frame of the windup the aim moves 10% of the way toward where the target is now; on the last frame the cone is born (stage 4b, one frame, fixed, any overlap hits, each target once) and the recovery begins. The code: `circleTouchesCone`, `hitboxTouches`, `swingMelees` in `src/sim.js`; the slice trace in `src/render.js`; tests 161 to 167.
+Not done (waiting for the user): the Biter does not use the aim-correction rule yet (it aims at the moment of the blow); no knockback; no sweep (the cone is static).
+
 ## Decided since
 
 - The bullet **travels**; the other kind (hits the chosen target at once, more precise and a little weaker) is wanted too and not built.

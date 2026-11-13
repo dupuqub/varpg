@@ -1,3 +1,5 @@
+> **Update 2026-11-13:** the sword is built (see "Built: the sword" in `docs/weapons.md`). What follows was written before it; the spear and the hammer are still preparation only.
+
 # Weapon families: preparing swords, spears and hammers (an experiment, written while the user slept)
 
 Written 2026-11-12 at the user's request ("create information that helps you build these new kinds of weapons later"). It is **preparation, not decisions**: nothing here is built, and nothing here is agreed beyond what the user said in the conversation, which is marked as such. Read `docs/weapons.md` first (vision, decisions, the repeater). This file has **no game numbers**: they belong in `src/data.js`, each with its reason.
