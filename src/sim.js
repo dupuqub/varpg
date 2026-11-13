@@ -86,6 +86,7 @@ function createAvatar(blueprint) {
   avatar.health = { now: 0, max: 0 };
   avatar.dash.charges = { now: 0, max: 0 };
   avatar.weapons = weaponStates(blueprint);
+  avatar.melees = meleeStates(blueprint);
   finalizeStatic(avatar, blueprint); // writes the maximums
   finalizeDynamic(avatar, blueprint);
   avatar.health.now = avatar.health.max;
@@ -479,7 +480,7 @@ function finalAttacks(thing) {
 // a weapon) is its base. For an actor whose weight never changes, now is the base, bit for bit. The day an aura gives its neighbors more
 // attack, its term goes here too (the base stays as it was made, so the bonus can leave without losing it).
 function finalAttackNow(actor, name, attack, type) {
-  const term = attackRecipes(actor)[name]?.damage?.[type];
+  const term = attack.terms?.[type] ?? attackRecipes(actor)[name]?.damage?.[type];
   return term === undefined ? attack.base[type] : term.flat + term.perWeight * actor.weight;
 }
 
@@ -1287,10 +1288,32 @@ function weaponStates(blueprint) {
 
 // The attack of each weapon of an actor, by the id of its part: { base, now, projectile } (the projectile numbers, among
 // them pierce, are copied so each can change in a run).
+// The state of every melee weapon of the avatar (a sword): where it is in its swing. "idle" waits for a target within reach;
+// "windup" counts the frames before the blow (the aim is locked in dirX, dirY when it starts); "recovery" counts the frames after it.
+function meleeStates(blueprint) {
+  const states = [];
+  for (const id of blueprint.parts) {
+    if (DEFINITIONS.parts[id].melee) states.push({ part: id, phase: "idle", frames: 0, dirX: 1, dirY: 0 });
+  }
+  return states;
+}
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
     actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile };
+  }
+  // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
+  // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
+  // once here, with the deterministic functions, never in the middle of a step), the frames and the aim correction.
+  for (const melee of actor.melees ?? []) {
+    const recipe = DEFINITIONS.parts[melee.part].melee;
+    const base = packetOf(recipe.damage, actor.weight);
+    const half = recipe.angleDegrees / 2;
+    actor.attacks[melee.part] = {
+      base, now: { ...base }, terms: JSON.parse(JSON.stringify(recipe.damage)),
+      reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
+      windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
+    };
   }
 }
 
@@ -1317,6 +1340,38 @@ function closestTarget(state, player, range) {
 // One frame of every weapon of the avatar: the interval and the reload count down; an empty magazine starts a reload if
 // there is a reserve, and the reload ends by filling the magazine from the reserve; a weapon that is ready, has a round
 // and has a target fires one bullet at it (born one body ahead of the avatar, moving at the speed of the weapon).
+// One frame of every sword of the avatar. Idle: the closest target the Radar sees, if it is within the reach of the strike
+// (the gap between the body and the target, as in the bite), starts the windup and locks the aim toward it. Windup: counts
+// down and, at the last frame, the cone is born (spawnHitbox, fixed, one frame, hurting what it overlaps) and the recovery begins.
+// Recovery: counts down, and the sword is idle again (and may start a new windup in the same frame).
+function swingMelees(state, player, visual) {
+  for (const sword of player.melees) {
+    const attack = player.attacks[sword.part];
+    if (sword.phase === "windup") {
+      sword.frames -= 1;
+      if (sword.frames > 0) continue;
+      spawnHitbox(state, player, sword.part, sword.dirX, sword.dirY, { radius: 0, frames: 1, speed: 0, pierce: null, cone: { reach: attack.reach, cosHalf: attack.cosHalf, sinHalf: attack.sinHalf } }, visual);
+      sword.phase = "recovery";
+      sword.frames = attack.recoveryFrames;
+      continue; // the frame of the blow is not also a frame of recovery
+    }
+    if (sword.phase === "recovery") {
+      sword.frames -= 1;
+      if (sword.frames > 0) continue;
+      sword.phase = "idle";
+    }
+    const target = closestTarget(state, player, player.radar);
+    if (target === null) continue;
+    const dx = target.position.x - player.position.x;
+    const dy = target.position.y - player.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance - player.radius - target.radius > attack.reach) continue;
+    sword.dirX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
+    sword.dirY = distance === 0 ? 0 : dy / distance;
+    sword.phase = "windup";
+    sword.frames = attack.windupFrames;
+  }
+}
 function fireWeapons(state, player) {
   for (const weapon of player.weapons) {
     const recipe = DEFINITIONS.parts[weapon.part].weapon;
@@ -1699,6 +1754,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
   // before the next step, so nothing in the order of the step stands in its way.
   emitStrikes(state, player, visual);
   fireWeapons(state, player);
+  swingMelees(state, player, visual);
 
   // 5. The hitboxes hurt, once each, and lose a frame.
   resolveHitboxes(state, audit);

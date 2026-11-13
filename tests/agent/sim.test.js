@@ -3657,3 +3657,43 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("damage: { puncture: { flat: 30, perWeight: 0 } },", "damage: { puncture: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
   bad("      melee: {", "      weapon: { target: \"closest\", intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
+
+test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of puncture), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
+  const result = run(`
+    const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
+    function swordGame(x, y) {
+      const run = createRun(1, { parts: swordParts });
+      const s = createChamber2State(1, 1, run.blueprint);
+      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+      const biter = s.actors[1];
+      biter.ai.phase = "freeze"; biter.ai.frames = 1000000; biter.health.now = 90; biter.health.max = 90;
+      biter.position.x = x; biter.position.y = y;
+      s.actors[0].position.x = 0; s.actors[0].position.y = 0;
+      return { s, bp: run.blueprint, biter };
+    }
+    const idle = { move: { x: 0, y: 0 } };
+    const near = swordGame(60, 0);
+    const sword = near.s.actors[0].melees[0];
+    const start = JSON.parse(JSON.stringify(sword));
+    const blows = [];
+    const phases = [];
+    let last = 90;
+    for (let i = 1; i <= 44; i++) {
+      step(near.s, idle, near.bp);
+      phases.push(sword.phase + ":" + sword.frames);
+      if (near.biter.health.now < last) { blows.push([i, last - near.biter.health.now]); last = near.biter.health.now; }
+    }
+    const far = swordGame(300, 0);
+    for (let i = 0; i < 40; i++) step(far.s, idle, far.bp);
+    return { start, blows, phases: phases.slice(0, 2).concat(phases.slice(11, 14)).concat(phases.slice(29, 32)), farPhase: far.s.actors[0].melees[0].phase, farHealth: far.biter.health.now, attack: near.s.actors[0].attacks["sword-arm"], starterMelees: createChamber1State(1, 1, createRun(1).blueprint).actors[0].melees };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.start, { part: "sword-arm", phase: "idle", frames: 0, dirX: 1, dirY: 0 });
+  assert.deepStrictEqual(r.blows, [[13, 30], [43, 30]]);
+  assert.deepStrictEqual(r.phases, ["windup:12", "windup:11", "windup:1", "recovery:18", "recovery:17", "recovery:1", "windup:12", "windup:11"]);
+  assert.strictEqual(r.farPhase, "idle");
+  assert.strictEqual(r.farHealth, 90);
+  assert.deepStrictEqual(r.attack.base, { puncture: 30 });
+  assert.strictEqual(r.attack.reach, 90);
+  assert.deepStrictEqual(r.starterMelees, []);
+});

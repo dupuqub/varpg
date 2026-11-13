@@ -255,6 +255,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 161 | A circle touches a cone when it overlaps it at all (exact test, no trigonometry in the rules): center inside, only the arc, only a straight edge, only the tip; and the misses (behind, beyond, to the side, touching exactly). | The user's decision: hit = any overlap, as in the bite; step A of the sword. |
 | 162 | A cone is a hitbox shape: it points where it was born to point, hurts a target that overlaps it by any part (even half), not one behind or beyond, lives one frame, and its trace carries the shape. | The user's decision: fixed cone, one frame, any overlap hits; step B of the sword. |
 | 163 | The sword arm is data: the recipe `melee` is read as written and checked; a bad reach, angle, frames, aim correction, type or amount of damage, or a part with both `weapon` and `melee`, stops the game with a message that names it. | The user's decision: the sword is the second arm; step C of the sword (numbers are guesses, written with reasons in `src/data.js`). |
+| 164 | The sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of puncture), then 18 frames of recovery and the next windup (blows at steps 13 and 43); a target outside the reach starts nothing; an avatar without a sword has no melee state. | The user's decisions: the swing starts when a target is within the reach, one frame of damage; step D of the sword. |
 
 ### Benchmark of the grid (not a test)
 
