@@ -20,30 +20,22 @@ function copyOf(value) {
 // of the run (it does not change during a run), because replaying needs it.
 // The visual state (src/sim.js, createVisual) is optional: when given, the history keeps a copy of it per snap, in `visuals`
 // (the same index), so stepping back can show the traces of that frame. The cross-check never reads `visuals`.
-// The audit of the hits (createAudit) is optional in the same way and kept in `audits`.
-function createHistory(state, blueprint, visual = null, audit = null) {
-  return { snaps: [copyOf(state)], inputs: [null], visuals: [visual === null ? null : copyOf(visual)], audits: [audit === null ? null : copyOf(audit)], blueprint: copyOf(blueprint) };
+// The combat audit (createAudit) is NOT kept here: it is the observer's notebook, outside the history, and only grows (the user, 2026-11-13).
+function createHistory(state, blueprint, visual = null) {
+  return { snaps: [copyOf(state)], inputs: [null], visuals: [visual === null ? null : copyOf(visual)], blueprint: copyOf(blueprint) };
 }
 
 // Call right after step(): saves the new state and the input that produced it.
 // The oldest ones (index 0) leave when there are more than HISTORY_SIZE.
-function recordFrame(history, state, input, visual = null, audit = null) {
+function recordFrame(history, state, input, visual = null) {
   history.snaps.push(copyOf(state));
   history.inputs.push(copyOf(input));
   history.visuals.push(visual === null ? null : copyOf(visual));
-  history.audits.push(audit === null ? null : copyOf(audit));
   while (history.snaps.length > HISTORY_SIZE) {
     history.snaps.shift();
     history.inputs.shift();
     history.visuals.shift();
-    history.audits.shift();
   }
-}
-
-// A copy of the audit of a snap (or null when none was kept).
-function auditFromSnap(history, index) {
-  const audit = history.audits[index];
-  return audit === null || audit === undefined ? null : copyOf(audit);
 }
 
 // A copy of the visual state of a snap (or null when none was kept), to show while looking at that frame.
@@ -69,7 +61,6 @@ function discardAfter(history, index) {
   history.snaps.length = index + 1;
   history.inputs.length = index + 1;
   history.visuals.length = index + 1;
-  history.audits.length = index + 1;
 }
 
 // The cross-check. Takes the oldest snap, applies the saved inputs with step(),

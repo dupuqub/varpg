@@ -3943,3 +3943,26 @@ test("173 the combat audit totals are read from the lines: two bites and a bulle
   });
   assert.deepStrictEqual(r.empty, {});
 });
+
+test("174 the history keeps no copy of the combat audit: its record has only the snaps, the inputs, the visual copies and the blueprint, and stepping a run on writes lines only into the log, which is never rewound by the history (discarding after a snap leaves it whole)", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    const audit = createAudit();
+    const history = createHistory(s, run.blueprint, null);
+    for (let i = 0; i < 1500; i++) {
+      const input = { move: { x: 0, y: 0 } };
+      step(s, input, run.blueprint, null, audit);
+      recordFrame(history, s, input, null);
+    }
+    const written = audit.length;
+    discardAfter(history, 10);
+    return { keys: Object.keys(history), written, after: audit.length, snaps: history.snaps.length, hasFromSnap: typeof auditFromSnap };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.keys, ["snaps", "inputs", "visuals", "blueprint"]);
+  assert.ok(r.written > 0, "the run must have written some lines");
+  assert.strictEqual(r.after, r.written);
+  assert.strictEqual(r.snaps, 11);
+  assert.strictEqual(r.hasFromSnap, "undefined");
+});

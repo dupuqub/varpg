@@ -69,7 +69,7 @@ function startChamber(id) {
   }
   visual = createVisual();
   audit = createAudit();
-  runHistory = createHistory(state, run.blueprint, visual, audit);
+  runHistory = createHistory(state, run.blueprint, visual);
   paused = false;
   viewIndex = 0;
   lastTimestamp = null;
@@ -127,7 +127,7 @@ function loop(timestamp) {
 function stepLive() {
   const input = readInput();
   step(state, input, run.blueprint, visual, audit);
-  recordFrame(runHistory, state, input, visual, audit);
+  recordFrame(runHistory, state, input, visual);
   viewIndex = runHistory.snaps.length - 1;
 }
 
@@ -151,7 +151,6 @@ function stepBack() {
   viewIndex -= 1;
   state = stateFromSnap(runHistory, viewIndex);
   visual = visualFromSnap(runHistory, viewIndex);
-  audit = auditFromSnap(runHistory, viewIndex);
   draw(context, state, run.blueprint, fps, visual);
   updateControls();
 }
@@ -163,8 +162,7 @@ function stepForward() {
     viewIndex += 1;
     state = stateFromSnap(runHistory, viewIndex);
     visual = visualFromSnap(runHistory, viewIndex);
-    audit = auditFromSnap(runHistory, viewIndex);
-  } else {
+    } else {
     stepLive();
   }
   draw(context, state, run.blueprint, fps, visual);
