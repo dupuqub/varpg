@@ -1518,9 +1518,9 @@ function emitStrikes(state, player, visual) {
 
 // Where a hitbox is born. The user (2026-11-13): "the reach of the sword stays untouched; the point of origin is the center
 // of the avatar/actor". So every hitbox of the avatar (the cone of a sword, a bullet) is born at its center, and its reach is
-// counted from there: neither the body nor the ring of the shield changes it. "Actor" includes the Biter, but its bite born
-// at its center would miss most bites started at the edge of its reach, so it waits for the user's answer (issue 3) and is
-// still born one body ahead of the Biter, toward its target.
+// counted from there: neither the body nor the ring of the shield changes it. The Biter is the exception, by the user's
+// answer the same day (issue 3): "the Biter can stay the same, the attack comes out of the front". Its bite is born one body
+// ahead of it, toward its target, and its reach stays the gap between the two bodies.
 function hitboxOrigin(owner, towardX, towardY) {
   if (isAvatar(owner)) return { x: owner.position.x, y: owner.position.y };
   return { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius };
