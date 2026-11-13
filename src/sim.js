@@ -1293,10 +1293,13 @@ function ageVisual(visual) {
 }
 
 // The strikes that the minds decided in this step (think sets ai.strike): for each one the hitbox is born now, toward where the
-// avatar is after everyone has moved, and the flag goes down. Called by step after the movement and the collisions.
+// avatar is after everyone has moved, and the flag goes down (an actor that has no health left strikes nothing). Called by step
+// after the movement and the collisions.
 function emitStrikes(state, player, visual) {
   for (const actor of state.actors) {
     if (!actor.ai || !actor.ai.strike) continue;
+    actor.ai.strike = false;
+    if (actor.health.now <= 0) continue; // the user, 2026-11-13: whoever died in this step does not strike (the flag triggers nothing)
     const attack = actor.attacks[actor.ai.attack];
     const dx = player.position.x - actor.position.x;
     const dy = player.position.y - actor.position.y;
@@ -1304,7 +1307,6 @@ function emitStrikes(state, player, visual) {
     const towardX = distance === 0 ? 1 : dx / distance; // same centers: faces right, the same everywhere
     const towardY = distance === 0 ? 0 : dy / distance;
     spawnHitbox(state, actor, actor.ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null }, visual);
-    actor.ai.strike = false;
   }
 }
 

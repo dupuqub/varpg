@@ -3486,3 +3486,19 @@ test("157 things are born after everyone has moved: a bullet fired in a step whe
   assert.ok(Math.abs(result.bullet.x - result.expected.x) < 1e-9 && Math.abs(result.bullet.y - result.expected.y) < 1e-9, JSON.stringify([result.bullet, result.expected]));
   assert.ok(Math.abs(result.trace.x - result.biteExpected.x) < 1e-9 && Math.abs(result.trace.y - result.biteExpected.y) < 1e-9, JSON.stringify([result.trace, result.biteExpected]));
 });
+
+test("158 a Biter that died in the step does not strike: its decision to strike triggers nothing, and the flag goes down anyway", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, a, b] = s.actors;
+    for (const biter of [a, b]) { biter.position.x = 16 + biter.radius + 5; biter.position.y = biter.id === "biter_0" ? 0 : 60; biter.attacks.bite.windupFrames = 0; }
+    b.position.x = -(16 + b.radius + 5); b.position.y = 0;
+    a.health.now = 0; // died before the hitboxes are born (killed earlier in the step)
+    const visual = createVisual();
+    step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+    return { traces: visual.traces.length, flags: [a.ai.strike, b.ai.strike], phases: [a.ai.phase, b.ai.phase] };
+  `, QUIET);
+  assert.strictEqual(result.traces, 1); // only the living Biter struck
+  assert.deepStrictEqual(plain(result.flags), [false, false]);
+});

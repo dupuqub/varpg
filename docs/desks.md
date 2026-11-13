@@ -24,7 +24,7 @@ Start a conversation attached to this repository and paste the opening line of t
 
 - **Job:** the simulation and everything that decides what happens in the game: movement, collision, damage, weapons, enemies, the shield, the seed, the history; the numbers and their reasons; the tests that guard them.
 - **Importance:** essential. Nothing else moves without it. It is also the desk that keeps `AGENTS.md` true.
-- **May change:** `src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`, `AGENTS.md`, `docs/weapons.md`, `docs/weapon-families.md`, `.github/`.
+- **May change:** `src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`, `AGENTS.md`, `docs/weapons.md`, `docs/weapon-families.md`, `docs/step-order.md`, `.github/`.
 - **May not change:** nothing is forbidden to it, but when it renames or removes a field of the state it must fix what reads it in `src/render.js` and `src/chamber-0.js` in the same commit (or the screen breaks), and say so in the commit message.
 - **Only one Rules desk at a time.** Two agents changing the rules in parallel collide on the numbers of the tests, on the version of the data and on the order of `step`.
 - **Opening line:** `You are the Rules desk of varpg. Read AGENTS.md (start with "What this is", "Handoff" and "Working with several agents") and docs/desks.md, run the tests, and tell me in a few lines what state the project is in before doing anything.`
