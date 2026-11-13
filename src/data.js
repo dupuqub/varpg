@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 52;
+const DEFINITIONS_VERSION = 53;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -144,6 +144,7 @@ const DEFINITIONS = {
           windupFrames: 15,
           freezeFrames: 10,
           hitbox: { radius: 20, frames: 1 },
+          target: { pick: "closest", tag: "ally" }, // what the bite aims at: the closest thing that is "ally" (the avatar is the only one today)
           ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
         },
       },
@@ -321,7 +322,8 @@ const DEFINITIONS = {
     // The repeater arm (the user, 2026-11-11): the weapon is the arm itself and takes the place of the plain Arm L. A
     // machine gun, slow at first, with limited ammunition that weighs: the mecha gets lighter and faster as it fires.
     // weight 800: the plain arm's 650 plus 150 for the gun (guess).
-    // weapon.target: "closest", the only rule of auto-aim for now.
+    // weapon.target: { pick: "closest", tag: "enemy" }: what the weapon aims at (the user, 2026-11-13, issue 13): a rule to pick ("closest", the only
+    //   one for now) among the things that carry the tag. The tag is absolute, not relative to who acts: the avatar's blows aim at "enemy", the Biter's bite at "ally".
     // The user (2026-11-11): "err upward first, better to look overpowered than a rubber duck"; the numbers are tuned later.
     // (the weapon has no range any more: the Radar of the Head decides what can be aimed at, see parts.head)
     // weapon.intervalFrames 10: guess, 6 shots a second (the old project's 0.3 s was 18 frames; raised on purpose).
@@ -338,7 +340,7 @@ const DEFINITIONS = {
       specs: {},
       weapon: {
         ignores: ["self", "ally"], // the tags its bullets do not hurt (each attack has its own list; the hitbox copies it at its birth)
-        target: "closest",
+        target: { pick: "closest", tag: "enemy" },
         intervalFrames: 10,
         reloadFrames: 90,
         rounds: { weight: 6, magazine: 30, reserve: 370 },
@@ -364,7 +366,7 @@ const DEFINITIONS = {
       specs: {},
       melee: {
         ignores: ["self", "ally"], // the tags its blows do not hurt
-        target: "closest",
+        target: { pick: "closest", tag: "enemy" },
         reach: 90,
         angleDegrees: 90,
         windupFrames: 12,

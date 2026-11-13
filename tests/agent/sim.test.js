@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 52, hash: "e49fe728eb3eaac2" };
+const DATA_FINGERPRINT = { version: 53, hash: "8520dfcc8cace95a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2950,7 +2950,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, ignores: ["self", "ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, ignores: ["self", "ally"] });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3124,7 +3124,9 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
 
 test("140 a weapon must be sound when the data loads: only the closest rule, whole numbers, known types of damage, a bullet that is slower than the smallest radius it must not skip over", () => {
   const bad = (from, to) => assert.throws(() => loadGame((text) => text.replace(from, to)), /weapon of the part repeater-arm|projectile of the weapon|bullet of the weapon|rounds of the weapon/);
-  bad('target: "closest",\n        intervalFrames', 'target: "farthest",\n        intervalFrames');
+  bad('target: { pick: "closest", tag: "enemy" },\n        intervalFrames', 'target: { pick: "farthest", tag: "enemy" },\n        intervalFrames');
+  bad('target: { pick: "closest", tag: "enemy" },\n        intervalFrames', 'target: { pick: "closest", tag: "" },\n        intervalFrames');
+  bad('target: { pick: "closest", tag: "enemy" },\n        intervalFrames', 'target: "closest",\n        intervalFrames');
   bad("reloadFrames: 90", "reloadFrames: 0");
   bad("intervalFrames: 10", "intervalFrames: 1.5");
   bad("rounds: { weight: 6, magazine: 30, reserve: 370 }", "rounds: { weight: 1.5, magazine: 30, reserve: 370 }");
@@ -3641,7 +3643,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], target: "closest", reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -3651,7 +3653,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { cut: { flat: 30, perWeight: 0 } },", /not a type of damage/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
-  bad("      melee: {", "      weapon: { target: \"closest\", intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
+  bad("      melee: {", "      weapon: { target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
 test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
@@ -4153,4 +4155,23 @@ test("182 the word self in the list of an attack means the actor that made the h
   assert.deepStrictEqual(r.byDefault, { maker: false, neighbor: false });
   assert.deepStrictEqual(r.selfOnly, { maker: false, neighbor: true });
   assert.deepStrictEqual(r.nothing, { maker: true, neighbor: true });
+});
+
+// ---- The target of an action (issue 13, step 1a) ----
+test("183 the target of an attack is a record { pick, tag } written into the attack: the bite aims at the closest ally, the repeater and the sword at the closest enemy; it is a copy, not the recipe's own object; a target that is not { pick, tag } with a known pick and a word for the tag stops the game on load (the bite's too)", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const bite = aloneBiters(0).actors[1].attacks.bite.target;
+    const avatar = createAvatar(createRun(1, DEFINITIONS.combatBlueprint).blueprint);
+    return { bite, repeater: avatar.attacks["repeater-arm"].target, sword: avatar.attacks["sword-arm"].target, copy: bite !== definitionOf({ type: "biter" }).attacks.bite.target };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.bite, { pick: "closest", tag: "ally" });
+  assert.deepStrictEqual(r.repeater, { pick: "closest", tag: "enemy" });
+  assert.deepStrictEqual(r.sword, { pick: "closest", tag: "enemy" });
+  assert.strictEqual(r.copy, true);
+  const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
+  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "closest" },', /target of the attack bite of the actor biter/);
+  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "random", tag: "ally" },', /target of the attack bite of the actor biter/);
+  bad('          target: { pick: "closest", tag: "ally" },', '          // no target', /target of the attack bite of the actor biter/);
 });
