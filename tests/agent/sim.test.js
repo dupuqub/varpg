@@ -3506,7 +3506,7 @@ test("158 a Biter that died in the step does not strike: its decision to strike 
   assert.deepStrictEqual(plain(result.flags), [false, false]);
 });
 
-test("159 the audit writes every hit with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance), with the frame the screen shows when it is seen (the state after its step), and a bullet on a Biter, and the totals add them up by kind of hit", () => {
+test("159 the combat audit writes every hit as a line with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance), with the frame the screen shows when it is seen (the state after its step), and a bullet on a Biter, and the totals read from the lines add them up by kind of hit", () => {
   const result = run(`
     ${ALONE_BITERS}
     ${ARMED}
@@ -3518,16 +3518,16 @@ test("159 the audit writes every hit with its numbers: a bite on the avatar (pun
     b.attacks.bite.windupFrames = 0;
     const frameBefore = s.frame;
     step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
-    const bite = JSON.parse(JSON.stringify(audit.hits[0]));
+    const bite = JSON.parse(audit[0]);
     const frames = { before: frameBefore, after: s.frame };
 
     const t = armed(0);
     const target = t.s.actors[1];
     target.position.x = 250; target.position.y = 0;
     const shots = createAudit();
-    for (let i = 0; i < 60 && shots.hits.length === 0; i++) step(t.s, { move: { x: 0, y: 0 } }, t.bp, null, shots);
-    const bullet = JSON.parse(JSON.stringify(shots.hits[0]));
-    return { bite, frames, bullet, biteTotals: JSON.parse(JSON.stringify(audit.totals)), bulletTotals: JSON.parse(JSON.stringify(shots.totals)), health: avatar.health.now };
+    for (let i = 0; i < 60 && shots.length === 0; i++) step(t.s, { move: { x: 0, y: 0 } }, t.bp, null, shots);
+    const bullet = JSON.parse(shots[0]);
+    return { bite, frames, bullet, biteTotals: combatAuditTotals(audit), bulletTotals: combatAuditTotals(shots), health: avatar.health.now };
   `, QUIET);
   const bite = plain(result.bite);
   assert.deepStrictEqual([bite.source, bite.attack, bite.target], ["biter_0", "bite", "avatar_1"]);
@@ -3551,37 +3551,28 @@ test("159 the audit writes every hit with its numbers: a bite on the avatar (pun
   assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
 });
 
-// A game whose audit keeps only the last 10 hits.
-const CAPPED = loadGame((text) => text.replace("keepHits: 100", "keepHits: 10"));
-
-test("160 the audit holds no truth and is bounded: 600 frames of Chamber 2 with it and without it give the same state; only the last hits are kept (here 10; the totals count all); the history keeps a copy per snap, and going back shows the audit of that frame", () => {
+test("160 the audit holds no truth and has no limit: 3000 frames of Chamber 2 with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
   const result = run(`
     const play = (withAudit) => {
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, run.blueprint);
       const audit = withAudit ? createAudit() : null;
-      const history = createHistory(s, run.blueprint, null, audit);
-      for (let i = 0; i < 600; i++) {
-        const input = { move: { x: 0, y: 0 } };
-        step(s, input, run.blueprint, null, audit);
-        recordFrame(history, s, input, null, audit);
-      }
-      return { state: JSON.stringify(s), check: crossCheck(history), audit, history };
+      for (let i = 0; i < 3000; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, audit);
+      return { state: JSON.stringify(s), audit };
     };
     const a = play(true);
     const b = play(false);
-    const counted = Object.values(a.audit.totals).reduce((sum, t) => sum + t.hits, 0);
-    const back = auditFromSnap(a.history, 0);
-    const front = auditFromSnap(a.history, a.history.snaps.length - 1);
-    return { same: a.state === b.state, check: a.check, kept: a.audit.hits.length, keep: DEFINITIONS.constants.audit.keepHits, counted, backLast: back.hits[back.hits.length - 1].frame, frontLast: front.hits[front.hits.length - 1].frame, copy: back !== a.history.audits[0], none: auditFromSnap(b.history, 0) };
-  `, CAPPED);
+    const entries = a.audit.map((line) => JSON.parse(line));
+    const counted = Object.values(combatAuditTotals(a.audit)).reduce((sum, t) => sum + t.hits, 0);
+    let ordered = true;
+    for (let i = 1; i < entries.length; i++) if (entries[i].frame < entries[i - 1].frame) ordered = false;
+    return { same: a.state === b.state, lines: a.audit.length, allHits: entries.every((e) => e.event === "hit"), ordered, counted, none: b.audit };
+  `);
   assert.strictEqual(result.same, true);
-  assert.strictEqual(result.check, null);
-  assert.strictEqual(result.keep, 10);
-  assert.strictEqual(result.kept, 10);
-  assert.ok(result.counted > result.keep, "the totals must count more hits than the list keeps: " + result.counted);
-  assert.ok(result.backLast < result.frontLast, "the oldest snap shows an older last hit: " + result.backLast + " vs " + result.frontLast);
-  assert.strictEqual(result.copy, true);
+  assert.ok(result.lines > 100, "the log must keep more than the old limit of 100: " + result.lines);
+  assert.strictEqual(result.allHits, true);
+  assert.strictEqual(result.ordered, true);
+  assert.strictEqual(result.counted, result.lines);
   assert.strictEqual(result.none, null);
 });
 

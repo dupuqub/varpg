@@ -1482,43 +1482,17 @@ function combatAuditTotals(lines) {
   return totals;
 }
 
-// ---- The audit of the hits (the user, 2026-11-13) ----
-// A third object beside the state, like the visual state and for the same reasons: the rules WRITE every hit into it and never
-// read it, so erasing it changes no decision and the states stay cheap to save. It answers "who hurt whom, with what, for how
-// much, and what the resistance took off" with numbers: balancing weapons, finding why the avatar died, and data for a model.
-// It is { hits, totals }:
-//   hits    the last constants.audit.keepHits hits, oldest first (the rest are only counted in the totals). A hit is
-//           { frame (the frame the screen shows when the hit is seen: the state after its step; review 2026-11-13, point 6), source, attack, target, parts, total, minimumApplied, shield, health }: parts is what resolveDamage said per
-//           type of damage ({ type, amount, points, fromShield, reduction, after }), total what it cost, minimumApplied whether
-//           the minimum damage was what counted, shield and health what the target really lost of each.
-//   totals  by "kind:attack" (the kind is the source without its number or place: "biter:bite", "avatar:repeater-arm",
-//           "avatar:bodySlam", "rock:bodySlam"): { hits, total, shield, health, minimumApplied } added up over the whole run.
-// The history keeps a copy per snap (outside the cross-check), so stepping back shows the audit of that frame.
+// ---- The log the rules write (the user, 2026-11-13; build step 3) ----
+// The audit is now the combat audit: a plain array of lines (createAudit) that the rules only ever PUSH to, one line per damage
+// calculation (combatAuditHitLine), and never read, so erasing it changes no decision. It has no limit and no copy per snap: it is
+// the observer's notebook, outside the state and outside the history. The totals are read from it (combatAuditTotals).
 function createAudit() {
-  return { hits: [], totals: {} };
+  return [];
 }
 
 function recordHit(audit, state, source, attack, target, resolved, taken) {
-  audit.hits.push({
-    frame: state.frame + 1, // the frame the hit is seen in: state.frame counts up at the end of the step, so the state the screen shows after this step says state.frame + 1
-    source,
-    attack,
-    target,
-    parts: resolved.parts.map((part) => ({ ...part })),
-    total: resolved.total,
-    minimumApplied: resolved.minimumApplied,
-    shield: taken.shield,
-    health: taken.health,
-  });
-  const keep = DEFINITIONS.constants.audit.keepHits;
-  if (audit.hits.length > keep) audit.hits.splice(0, audit.hits.length - keep);
-  const key = source.replace(/_\d+$/, "").replace(/ .*$/, "") + ":" + attack; // "biter_3" is a biter, "rock 12,4" is a rock
-  const totals = audit.totals[key] ?? (audit.totals[key] = { hits: 0, total: 0, shield: 0, health: 0, minimumApplied: 0 });
-  totals.hits += 1;
-  totals.total += resolved.total;
-  totals.shield += taken.shield;
-  totals.health += taken.health;
-  if (resolved.minimumApplied) totals.minimumApplied += 1;
+  // the frame the hit is seen in: state.frame counts up at the end of the step, so the state the screen shows after this step says state.frame + 1
+  audit.push(combatAuditHitLine(state.frame + 1, source, attack, target, resolved, taken));
 }
 
 // ---- The visual state (the user, 2026-11-13) ----

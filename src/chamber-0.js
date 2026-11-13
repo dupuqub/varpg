@@ -93,9 +93,9 @@ function combatReportText() {
   for (let i = 0; i < frames; i++) step(state, idle, run.blueprint, null, audit);
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const number = (value) => value.toFixed(2);
-  const rows = Object.entries(audit.totals).map(([kind, t]) =>
+  const rows = Object.entries(combatAuditTotals(audit)).map(([kind, t]) =>
     `  ${kind}: ${t.hits} hits, ${number(t.total)} damage (${number(t.shield)} to the shield, ${number(t.health)} to health), the minimum counted in ${t.minimumApplied}`);
-  const last = audit.hits.slice(-10).map((hit) =>
+  const last = audit.slice(-10).map((line) => JSON.parse(line)).map((hit) =>
     `  frame ${hit.frame}: ${hit.source} ${hit.attack} -> ${hit.target}: ${hit.parts.map((p) => `${p.type} ${number(p.amount)} - ${(p.reduction * 100).toFixed(1)}% (${p.points} points, ${p.fromShield} from the shield) = ${number(p.after)}`).join(", ")}; total ${number(hit.total)}${hit.minimumApplied ? " (minimum)" : ""}; shield ${number(hit.shield)}, health ${number(hit.health)}`);
   return [
     "COMBAT REPORT",
@@ -104,7 +104,7 @@ function combatReportText() {
     `at the end: health ${number(player.health.now)}/${player.health.max}, shield ${number(player.shield.now)}/${player.shield.max}, Biters alive ${state.actors.length - 1}`,
     "totals by kind of hit:",
     ...rows,
-    `the last ${last.length} hits of ${audit.hits.length} kept:`,
+    `the last ${last.length} hits of ${audit.length} written:`,
     ...last,
   ].join("\n");
 }
