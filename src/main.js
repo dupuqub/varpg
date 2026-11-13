@@ -53,7 +53,7 @@ let fpsSince = null;
 // and the run goes on from there with new inputs (the agent's default, to be confirmed by the user).
 let paused = false;
 let viewIndex = 0;
-let audit = null; // the audit of the hits (src/sim.js): the rules write every hit into it and never read it
+let audit = null; // the combat audit (src/sim.js), a log of lines outside the state and the history: the rules write every hit into it and never read it; it only grows
 let visual = null; // the visual state (src/sim.js): traces for the eye; the rules write it and never read it
 
 function startChamber(id) {
@@ -69,6 +69,7 @@ function startChamber(id) {
   }
   visual = createVisual();
   audit = createAudit();
+  audit.push(combatAuditStartLine(state.frame, run.id, id)); // the log says which run and chamber the lines after it belong to
   runHistory = createHistory(state, run.blueprint, visual);
   paused = false;
   viewIndex = 0;
@@ -139,6 +140,7 @@ function pauseGame() {
 
 function playGame() {
   if (viewIndex < runHistory.snaps.length - 1) discardAfter(runHistory, viewIndex); // playing from a past frame
+  audit.push(combatAuditResumeLine(state.frame)); // every play after a pause says where the simulation resumed from, so a frame that repeats in the log can be understood
   paused = false;
   accumulatedMs = 0;
   lastTimestamp = null;

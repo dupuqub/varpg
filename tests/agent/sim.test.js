@@ -3966,3 +3966,17 @@ test("174 the history keeps no copy of the combat audit: its record has only the
   assert.strictEqual(r.snaps, 11);
   assert.strictEqual(r.hasFromSnap, "undefined");
 });
+
+test("175 the screen writes the two descriptive lines of the combat audit: startChamber writes the start line (the frame, the run and the chamber) right after creating the log, playGame writes the resume line with the frame it resumes from, and stepBack and stepForward write nothing themselves (walking through saved states leaves the log alone)", () => {
+  const main = readSource("main.js");
+  const body = (name) => {
+    const at = main.indexOf("function " + name + "(");
+    assert.ok(at >= 0, name + " not found in main.js");
+    return main.slice(at, main.indexOf("\n}\n", at));
+  };
+  const start = body("startChamber");
+  assert.ok(start.indexOf("audit = createAudit();") >= 0 && start.indexOf("audit.push(combatAuditStartLine(state.frame, run.id, id))") > start.indexOf("audit = createAudit();"), "startChamber must write the start line after creating the log");
+  assert.ok(body("playGame").includes("audit.push(combatAuditResumeLine(state.frame))"), "playGame must write the resume line");
+  assert.ok(!body("stepBack").includes("audit"), "stepBack must not touch the log");
+  assert.ok(!body("stepForward").includes("audit"), "stepForward must not touch the log itself (a new step goes through stepLive, which the rules write from)");
+});
