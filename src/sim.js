@@ -344,6 +344,23 @@ function assertValidDefinitions() {
       }
     }
   }
+  // The tags of exclusion (the user, 2026-11-13, issues 19 and 20): every thing has its tags and the list of its body, and every attack has
+  // its own list written (an empty one is a choice, a missing one is refused: leaving "self" or a side out is always visible in the data).
+  const tagList = (list, where) => {
+    if (!Array.isArray(list) || list.some((tag) => typeof tag !== "string" || tag === "")) {
+      throw new Error("The list of " + where + " must be written, a list of words (it can be empty for the lists of ignored tags): " + JSON.stringify(list));
+    }
+  };
+  for (const [id, thing] of Object.entries({ ...DEFINITIONS.objects, ...DEFINITIONS.actors })) {
+    const where = id + " (" + (DEFINITIONS.objects[id] ? "an object" : "an actor") + ")";
+    tagList(thing.tags, "the tags of " + where);
+    tagList(thing.bodyIgnores, "the bodyIgnores of " + where);
+    for (const [name, attack] of Object.entries(thing.attacks ?? {})) tagList(attack.ignores, "the ignores of the attack " + name + " of " + where);
+  }
+  for (const [id, part] of Object.entries(DEFINITIONS.parts)) {
+    if (part.weapon) tagList(part.weapon.ignores, "the ignores of the weapon of the part " + id);
+    if (part.melee) tagList(part.melee.ignores, "the ignores of the melee of the part " + id);
+  }
   const squareSizes = [];
   for (const [id, layer] of Object.entries(DEFINITIONS.terrain.objects.layers)) {
     const where = "the layer " + id + " of terrain.objects";

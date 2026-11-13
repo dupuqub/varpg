@@ -355,7 +355,7 @@ test("17 unknown types fail loudly, and a type without 'move' is static", () => 
   const withTrap = loadGame((text) => {
     const patched = text.replace(
       "  actors: {\n    avatar: {",
-      '  actors: {\n    trap: { name: "Trap", health: { now: 1, max: 1 }, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },\n    avatar: {'
+      '  actors: {\n    trap: { tags: ["object"], bodyIgnores: [], name: "Trap", health: { now: 1, max: 1 }, radius: 10, initial: { health: { now: 1, max: 1 }, position: { x: 0, y: 0 }, cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } } } },\n    avatar: {'
     );
     assert.notStrictEqual(patched, text, "the patch of data.js should apply");
     return patched;
@@ -2160,7 +2160,7 @@ function patchOnce(text, from, to) {
 
 const AFTER_SMALL = "        },\n      },\n    },\n\n    // The Dummies of Chamber 1";
 const HUGE_LAYER = (square, kind = "giant") => `        },\n        huge: { cellSize: ${square}, chancePercent: 100, safeRadius: 0, kinds: ["${kind}"] },\n      },\n    },\n\n    // The Dummies of Chamber 1`;
-const GIANT = '    giant: { name: "Giant", size: { min: 200, max: 256 }, weightPerRadius: 100, healthRange: { min: 10, max: 20 } },\n    rock: {';
+const GIANT = '    giant: { tags: ["object"], bodyIgnores: ["enemy", "object"], name: "Giant", size: { min: 200, max: 256 }, weightPerRadius: 100, healthRange: { min: 10, max: 20 } },\n    rock: {';
 
 function withHugeLayer(square = 2048) {
   return loadGame((text) => {
@@ -4115,4 +4115,16 @@ test("180 each attack has its own list of ignored tags, and a hitbox copies the 
   assert.deepStrictEqual(r.armed, { repeater: ["ally"], sword: ["ally"] });
   assert.deepStrictEqual(r.byDefault, { born: ["enemy", "object"], hurt: false, bodyList: ["enemy", "object"] });
   assert.deepStrictEqual(r.changed, { born: ["object"], hurt: true, bodyList: ["enemy", "object"] });
+});
+
+// ---- The tag "self" (issue 19): step 19a, a list that is missing is refused ----
+test("181 a list of tags that is missing is refused when the definitions load, with a message that names it: the tags of a thing, its bodyIgnores, the ignores of an attack (the bite), of a weapon and of a melee; an empty list is accepted (it is a choice)", () => {
+  const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
+  bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', /tags of biter/);
+  bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      tags: ["enemy"],\n      name: "Biter",', /bodyIgnores of biter/);
+  bad('          ignores: ["enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of biter/);
+  bad('        ignores: ["ally"], // the tags its bullets do not hurt', '        // the tags its bullets do not hurt', /ignores of the weapon of the part repeater-arm/);
+  bad('        ignores: ["ally"], // the tags its blows do not hurt', '        // the tags its blows do not hurt', /ignores of the melee of the part sword-arm/);
+  bad('          ignores: ["enemy", "object"], // the tags this attack', '          ignores: "enemy", // the tags this attack', /ignores of the attack bite of biter/);
+  assert.doesNotThrow(() => loadGame((text) => text.replace('          ignores: ["enemy", "object"], // the tags this attack', '          ignores: [], // the tags this attack')));
 });
