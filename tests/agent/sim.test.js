@@ -3732,3 +3732,22 @@ test("165 the aim of the sword is locked when the windup starts but may be corre
   assert.ok(Math.abs(turning.moved.length - 1) < 1e-12);
   assert.deepStrictEqual(fixed.moved.aim, [1, 0]);
 });
+
+test("166 the blow comes even if the target is gone during the windup (as the Biter's does): it lands on nothing and the recovery begins at the same step", () => {
+  const result = run(`
+    const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"] });
+    const s = createChamber2State(1, 1, run.blueprint);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    s.actors[1].ai.phase = "freeze"; s.actors[1].ai.frames = 1000000;
+    s.actors[1].position.x = 60; s.actors[1].position.y = 0;
+    s.actors[0].position.x = 0; s.actors[0].position.y = 0;
+    const idle = { move: { x: 0, y: 0 } };
+    const sword = s.actors[0].melees[0];
+    for (let i = 1; i <= 13; i++) {
+      step(s, idle, run.blueprint);
+      if (i === 3) s.actors[1].health.now = 0; // dies in the middle of the windup, and leaves at the end of the next step
+    }
+    return { phase: sword.phase, frames: sword.frames, actors: s.actors.length, hitboxes: s.hitboxes.length };
+  `);
+  assert.deepStrictEqual(plain(result), { phase: "recovery", frames: 18, actors: 1, hitboxes: 0 });
+});
