@@ -3697,3 +3697,38 @@ test("164 the sword swings: a target inside the reach starts the windup (12 fram
   assert.strictEqual(r.attack.reach, 90);
   assert.deepStrictEqual(r.starterMelees, []);
 });
+
+test("165 the aim of the sword is locked when the windup starts but may be corrected: each frame it moves aimCorrection of the way toward where the target is now (length stays 1); with 0 it never turns; with the target still it stays", () => {
+  const code = `
+    const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
+    function swordGame(x, y) {
+      const run = createRun(1, { parts: swordParts });
+      const s = createChamber2State(1, 1, run.blueprint);
+      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+      const biter = s.actors[1];
+      biter.ai.phase = "freeze"; biter.ai.frames = 1000000; biter.health.now = 90; biter.health.max = 90;
+      biter.position.x = x; biter.position.y = y;
+      s.actors[0].position.x = 0; s.actors[0].position.y = 0;
+      return { s, bp: run.blueprint, biter };
+    }
+    const idle = { move: { x: 0, y: 0 } };
+    function aimAfter(moveTo) {
+      const g = swordGame(60, 0);
+      const sword = g.s.actors[0].melees[0];
+      step(g.s, idle, g.bp); // the windup starts: locked toward (1, 0)
+      const locked = [sword.dirX, sword.dirY];
+      if (moveTo) { g.biter.position.x = moveTo[0]; g.biter.position.y = moveTo[1]; }
+      for (let i = 0; i < 5; i++) step(g.s, idle, g.bp);
+      return { locked, aim: [sword.dirX, sword.dirY], length: Math.sqrt(sword.dirX * sword.dirX + sword.dirY * sword.dirY) };
+    }
+    return { still: aimAfter(null), moved: aimAfter([0, 60]) };
+  `;
+  const turning = plain(run(code));
+  const fixed = plain(run(code, loadGame((text) => text.replace("aimCorrection: 0.1,", "aimCorrection: 0,"))));
+  assert.deepStrictEqual(turning.still.aim, [1, 0]);
+  assert.deepStrictEqual(turning.moved.locked, [1, 0]);
+  assert.ok(turning.moved.aim[0] > 0 && turning.moved.aim[1] > 0.1, "it turned toward the target, below it: " + turning.moved.aim);
+  assert.ok(turning.moved.aim[1] < 0.9, "but not all the way: " + turning.moved.aim);
+  assert.ok(Math.abs(turning.moved.length - 1) < 1e-12);
+  assert.deepStrictEqual(fixed.moved.aim, [1, 0]);
+});

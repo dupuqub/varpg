@@ -1349,6 +1349,25 @@ function swingMelees(state, player, visual) {
     const attack = player.attacks[sword.part];
     if (sword.phase === "windup") {
       sword.frames -= 1;
+      // Room to correct (the user, 2026-11-13): the aim was locked when the windup began, but each frame it moves a part
+      // (attack.aimCorrection) of the way toward where the closest target is now. No trigonometry: blend the two directions and
+      // give the result length 1 again. Opposite directions would blend to nothing: then the aim stays as it was.
+      const aimed = closestTarget(state, player, player.radar);
+      if (aimed !== null && attack.aimCorrection > 0) {
+        const dx = aimed.position.x - player.position.x;
+        const dy = aimed.position.y - player.position.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 0) {
+          const keep = 1 - attack.aimCorrection;
+          const blendX = sword.dirX * keep + (dx / distance) * attack.aimCorrection;
+          const blendY = sword.dirY * keep + (dy / distance) * attack.aimCorrection;
+          const length = Math.sqrt(blendX * blendX + blendY * blendY);
+          if (length > 0) {
+            sword.dirX = blendX / length;
+            sword.dirY = blendY / length;
+          }
+        }
+      }
       if (sword.frames > 0) continue;
       spawnHitbox(state, player, sword.part, sword.dirX, sword.dirY, { radius: 0, frames: 1, speed: 0, pierce: null, cone: { reach: attack.reach, cosHalf: attack.cosHalf, sinHalf: attack.sinHalf } }, visual);
       sword.phase = "recovery";
