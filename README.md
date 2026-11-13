@@ -7,7 +7,7 @@ A 2D top-down action RPG about mechas, in the browser, in **early development**.
 - Online (once published): `https://dupuqub.github.io/varpg/`
 - Or open `index.html` in a browser. There is no build and no server: the scripts are plain files.
 
-**Controls:** WASD or the left stick of a gamepad to move, Space or the gamepad A button to dash. The weapons aim by themselves. The `||`, `<<` and `>>` buttons at the top pause the game and walk through the last two seconds, frame by frame, and `[ ]` is fullscreen. Esc goes back to the menu.
+**Controls:** WASD or the left stick of a gamepad to move, Space or the gamepad A button to dash. The weapons aim by themselves. The `||`, `<<` and `>>` buttons at the top pause the game and walk through the last two seconds, frame by frame (keys `P` for pause, `,` and `;` or `.` for the steps), and `[ ]` is fullscreen. Esc goes back to the menu.
 
 **Phones (landscape):** put a finger on the left half of the screen and drag: it is a floating analog stick (the farther the finger from where it touched, the faster). A touch anywhere on the right half is the dash, in the direction you are moving. A Bluetooth gamepad also works.
 

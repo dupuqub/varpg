@@ -200,6 +200,22 @@ for (const button of fullscreenButtons) {
   });
 }
 
+// The keys of the same buttons (the user, 2026-11-12). P pauses and plays. The two step keys are the ones that carry the symbols: "," (and "<") steps back; ";" and "."
+// (and ">") step forward. He named ";" for the forward symbol; on some keyboards the key with ">" is "."; both work, so the
+// answer does not depend on the layout. The key is read by what it types (event.key), not by its place. Holding the key repeats
+// the step, which scrubs through the history.
+const BACK_KEYS = [",", "<"];
+const FORWARD_KEYS = [";", ".", ">"];
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.altKey || event.metaKey || !currentScreen() || !CHAMBERS[currentScreen().id]) return;
+  if (BACK_KEYS.includes(event.key)) stepBack();
+  else if (FORWARD_KEYS.includes(event.key)) stepForward();
+  else if (event.key.toLowerCase() === "p") {
+    if (!event.repeat) togglePause(); // holding P must not flicker between pause and play
+  } else return;
+  event.preventDefault();
+});
+
 // A button that keeps the focus would be pressed again by the Space key, which is the dash: so each click gives the focus back.
 for (const button of document.querySelectorAll('[data-control="back"]')) {
   button.addEventListener("click", () => { stepBack(); button.blur(); });
@@ -207,11 +223,15 @@ for (const button of document.querySelectorAll('[data-control="back"]')) {
 for (const button of document.querySelectorAll('[data-control="forward"]')) {
   button.addEventListener("click", () => { stepForward(); button.blur(); });
 }
+function togglePause() {
+  if (paused) playGame();
+  else pauseGame();
+  updateControls();
+}
+
 for (const button of document.querySelectorAll('[data-control="toggle"]')) {
   button.addEventListener("click", () => {
-    if (paused) playGame();
-    else pauseGame();
-    updateControls();
+    togglePause();
     button.blur();
   });
 }
