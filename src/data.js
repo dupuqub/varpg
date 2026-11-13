@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 51;
+const DEFINITIONS_VERSION = 52;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -144,7 +144,7 @@ const DEFINITIONS = {
           windupFrames: 15,
           freezeFrames: 10,
           hitbox: { radius: 20, frames: 1 },
-          ignores: ["enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issue 20): each attack has its own list; a hitbox copies it at its birth
+          ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
         },
       },
       initial: {
@@ -337,7 +337,7 @@ const DEFINITIONS = {
       weight: 800,
       specs: {},
       weapon: {
-        ignores: ["ally"], // the tags its bullets do not hurt (each attack has its own list; the hitbox copies it at its birth)
+        ignores: ["self", "ally"], // the tags its bullets do not hurt (each attack has its own list; the hitbox copies it at its birth)
         target: "closest",
         intervalFrames: 10,
         reloadFrames: 90,
@@ -363,7 +363,7 @@ const DEFINITIONS = {
       weight: 850,
       specs: {},
       melee: {
-        ignores: ["ally"], // the tags its blows do not hurt
+        ignores: ["self", "ally"], // the tags its blows do not hurt
         target: "closest",
         reach: 90,
         angleDegrees: 90,

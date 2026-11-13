@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 51, hash: "8a60373c561f1c8a" };
+const DATA_FINGERPRINT = { version: 52, hash: "e49fe728eb3eaac2" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2950,7 +2950,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, ignores: ["ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, ignores: ["self", "ally"] });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3641,7 +3641,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["ally"], target: "closest", reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], target: "closest", reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -4053,7 +4053,7 @@ test("178 a hitbox carries a copy of its owner's ignored tags from its birth and
     return { copy, before, protectedHealth, afterExceptions: b.health.now };
   `, QUIET);
   const r = plain(result);
-  assert.deepStrictEqual(r.copy, { ignores: ["enemy", "object"], same: false });
+  assert.deepStrictEqual(r.copy, { ignores: ["self", "enemy", "object"], same: false });
   assert.strictEqual(r.protectedHealth, r.before);
   assert.ok(r.afterExceptions < r.before, "without the tag in its list the bite hurts the neighbor: " + r.afterExceptions);
 });
@@ -4111,9 +4111,9 @@ test("180 each attack has its own list of ignored tags, and a hitbox copies the 
     return { bite: aloneBiters(0).actors[1].attacks.bite.ignores, armed, byDefault: bite(null), changed: bite(["object"]) };
   `, QUIET);
   const r = plain(result);
-  assert.deepStrictEqual(r.bite, ["enemy", "object"]);
-  assert.deepStrictEqual(r.armed, { repeater: ["ally"], sword: ["ally"] });
-  assert.deepStrictEqual(r.byDefault, { born: ["enemy", "object"], hurt: false, bodyList: ["enemy", "object"] });
+  assert.deepStrictEqual(r.bite, ["self", "enemy", "object"]);
+  assert.deepStrictEqual(r.armed, { repeater: ["self", "ally"], sword: ["self", "ally"] });
+  assert.deepStrictEqual(r.byDefault, { born: ["self", "enemy", "object"], hurt: false, bodyList: ["enemy", "object"] });
   assert.deepStrictEqual(r.changed, { born: ["object"], hurt: true, bodyList: ["enemy", "object"] });
 });
 
@@ -4122,9 +4122,35 @@ test("181 a list of tags that is missing is refused when the definitions load, w
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
   bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', /tags of biter/);
   bad('      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      tags: ["enemy"],\n      name: "Biter",', /bodyIgnores of biter/);
-  bad('          ignores: ["enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of biter/);
-  bad('        ignores: ["ally"], // the tags its bullets do not hurt', '        // the tags its bullets do not hurt', /ignores of the weapon of the part repeater-arm/);
-  bad('        ignores: ["ally"], // the tags its blows do not hurt', '        // the tags its blows do not hurt', /ignores of the melee of the part sword-arm/);
-  bad('          ignores: ["enemy", "object"], // the tags this attack', '          ignores: "enemy", // the tags this attack', /ignores of the attack bite of biter/);
-  assert.doesNotThrow(() => loadGame((text) => text.replace('          ignores: ["enemy", "object"], // the tags this attack', '          ignores: [], // the tags this attack')));
+  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of biter/);
+  bad('        ignores: ["self", "ally"], // the tags its bullets do not hurt', '        // the tags its bullets do not hurt', /ignores of the weapon of the part repeater-arm/);
+  bad('        ignores: ["self", "ally"], // the tags its blows do not hurt', '        // the tags its blows do not hurt', /ignores of the melee of the part sword-arm/);
+  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          ignores: "enemy", // the tags this attack', /ignores of the attack bite of biter/);
+  assert.doesNotThrow(() => loadGame((text) => text.replace('          ignores: ["self", "enemy", "object"], // the tags this attack', '          ignores: [], // the tags this attack')));
+});
+
+// ---- The tag "self" (issue 19), step 19b ----
+test("182 the word self in the list of an attack means the actor that made the hitbox: with enemy out of the list and self in, a bite born one body ahead hurts the neighbor Biter and never its maker (which it overlaps); with self out too it hurts its maker; with the default list (self, enemy, object) it hurts neither", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const bite = (list) => {
+      const s = aloneBiters(0, 1);
+      const [avatar, a, b] = s.actors;
+      avatar.position.x = 900; avatar.position.y = 900;
+      a.position.x = 0; a.position.y = 0; b.position.x = 30; b.position.y = 0;
+      step(s, { move: { x: 0, y: 0 } });
+      s.hitboxes = [];
+      if (list) a.attacks.bite.ignores = list;
+      const makerBefore = a.health.now;
+      const neighborBefore = b.health.now;
+      spawnHitbox(s, a, "bite", 1, 0, { radius: 40, frames: 3, speed: 0, pierce: null });
+      step(s, { move: { x: 0, y: 0 } });
+      return { maker: a.health.now < makerBefore, neighbor: b.health.now < neighborBefore };
+    };
+    return { byDefault: bite(null), selfOnly: bite(["self", "object"]), nothing: bite(["object"]) };
+  `, QUIET);
+  const r = plain(result);
+  assert.deepStrictEqual(r.byDefault, { maker: false, neighbor: false });
+  assert.deepStrictEqual(r.selfOnly, { maker: false, neighbor: true });
+  assert.deepStrictEqual(r.nothing, { maker: true, neighbor: true });
 });

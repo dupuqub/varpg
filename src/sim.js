@@ -1622,9 +1622,12 @@ function hitboxTouches(hitbox, target) {
 }
 
 // Whether a hitbox hurts a target (the user, 2026-11-13, "Tags of exclusion" in AGENTS.md): it does unless the target has a tag that
-// the hitbox ignores (hitbox.ignores, copied from its owner's recipe when it was born). With today's recipes this is the old side
-// rule: the avatar's hitboxes hurt what is not the avatar, and an enemy's hitboxes hurt only the avatar (no enemy hurts another).
+// the hitbox ignores (hitbox.ignores, copied from its attack's list when it was born), or the list has "self" and the target is the actor
+// that made the hitbox (issue 19: "self" is the one word that is no tag, "the actor that made this"; almost every attack writes it, and
+// an attack that hurts its maker, a blast, leaves it out). With today's recipes: the avatar's hitboxes hurt what is not the avatar, and
+// an enemy's hitboxes hurt only the avatar (no enemy hurts another, nor itself).
 function hitboxHurts(hitbox, target) {
+  if (hitbox.ignores.includes("self") && target.id === hitbox.owner) return false;
   return !ignoresTarget(hitbox.ignores, tagsOf(target));
 }
 
