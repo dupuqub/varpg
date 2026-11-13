@@ -164,7 +164,7 @@ function stepForward() {
     viewIndex += 1;
     state = stateFromSnap(runHistory, viewIndex);
     visual = visualFromSnap(runHistory, viewIndex);
-    } else {
+  } else {
     stepLive();
   }
   draw(context, state, run.blueprint, fps, visual);
