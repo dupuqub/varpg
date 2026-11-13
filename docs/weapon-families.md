@@ -24,7 +24,7 @@ The Biter's attack is already a tiny timeline: wait, emit a hitbox, wait. A swor
 
 | Family | Wait before | What is emitted | Wait after |
 |---|---|---|---|
-| Biter bite | windup | a circle, still, a few frames | freeze |
+| Biter bite | windup | a circle, still, one frame (the user, 2026-11-13) | freeze |
 | Sword | a short windup | an **arc** in front of the owner, alive for the swing | recovery |
 | Spear | a very short windup | a **line** (a capsule) that pokes out, with pierce | a very short recovery |
 | Hammer | a long windup | a **burst**: a circle at a point, for one or two frames | a long recovery |
@@ -42,7 +42,7 @@ The Biter's attack is already a tiny timeline: wait, emit a hitbox, wait. A swor
 
 **2. Hitboxes that follow their owner.** A slash or a thrust must stay with the avatar while it walks. A hitbox needs an optional `attached: true` (position relative to the owner, recomputed every frame) as opposed to the bullet, which stays where it is or flies.
 
-**3. A swing that sweeps.** The simplest sword is a **static cone alive for a few frames** (cheap, and it already hits things in front). A real sweep rotates the cone across its frames; each target is still hit once (`struck`). Start static, sweep later, behind the same data.
+**3. A swing that sweeps.** The simplest sword is a **static cone alive for one frame** (the user, 2026-11-13: like the bite, it hurts in the frame it is born and is gone; what the eye sees is a trace in the visual state; cheap, and it already hits things in front). A real sweep rotates the cone across its frames; each target is still hit once (`struck`). Start static, sweep later, behind the same data.
 
 **4. Area bursts** (hammer, grenade explosion, later the rocket's mini-grenades): an instant circle at a point, alive for one or two frames, hurting everything inside once. Here the question of **falloff** (damage lower at the edge) appears; start flat.
 
@@ -84,7 +84,7 @@ A function that plays a scripted fight and returns numbers. Because the simulati
 ## Open questions for the user (none asked yet; answer when convenient)
 
 1. **Where does the sword's arc point?** At the target locked when the windup starts, or at the target at the moment of the strike?
-2. **Does a swing sweep** (the arc turns while it lasts) or is it a static cone for a few frames, at first?
+2. **Does a swing sweep** (the arc turns while it lasts) or is it a static cone for one frame, at first? (Answered 2026-11-13: static, one frame.)
 3. **Knockback:** should hits push the target, and by how much does the target's weight matter?
 4. **Falloff** of the hammer: flat damage in the whole circle, or less at the edge?
 5. **Do melee weapons also take ammunition** (a durability or a resource) or are they free to swing?

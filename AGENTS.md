@@ -458,6 +458,7 @@ From the root of the repository: `node --test` (no path; Node finds the `*.test.
 
 ## How to work on this project
 
+- **The title of a test claims only what the test checks (2026-11-13).** The user cannot read code: the titles and the rows of `tests/agent/README.md` are his window to what is guaranteed, so a title that promises more than the test verifies gives him a false guarantee (it happened twice in one day, tests 153 and 122). When a test is changed, change its title and its row in the same commit.
 - Solve one problem at a time. Short replies. Do not over-explain.
 - Do not start work the user has not asked for. The user explains the concept and sets the decisions; the agent proposes and confirms.
 - Do not assume the obvious: if a question already has an evident answer, decide and move on, and keep questions for real design decisions.

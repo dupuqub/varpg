@@ -45,7 +45,7 @@ function loadGame(patchData = null, { shield = false } = {}) {
   }
   // The rules need the blueprint of the run as the third argument of step. Most tests do not care
   // which one, so here step plays with the starter blueprint unless a test passes another.
-  vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint, visual = null) => realStep(state, input, blueprint, visual);", context);
+  vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint, ...rest) => realStep(state, input, blueprint, ...rest);", context);
   return context;
 }
 
@@ -2679,7 +2679,7 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   }
 });
 
-test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture); the bite lives one frame, so it is gone at the end of the step it hurt in; a hitbox that lives more frames keeps its packet even if the bite changes later and still hurts only once", () => {
+test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture); the bite lives one frame, so it is gone at the end of the step it hurt in; a hitbox that lives 3 frames and keeps touching the avatar still hurts it only once, with the packet it was born with even if the bite changed afterwards", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -2691,19 +2691,22 @@ test("122 a hitbox hurts the avatar once, with the packet as it was born (resist
     step(s, { move: { x: 0, y: 0 } });
     const bitten = { health: avatar.health.now, alive: s.hitboxes.length };
 
-    // A hitbox that lives 3 frames, made by the same function: it keeps the packet it was born with.
+    // A hitbox that lives 3 frames, made by the same function and touching the avatar all the time: it hurts once.
     const t = aloneBiters(0);
     const c = t.actors[1];
-    c.position.x = 900; c.position.y = 0; // far: it will not strike by itself
-    spawnHitbox(t, c, "bite", 1, 0, { radius: 20, frames: 3, speed: 0, pierce: null });
+    c.position.x = 16 + c.radius + 5; c.position.y = 0;
+    c.ai.phase = "freeze"; c.ai.frames = 1000000; // a frozen mind: it will not strike by itself
+    spawnHitbox(t, c, "bite", -1, 0, { radius: 20, frames: 3, speed: 0, pierce: null });
     c.attacks.bite.now.puncture = 50; // the bite changes after the hitbox was born
-    return { bite, bitten, frozen: t.hitboxes[0].damage.puncture, frames: t.hitboxes[0].framesLeft };
+    const longer = [];
+    for (let i = 0; i < 3; i++) { step(t, { move: { x: 0, y: 0 } }); longer.push([t.actors[0].health.now, t.hitboxes.length]); }
+    return { bite, bitten, longer };
   `, QUIET);
   const damage = 100 - resisted(result.bite, 10); // 10 points of puncture: 10 / 110 = 9% off
   assert.ok(Math.abs(result.bitten.health - damage) < 1e-9, "the bite: " + result.bitten.health);
   assert.strictEqual(result.bitten.alive, 0); // it lived one frame
-  assert.strictEqual(result.frozen, result.bite); // the hitbox kept the value it was born with
-  assert.strictEqual(result.frames, 3);
+  for (const [health] of plain(result.longer)) assert.ok(Math.abs(health - damage) < 1e-9, "hurt once, with the packet it was born with: " + health);
+  assert.deepStrictEqual(plain(result.longer).map(([, alive]) => alive), [1, 1, 0]); // 3 frames, and then it is gone
 });
 
 test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, anything else's hurts the avatar; a hitbox that does not touch the avatar hurts nobody", () => {
