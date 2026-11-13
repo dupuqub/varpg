@@ -3358,7 +3358,7 @@ test("152 every function or constant that the \"Code layout\" of AGENTS.md names
   assert.deepStrictEqual(missing, []);
 });
 
-test("153 a bullet has no life in frames: it flies past the old range (520 px) and goes only when its center leaves the window of the grid around the avatar; a pierce spent still ends it, and a bite still lives its frames", () => {
+test("153 a bullet has no life in frames: it flies past the old range (520 px) and goes only when its center leaves the window of the grid around the avatar (the pierce and the bite are checked by tests 122 and 138)", () => {
   const result = run(`
     ${ARMED}
     const { s, bp } = armed();
