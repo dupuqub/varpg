@@ -111,13 +111,9 @@ function isAvatar(actor) {
 
 // The tags of a thing (what it is: "ally", "enemy", "object") are written into the thing when it is made (finalizeObject, from its
 // recipe) and read from the thing, never from its type: anything can change side (the user, 2026-11-13, issue 20). The tags its body
-// and attacks ignore are still read from the recipe (they move into the thing in the next steps of issue 20).
+// and attacks ignore are written into the attacks of the thing (issue 20): attacks.<name>.ignores, the body's list being the one of bodySlam.
 function tagsOf(thing) {
   return thing.tags;
-}
-
-function ignoredTagsOf(thing) {
-  return definitionOf(thing).ignores;
 }
 
 // Whether a list of ignored tags covers a target: true when the target has at least one of the tags in the list. A hit or a contact on
@@ -481,7 +477,8 @@ function packetOf(parts, weight) {
 // weight times bodySlam.attack.damage (the hit itself scales it by the impact, see finalAttack); a recipe can have more
 // (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, windupFrames, freezeFrames, the hitbox) is copied as it is.
 function attackRecipes(thing) {
-  return { bodySlam: DEFINITIONS.constants.bodySlam.attack, ...definitionOf(thing).attacks };
+  const recipe = definitionOf(thing);
+  return { bodySlam: { ...DEFINITIONS.constants.bodySlam.attack, ignores: recipe.bodyIgnores ?? [] }, ...recipe.attacks }; // the body's list is the list of its bodySlam attack
 }
 
 function finalAttacks(thing) {
@@ -579,7 +576,7 @@ function slamObject(state, audit, attacker, hit, object) {
 // The avatar hurts actors and objects, and actors and objects hurt the avatar; two enemies, or an enemy and an object, hurt nobody.
 // The weight of the mecha is the center of the damage of contact, and nothing else fights by itself (the weapons will, later).
 function bodyHurts(attacker, target) {
-  return !ignoresTarget(ignoredTagsOf(attacker), tagsOf(target));
+  return !ignoresTarget(attacker.attacks.bodySlam.ignores, tagsOf(target));
 }
 
 // Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).

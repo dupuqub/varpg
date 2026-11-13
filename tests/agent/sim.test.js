@@ -766,8 +766,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 } } }, tags: ["object"] });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 } } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -1417,8 +1417,8 @@ test("73 the objects are the rock and the Shroom, each complete and with its own
     assert.strictEqual(object.weightPerRadius * object.size.max, 3200, id);
   }
   // Nothing is in an entry without being used: no fixed health, no initial state, no placeholder.
-  assert.deepStrictEqual(Object.keys(objects.rock), ["tags", "ignores", "name", "size", "weightPerRadius", "healthRange"]);
-  assert.deepStrictEqual(Object.keys(objects.shroom), ["tags", "ignores", "name", "size", "weightPerRadius", "healthRange", "bounce"]); // only the Shroom bounces
+  assert.deepStrictEqual(Object.keys(objects.rock), ["tags", "bodyIgnores", "name", "size", "weightPerRadius", "healthRange"]);
+  assert.deepStrictEqual(Object.keys(objects.shroom), ["tags", "bodyIgnores", "name", "size", "weightPerRadius", "healthRange", "bounce"]); // only the Shroom bounces
   assert.deepStrictEqual(objects.shroom.bounce, { min: 0.2, max: 1 });
 });
 
@@ -1448,9 +1448,9 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   `);
   assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy", "biter"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 } } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 } } }, tags: ["object"] }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
@@ -2611,7 +2611,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
   assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 1 }]); // what is not damage is copied as it is
   assert.ok(Math.abs(result.now.puncture - (3 + 0.002 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
   assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
-  assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 } } }); // the avatar has only the body slam: 5000 kg x 0.001
+  assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 }, ignores: ["ally"] } }); // the avatar has only the body slam: 5000 kg x 0.001
 });
 
 test("120 a Biter walks straight at the avatar: its wanted direction is the unit vector toward it, its velocity speeds up by 0.125 per frame to its top speed of 2.5, and the distance only shrinks", () => {
@@ -2718,7 +2718,7 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
     s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"] }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
-    return { rule: [hitboxHurts({ ignores: ignoredTagsOf(avatar) }, avatar), hitboxHurts({ ignores: ignoredTagsOf(avatar) }, b), hitboxHurts({ ignores: ignoredTagsOf(b) }, avatar), hitboxHurts({ ignores: ignoredTagsOf(b) }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
+    return { rule: [hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, b), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
   assert.deepStrictEqual(plain(result.rule), [false, true, true, false]);
   assert.strictEqual(result.health, 100);
@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 50, hash: "8ba5e170a6605128" };
+const DATA_FINGERPRINT = { version: 51, hash: "8a60373c561f1c8a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3114,7 +3114,7 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
     w.magazine = 1; w.reserve = 0;
     for (let i = 0; i < 40; i++) step(t.s, idle, t.bp);
     const avatar = t.s.actors[0];
-    return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts({ ignores: ignoredTagsOf(avatar) }, avatar) };
+    return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar) };
   `, PIERCE_ONE);
   assert.deepStrictEqual(plain(result.ids), ["avatar_1", "biter_1"]); // the weak one is gone
   assert.strictEqual(result.behind, 20); // the bullet had a pierce left because the dead one did not spend it... and hurt this one
@@ -3982,16 +3982,16 @@ test("175 the screen writes the two descriptive lines of the combat audit: start
 });
 
 // ---- Tags of exclusion (the user, 2026-11-13; step B) ----
-test("176 every type has tags and a list of ignored tags in its recipe, and the tags are written into the thing when it is made: the avatar is ally and ignores ally; the Biter and the Dummy are enemy and ignore enemy and object; the rock and the Shroom are object and ignore enemy and object; a thing made by finalizeObject carries its tags (and a copy, not the recipe's own array), tagsOf reads the thing and so a Biter given the tag ally is not an enemy any more", () => {
+test("176 every type has tags and a list of ignored tags for its body (bodyIgnores, written into the thing as the list of its bodySlam attack) in its recipe, and the tags are written into the thing when it is made: the avatar is ally and ignores ally; the Biter and the Dummy are enemy and ignore enemy and object; the rock and the Shroom are object and ignore enemy and object; a thing made by finalizeObject carries its tags (and a copy, not the recipe's own array), tagsOf reads the thing and so a Biter given the tag ally is not an enemy any more", () => {
   const result = run(`
     const types = ["avatar", "dummy", "biter", "rock", "shroom"];
     const table = {};
-    for (const type of types) table[type] = { tags: tagsOf(finalizeObject(type, {}, undefined, "x")), ignores: ignoredTagsOf({ type }) };
+    for (const type of types) table[type] = { tags: tagsOf(finalizeObject(type, {}, undefined, "x")), ignores: finalizeObject(type, {}, undefined, "x").attacks.bodySlam.ignores };
     const made = finalizeObject("biter", {}, undefined, "x");
     const copy = made.tags !== definitionOf(made).tags;
     const summoned = finalizeObject("biter", {}, undefined, "y");
     summoned.tags = ["ally"];
-    return { table, copy, enemyHurtsBiter: !ignoresTarget(ignoredTagsOf(made), tagsOf(made)), enemyHurtsSummoned: !ignoresTarget(ignoredTagsOf(made), tagsOf(summoned)) };
+    return { table, copy, enemyHurtsBiter: !ignoresTarget(made.attacks.bodySlam.ignores, tagsOf(made)), enemyHurtsSummoned: !ignoresTarget(made.attacks.bodySlam.ignores, tagsOf(summoned)) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.table, {
@@ -4018,7 +4018,7 @@ test("177 a list of ignored tags covers a target when the target has any of them
     ];
     const types = ["avatar", "dummy", "biter", "rock", "shroom"];
     const hurts = {};
-    for (const a of types) for (const b of types) hurts[a + ">" + b] = !ignoresTarget(ignoredTagsOf({ type: a }), tagsOf(finalizeObject(b, {}, undefined, "x")));
+    for (const a of types) for (const b of types) hurts[a + ">" + b] = !ignoresTarget(finalizeObject(a, {}, undefined, "x").attacks.bodySlam.ignores, tagsOf(finalizeObject(b, {}, undefined, "x")));
     return { cases, hurts };
   `);
   const r = plain(result);
@@ -4060,7 +4060,7 @@ test("178 a hitbox carries a copy of its owner's ignored tags from its birth and
 
 // ---- Tags of exclusion: the body (step E) ----
 // A game where the Biter ignores only "object": the "enemy" tag is taken out of its list, so Biters hurt each other by contact.
-const BITERS_HURT_BITERS = loadGame((text) => text.replace('biter: {\n      tags: ["enemy"],\n      ignores: ["enemy", "object"],', 'biter: {\n      tags: ["enemy"],\n      ignores: ["object"],'));
+const BITERS_HURT_BITERS = loadGame((text) => text.replace('biter: {\n      tags: ["enemy"],\n      bodyIgnores: ["enemy", "object"],', 'biter: {\n      tags: ["enemy"],\n      bodyIgnores: ["object"],'));
 
 test("179 the body slam hurts unless the target has a tag that the body ignores, each direction on its own: two Biters meeting head on at speed hurt nobody (enemies ignore enemy), and with the tag taken out of the Biter's list the same meeting hurts both", () => {
   const code = `
@@ -4106,7 +4106,7 @@ test("180 each attack has its own list of ignored tags, and a hitbox copies the 
       const born = [...s.hitboxes[0].ignores];
       const before = b.health.now;
       step(s, { move: { x: 0, y: 0 } });
-      return { born, hurt: b.health.now < before, bodyList: ignoredTagsOf(a) };
+      return { born, hurt: b.health.now < before, bodyList: a.attacks.bodySlam.ignores };
     };
     return { bite: aloneBiters(0).actors[1].attacks.bite.ignores, armed, byDefault: bite(null), changed: bite(["object"]) };
   `, QUIET);

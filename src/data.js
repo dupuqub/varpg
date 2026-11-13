@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 50;
+const DEFINITIONS_VERSION = 51;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -31,11 +31,12 @@ const DEFINITIONS = {
 
   actors: {
     avatar: {
-      // tags / ignores (the user, 2026-11-13; see "Tags of exclusion" in AGENTS.md): tags say what the thing is, ignores the tags its
-      //   body and its attacks do not hurt. By default every enemy ignores "enemy" (no enemy hurts another enemy), and "object"
-      //   (an enemy and the scenery hurt nobody between themselves, as today); the avatar ignores "ally" (its own hitboxes are born on it).
+      // tags / bodyIgnores (the user, 2026-11-13; see "Tags of exclusion" in AGENTS.md): tags say what the thing is; bodyIgnores is the
+      //   list of its body slam (written into the thing as the "ignores" of its bodySlam attack; every other attack has its own list, see
+      //   the bite, the weapon and the melee). By default every enemy ignores "enemy" (no enemy hurts another enemy), and "object"
+      //   (an enemy and the scenery hurt nobody between themselves, as today); the avatar ignores "ally".
       tags: ["ally"],
-      ignores: ["ally"],
+      bodyIgnores: ["ally"],
       name: "Avatar",
       // The maximum health, the resistance, the top speed and the dash strength of the
       // avatar are not here: they are the sum of what its parts give (see "parts" below).
@@ -82,7 +83,7 @@ const DEFINITIONS = {
     //   of two, like the avatar's. A Dummy always wants to walk, so its deceleration waits for the day one stops.
     dummy: {
       tags: ["enemy"],
-      ignores: ["enemy", "object"],
+      bodyIgnores: ["enemy", "object"],
       name: "Dummy",
       size: { min: 8, max: 16 },
       weightPerRadius: 100,
@@ -128,7 +129,7 @@ const DEFINITIONS = {
     //     state, see constants.visual). A hitbox hurts once.
     biter: {
       tags: ["enemy"],
-      ignores: ["enemy", "object"],
+      bodyIgnores: ["enemy", "object"],
       name: "Biter",
       size: { min: 12, max: 20 },
       weightPerRadius: 100,
@@ -178,7 +179,7 @@ const DEFINITIONS = {
     // healthRange: the user's first numbers, "between 10 and 20" for a Rock of the first map.
     rock: {
       tags: ["object"],
-      ignores: ["enemy", "object"],
+      bodyIgnores: ["enemy", "object"],
       name: "Rock",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
@@ -192,7 +193,7 @@ const DEFINITIONS = {
     //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
     shroom: {
       tags: ["object"],
-      ignores: ["enemy", "object"],
+      bodyIgnores: ["enemy", "object"],
       name: "Shroom",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
