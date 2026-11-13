@@ -27,7 +27,7 @@ Start a conversation attached to this repository and paste the opening line of t
 - **May change:** `src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`, `AGENTS.md`, `docs/weapons.md`, `docs/weapon-families.md`, `docs/step-order.md`, `.github/`.
 - **May not change:** nothing is forbidden to it, but when it renames or removes a field of the state it must fix what reads it in `src/render.js` and `src/chamber-0.js` in the same commit (or the screen breaks), and say so in the commit message.
 - **Only one Rules desk at a time.** Two agents changing the rules in parallel collide on the numbers of the tests, on the version of the data and on the order of `step`.
-- **Opening line:** `You are the Rules desk of varpg. Read AGENTS.md (start with "What this is", "Handoff" and "Working with several agents") and docs/desks.md, run the tests, and tell me in a few lines what state the project is in before doing anything.`
+- **Opening line:** `You are the Rules desk of varpg. Read AGENTS.md (start with "What this is", "Handoff" and "Working with several agents") and docs/desks.md, run the tests, and tell me in a few lines what state the project is in before doing anything. Then read the open issues with your label: gh issue list --label desk:rules.`
 
 ## Review desk
 
@@ -36,7 +36,7 @@ Start a conversation attached to this repository and paste the opening line of t
 - **May change:** only `docs/review-YYYY-MM-DD.md` (a new file per review). It writes findings in order of severity, each with the file and the function, and what it would do.
 - **May not change:** any code, any test, `AGENTS.md`. If something is wrong in `AGENTS.md`, it says so in the review; the Rules desk fixes it.
 - **How its work reaches the others:** the user tells the Rules desk "see the review", and the Rules desk says for each recommendation: done, not done and why, or needs the user's decision. A review that nobody answers is noise; delete from an old review what was solved.
-- **Opening line:** `You are the Review desk of varpg. Read AGENTS.md and docs/desks.md. Change no code. Review <what> and write docs/review-<date>.md with findings in order of severity and a recommendation for each.`
+- **Opening line:** `You are the Review desk of varpg. Read AGENTS.md and docs/desks.md. Change no code. Review <what> and write docs/review-<date>.md with findings in order of severity and a recommendation for each. Then read the open issues with your label: gh issue list --label desk:review.`
 
 ## Screen desk
 
@@ -45,7 +45,7 @@ Start a conversation attached to this repository and paste the opening line of t
 - **May change:** `src/render.js`, `src/input.js`, `src/main.js`, `src/chamber-0.js` (the page part), `index.html`, `style.css`, `README.md`, and the sections of `AGENTS.md` about screens, input and how to run.
 - **May not change:** `src/sim.js`, `src/data.js`, `src/history.js`, the tests of the rules. **The screen reads the state and never writes it.** The input stays `{ move, dash }`: a change of its shape is a change of the rules (it is in every snap) and belongs to the Rules desk.
 - **What it needs to know:** the simulation must not learn about the screen (no clock, no size of the window, no touch inside `step`). If the screen needs a value that is not in the state, it does not calculate a rule by itself: it writes a request (below). Its work has no Node tests (it needs the page), so it checks in a real browser and says in the commit what it checked.
-- **Opening line:** `You are the Screen desk of varpg. Read AGENTS.md (the top, "Screens", "Movement and input", "Working with several agents") and docs/desks.md. You change only the screen and the input, never the rules. Tell me what you would look at first.`
+- **Opening line:** `You are the Screen desk of varpg. Read AGENTS.md (the top, "Screens", "Movement and input", "Working with several agents") and docs/desks.md. You change only the screen and the input, never the rules. Tell me what you would look at first. Then read the open issues with your label: gh issue list --label desk:screen.`
 
 ## Bench desk (later)
 
@@ -54,7 +54,7 @@ Start a conversation attached to this repository and paste the opening line of t
 - **May change:** a new folder of its own (`bench/` for Node, `ml/` for Python) and its own docs. It loads the game scripts the way the tests do.
 - **May not change:** anything in `src/` or `tests/agent/`. A hole it finds in the rules (an input nobody can be hit with, a build that ignores a limit) is a report to the Rules desk, not something to work around.
 - **What it needs to know:** a run is `seed + blueprint + inputs`; a result is only worth something if it says which of the three it used. The reward and what the model observes are decisions about the game: the user's.
-- **Opening line:** `You are the Bench desk of varpg. Read AGENTS.md ("Ideas", "Working with several agents") and docs/desks.md. You never change src/. Propose the simplest bot and the table it would print, and wait for my answer.`
+- **Opening line:** `You are the Bench desk of varpg. Read AGENTS.md ("Ideas", "Working with several agents") and docs/desks.md. You never change src/. Propose the simplest bot and the table it would print, and wait for my answer. Then read the open issues with your label: gh issue list --label desk:bench.`
 
 ## Content desk (much later)
 
@@ -70,8 +70,13 @@ Not worth opening before the library of `AGENTS.md` ("The library") exists and a
 | `README.md` and the published page | Screen | Rules updates the lines about what exists |
 | Questions to the user | each desk, one at a time | a desk never answers for him: what he did not decide stays open |
 
-## Requests between desks
+## How desks talk: the Issues of GitHub (the user, 2026-11-13)
 
-A desk that needs something from another writes one line here (who asks, what, why), and removes it when it is done. Empty means nothing is waiting.
+The Issues of the repository are the place where desks talk and where the tasks live (`gh issue list`, `gh issue view N`, `gh issue comment N`).
 
-- (none)
+- **One task, one issue**, with the label of the desk that will do it: `desk:rules`, `desk:review`, `desk:screen`, `desk:bench`. The user points a desk at it ("take issue 3").
+- **A request to another desk is an issue** with that desk's label: who asks, what, why. The desk that does it says so in a comment and closes it.
+- **A question for the user** gets the label `question-for-user`, one question per issue. No desk answers for him.
+- **When a desk starts a conversation** it reads the open issues with its label, after `AGENTS.md` and this file.
+- **What was decided still goes to `AGENTS.md`**, in the same commit as the change. An issue is the conversation; the files are the memory.
+- A desk other than Rules sends its work as a pull request (the tests run on it, and the Review desk reads it there). Rules keeps pushing to `main`.
