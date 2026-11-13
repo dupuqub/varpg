@@ -1428,6 +1428,41 @@ function fireWeapons(state, player) {
   }
 }
 
+// ---- The combat audit, "caudit" (the user, 2026-11-13) ----
+// A log outside everything: someone in the stands watching the simulation and writing it down. It never interferes with the
+// gameplay (the rules write lines into it and never read it), it is tied to nothing (not the history either), and it only
+// grows. One line per damage calculation (one attack on one target), clear and minimal, as one JSON object per line, so a
+// person can read it and a script can parse it. Every line starts with the frame and the kind of event. The three kinds:
+//   hit     what came into effect in one damage calculation, with the ids of the two sides (an object is named by its type and
+//           place, see nameOf): { frame, event, source, attack, target, parts, total, minimumApplied, shield, health }. parts
+//           is what resolveDamage said per type of damage; shield and health are what the target really lost of each. frame is
+//           the frame the screen shows when the hit is seen (the state after its step).
+//   resume  the simulation resumed from frame X after a pause (written by the screen, which is where play is pressed), so
+//           that a frame written twice, or an actor dying twice, can be understood: { frame, event }.
+//   start   a run begins: { frame, event, run, chamber }, so one log can hold several runs of the same session.
+function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
+  return JSON.stringify({
+    frame,
+    event: "hit",
+    source,
+    attack,
+    target,
+    parts: resolved.parts,
+    total: resolved.total,
+    minimumApplied: resolved.minimumApplied,
+    shield: taken.shield,
+    health: taken.health,
+  });
+}
+
+function combatAuditResumeLine(frame) {
+  return JSON.stringify({ frame, event: "resume" });
+}
+
+function combatAuditStartLine(frame, run, chamber) {
+  return JSON.stringify({ frame, event: "start", run, chamber });
+}
+
 // ---- The audit of the hits (the user, 2026-11-13) ----
 // A third object beside the state, like the visual state and for the same reasons: the rules WRITE every hit into it and never
 // read it, so erasing it changes no decision and the states stay cheap to save. It answers "who hurt whom, with what, for how

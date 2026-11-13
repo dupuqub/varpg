@@ -3904,3 +3904,29 @@ test("171 calling the static and dynamic lists again on a living avatar changes 
   assert.deepStrictEqual(r.radii, [[16, 28.8], [16, 28.8]]);
   assert.deepStrictEqual(r.again, r.once);
 });
+
+// ---- The combat audit, "caudit": the lines (the user, 2026-11-13; build step 1) ----
+test("172 the combat audit writes one line per event, each a single JSON object that starts with the frame and the kind of event: a hit carries the ids of both sides and what came into effect in its damage calculation; a resume says the simulation resumed from frame X; a start names the run and the chamber", () => {
+  const result = run(`
+    const resolved = { parts: [{ type: "puncture", amount: 10, points: 10, fromShield: 0, reduction: 10 / 110, after: 10 * (1 - 10 / 110) }], total: 10 * (1 - 10 / 110), minimumApplied: false };
+    const taken = { shield: 0, health: resolved.total };
+    return {
+      hit: combatAuditHitLine(42, "biter_3", "bite", "avatar_1", resolved, taken),
+      resume: combatAuditResumeLine(450),
+      start: combatAuditStartLine(0, 1, "chamber-2"),
+      resolved, taken,
+    };
+  `);
+  const r = plain(result);
+  for (const line of [r.hit, r.resume, r.start]) {
+    assert.ok(!line.includes("\n"), "one line: " + line);
+    assert.deepStrictEqual(Object.keys(JSON.parse(line)).slice(0, 2), ["frame", "event"]);
+  }
+  const hit = JSON.parse(r.hit);
+  assert.deepStrictEqual(Object.keys(hit), ["frame", "event", "source", "attack", "target", "parts", "total", "minimumApplied", "shield", "health"]);
+  assert.deepStrictEqual([hit.frame, hit.event, hit.source, hit.attack, hit.target], [42, "hit", "biter_3", "bite", "avatar_1"]);
+  assert.deepStrictEqual(hit.parts, r.resolved.parts); // the numbers come out exactly as they went in
+  assert.deepStrictEqual([hit.total, hit.minimumApplied, hit.shield, hit.health], [r.resolved.total, false, 0, r.taken.health]);
+  assert.deepStrictEqual(JSON.parse(r.resume), { frame: 450, event: "resume" });
+  assert.deepStrictEqual(JSON.parse(r.start), { frame: 0, event: "start", run: 1, chamber: "chamber-2" });
+});
