@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 39;
+const DEFINITIONS_VERSION = 40;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -116,8 +116,9 @@ const DEFINITIONS = {
     //     see it and to dash out, short enough for a crowd to stay a threat. 0 would bite at once.
     //   freezeFrames: the user's number, "about 10 frames", now the pause after the bite.
     //   hitbox: radius guess 20 (a little more than the avatar's radius, so a bite at the reach always lands: the hitbox is
-    //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames guess 4 (0.07 s: a bite is
-    //     a snap, not a zone). A hitbox hurts once.
+    //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames 1 (the user, 2026-11-13: the bite hurts in the
+    //     frame it is born and is gone; who is not there then is not hit; what the eye sees afterwards is a trace in the visual
+    //     state, see constants.visual). A hitbox hurts once.
     biter: {
       name: "Biter",
       size: { min: 12, max: 20 },
@@ -132,7 +133,7 @@ const DEFINITIONS = {
           reach: 8,
           windupFrames: 15,
           freezeFrames: 10,
-          hitbox: { radius: 20, frames: 4 },
+          hitbox: { radius: 20, frames: 1 },
         },
       },
       initial: {
@@ -223,6 +224,11 @@ const DEFINITIONS = {
     //   about the same from 60 to 100 with the Dummies of today; it is to be measured again when the actors change.
     // windowWidth x windowHeight = rule: twice the screen (see above).
     grid: { screenWidth: 1920, screenHeight: 1080, cellSize: 64, windowWidth: 61, windowHeight: 35 },
+
+    // The visual state (the user, 2026-11-13): what the eye sees for longer than the rules need (see createVisual in src/sim.js).
+    // visual.traceFrames 12: guess, 0.2 s: long enough to see where a one-frame hitbox was (a bite, later a sword), short
+    //   enough not to be taken for a live hitbox. The trace fades with its age; 0 would turn the traces off.
+    visual: { traceFrames: 12 },
 
     // The body slam: what a collision does, and the first attack of every thing (the user's decision, 2026-11-11: it is a
     // packet like any other attack, of blunt damage). Every collision is a hit; the blunt damage is the weight of whoever hits

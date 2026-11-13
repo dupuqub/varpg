@@ -18,19 +18,29 @@ function copyOf(value) {
 
 // Starts a history with the initial state, before any step. It also keeps the blueprint
 // of the run (it does not change during a run), because replaying needs it.
-function createHistory(state, blueprint) {
-  return { snaps: [copyOf(state)], inputs: [null], blueprint: copyOf(blueprint) };
+// The visual state (src/sim.js, createVisual) is optional: when given, the history keeps a copy of it per snap, in `visuals`
+// (the same index), so stepping back can show the traces of that frame. The cross-check never reads `visuals`.
+function createHistory(state, blueprint, visual = null) {
+  return { snaps: [copyOf(state)], inputs: [null], visuals: [visual === null ? null : copyOf(visual)], blueprint: copyOf(blueprint) };
 }
 
 // Call right after step(): saves the new state and the input that produced it.
 // The oldest ones (index 0) leave when there are more than HISTORY_SIZE.
-function recordFrame(history, state, input) {
+function recordFrame(history, state, input, visual = null) {
   history.snaps.push(copyOf(state));
   history.inputs.push(copyOf(input));
+  history.visuals.push(visual === null ? null : copyOf(visual));
   while (history.snaps.length > HISTORY_SIZE) {
     history.snaps.shift();
     history.inputs.shift();
+    history.visuals.shift();
   }
+}
+
+// A copy of the visual state of a snap (or null when none was kept), to show while looking at that frame.
+function visualFromSnap(history, index) {
+  const visual = history.visuals[index];
+  return visual === null || visual === undefined ? null : copyOf(visual);
 }
 
 // A copy of a snap, to load as the live state. It must be a copy, because
@@ -49,6 +59,7 @@ function stateFromSnap(history, index) {
 function discardAfter(history, index) {
   history.snaps.length = index + 1;
   history.inputs.length = index + 1;
+  history.visuals.length = index + 1;
 }
 
 // The cross-check. Takes the oldest snap, applies the saved inputs with step(),

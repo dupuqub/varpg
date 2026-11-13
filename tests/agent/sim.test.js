@@ -45,7 +45,7 @@ function loadGame(patchData = null, { shield = false } = {}) {
   }
   // The rules need the blueprint of the run as the third argument of step. Most tests do not care
   // which one, so here step plays with the starter blueprint unless a test passes another.
-  vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint) => realStep(state, input, blueprint);", context);
+  vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint, visual = null) => realStep(state, input, blueprint, visual);", context);
   return context;
 }
 
@@ -2571,7 +2571,7 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.002 } }")), /attack bite of the actor biter needs flat and perWeight/);
   assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the actor biter/);
   assert.throws(() => loadGame((text) => text.replace("windupFrames: 15,", "windupFrames: -1,")), /windupFrames of the attack bite of the actor biter/);
-  assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 4 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the actor biter/);
+  assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 1 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the actor biter/);
   assert.throws(() => loadGame((text) => text.replace("attacks: {\n        bite: {", "attacks: {\n        bodySlam: {")), /name bodySlam of the attack bodySlam/);
 });
 
@@ -2608,7 +2608,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
   assert.ok(Math.abs(result.made.bite.base.puncture - (3 + 0.002 * weight)) < 1e-9);
   assert.ok(Math.abs(result.made.bodySlam.base.blunt - weight * 0.001) < 1e-9);
   assert.deepStrictEqual(plain(result.made.bite.now), plain(result.made.bite.base)); // a new actor: now is the base
-  assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 4 }]); // what is not damage is copied as it is
+  assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 1 }]); // what is not damage is copied as it is
   assert.ok(Math.abs(result.now.puncture - (3 + 0.002 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
   assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
   assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 } } }); // the avatar has only the body slam: 5000 kg x 0.001
@@ -2644,7 +2644,7 @@ test("120 a Biter walks straight at the avatar: its wanted direction is the unit
   assert.strictEqual(result.top, 2.5);
 });
 
-test("121 within its reach the Biter holds still for 15 frames (the windup), then strikes: one hitbox is born one body ahead of it with the damage the bite has now, and it stays still for 10 frames more (the freeze) and then chases again", () => {
+test("121 within its reach the Biter holds still for 15 frames (the windup), then strikes: one hitbox is born one body ahead of it with the damage the bite has now, hurts in that same step and is gone (it lives one frame), leaving a trace in the visual state, and it stays still for 10 frames more (the freeze) and then chases again", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -2652,12 +2652,13 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0; // 5 px of space between the bodies: within the reach of 8
     const rows = [];
+    const visual = createVisual();
     let born = null;
     for (let i = 1; i <= 27; i++) {
       if (i === 17) avatar.position.x = -1000; // after the strike the avatar goes away: the Biter has nothing to bite when the freeze ends
-      step(s, { move: { x: 0, y: 0 } });
-      rows.push([i, b.ai.phase, b.ai.frames, b.move.direction.x === 0 && b.move.direction.y === 0, s.hitboxes.length]);
-      if (i === 16) born = { hitboxes: JSON.parse(JSON.stringify(s.hitboxes)), radius: b.radius, bite: b.attacks.bite.now.puncture, direction: { ...b.move.direction } };
+      step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+      rows.push([i, b.ai.phase, b.ai.frames, b.move.direction.x === 0 && b.move.direction.y === 0, visual.traces.length]);
+      if (i === 16) born = { hitboxes: s.hitboxes.length, traces: JSON.parse(JSON.stringify(visual.traces)), health: avatar.health.now, radius: b.radius, bite: b.attacks.bite.now.puncture, direction: { ...b.move.direction } };
     }
     return { rows, born };
   `, QUIET);
@@ -2665,9 +2666,11 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   // Step 1 it enters the windup with 15 frames; at steps 2 to 15 it counts down 14 to 1 and no hitbox exists yet.
   assert.deepStrictEqual(plain(rows[0].slice(1)), ["windup", 15, true, 0]);
   for (const [step, phase, frames, still, hitboxes] of plain(rows.slice(1, 15))) assert.deepStrictEqual([phase, frames, still, hitboxes], ["windup", 16 - step, true, 0], "step " + step);
-  // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now) and the freeze begins.
-  assert.strictEqual(born.hitboxes.length, 1);
-  assert.deepStrictEqual(plain(born.hitboxes[0]), { owner: "biter_0", attack: "bite", position: { x: 21, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: born.bite }, velocity: { x: 0, y: 0 }, struck: ["avatar_1"], pierceLeft: null });
+  // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now), hurts in that same step and
+  // is gone (it lives one frame); the trace it leaves in the visual state is where it was born; the freeze begins.
+  assert.strictEqual(born.hitboxes, 0);
+  assert.deepStrictEqual(plain(born.traces), [{ position: { x: 21, y: 0 }, radius: 20, age: 0, frames: 12 }]);
+  assert.ok(Math.abs(born.health - (100 - resisted(born.bite, 10))) < 1e-9, "the bite hurt the avatar once: " + born.health);
   assert.deepStrictEqual([rows[15][1], rows[15][2], plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
   // Steps 17 to 25 it is frozen (frames 9 down to 1) and wants no movement; at step 26 the freeze is over and it chases.
   for (const [step, phase, frames, still] of plain(rows.slice(16))) {
@@ -2676,7 +2679,7 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   }
 });
 
-test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture), lives 4 frames and goes; changing the bite later does not change a hitbox that exists", () => {
+test("122 a hitbox hurts the avatar once, with the packet as it was born (resisted by the avatar's 10 points of puncture); the bite lives one frame, so it is gone at the end of the step it hurt in; a hitbox that lives more frames keeps its packet even if the bite changes later and still hurts only once", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -2685,21 +2688,22 @@ test("122 a hitbox hurts the avatar once, with the packet as it was born (resist
     b.position.x = 16 + b.radius + 5; b.position.y = 0;
     b.attacks.bite.windupFrames = 0; // this test is about the hitbox, not the windup
     const bite = b.attacks.bite.base.puncture;
-    const health = [];
-    const alive = [];
     step(s, { move: { x: 0, y: 0 } });
-    health.push(avatar.health.now); alive.push(s.hitboxes.length);
-    b.attacks.bite.base.puncture = 50; // the bite changes after the hitbox was born
-    b.attacks.bite.now.puncture = 50;
-    const frozen = s.hitboxes[0].damage.puncture;
-    for (let i = 2; i <= 4; i++) { step(s, { move: { x: 0, y: 0 } }); health.push(avatar.health.now); alive.push(s.hitboxes.length); }
-    return { bite, health, alive, frozen };
+    const bitten = { health: avatar.health.now, alive: s.hitboxes.length };
+
+    // A hitbox that lives 3 frames, made by the same function: it keeps the packet it was born with.
+    const t = aloneBiters(0);
+    const c = t.actors[1];
+    c.position.x = 900; c.position.y = 0; // far: it will not strike by itself
+    spawnHitbox(t, c, "bite", 1, 0, { radius: 20, frames: 3, speed: 0, pierce: null });
+    c.attacks.bite.now.puncture = 50; // the bite changes after the hitbox was born
+    return { bite, bitten, frozen: t.hitboxes[0].damage.puncture, frames: t.hitboxes[0].framesLeft };
   `, QUIET);
   const damage = 100 - resisted(result.bite, 10); // 10 points of puncture: 10 / 110 = 9% off
-  assert.ok(Math.abs(result.health[0] - damage) < 1e-9, "the bite: " + result.health[0]);
-  for (const health of result.health) assert.strictEqual(health, result.health[0]); // it hurt once, in the frame it was born
-  assert.deepStrictEqual(plain(result.alive), [1, 1, 1, 0]); // 4 frames, and then it is gone
+  assert.ok(Math.abs(result.bitten.health - damage) < 1e-9, "the bite: " + result.bitten.health);
+  assert.strictEqual(result.bitten.alive, 0); // it lived one frame
   assert.strictEqual(result.frozen, result.bite); // the hitbox kept the value it was born with
+  assert.strictEqual(result.frames, 3);
 });
 
 test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, anything else's hurts the avatar; a hitbox that does not touch the avatar hurts nobody", () => {
@@ -2806,15 +2810,14 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
     const play = () => {
       const run = createRun(1);
       const s = createChamber2State(1, 1, run.blueprint);
-      const history = createHistory(s, run.blueprint);
-      let bitten = 0;
+      const visual = createVisual();
+      const history = createHistory(s, run.blueprint, visual);
       let mostHitboxes = 0;
       for (let i = 0; i < 900; i++) {
         const input = { move: { x: 0, y: 0 } };
-        step(s, input, run.blueprint);
-        recordFrame(history, s, input);
-        bitten = Math.max(bitten, s.hitboxes.length);
-        mostHitboxes = Math.max(mostHitboxes, s.hitboxes.length);
+        step(s, input, run.blueprint, visual);
+        recordFrame(history, s, input, visual);
+        mostHitboxes = Math.max(mostHitboxes, visual.traces.length); // a bite lives one frame: its trace says it happened
       }
       return { s, check: crossCheck(history), mostHitboxes };
     };
@@ -2833,7 +2836,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 39, hash: "4b1098f7678f8414" };
+const DATA_FINGERPRINT = { version: 40, hash: "51e0480429f042ee" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2891,19 +2894,21 @@ test("132 with no windup (windupFrames 0) the Biter strikes in the same step it 
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0;
     b.attacks.bite.windupFrames = 0;
-    step(s, { move: { x: 0, y: 0 } });
-    const immediately = { hitboxes: s.hitboxes.length, phase: b.ai.phase };
+    const visual = createVisual();
+    step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+    const immediately = { traces: visual.traces.length, phase: b.ai.phase };
 
     const t = aloneBiters(0);
     const c = t.actors[1];
     c.position.x = 16 + c.radius + 5; c.position.y = 0;
-    step(t, { move: { x: 0, y: 0 } }); // windup begins
+    const seen = createVisual();
+    step(t, { move: { x: 0, y: 0 } }, undefined, seen); // windup begins
     t.actors[0].position.x = -1000; // the avatar leaves
-    for (let i = 0; i < 15; i++) step(t, { move: { x: 0, y: 0 } }); // the windup lasts 15 steps after the one that began it
-    return { immediately, afterWindup: { hitboxes: t.hitboxes.length, struck: t.hitboxes[0] && t.hitboxes[0].struck.length, health: t.actors[0].health.now, phase: c.ai.phase } };
+    for (let i = 0; i < 15; i++) step(t, { move: { x: 0, y: 0 } }, undefined, seen); // the windup lasts 15 steps after the one that began it
+    return { immediately, afterWindup: { traces: seen.traces.length, health: t.actors[0].health.now, phase: c.ai.phase } };
   `, QUIET);
-  assert.deepStrictEqual(plain(result.immediately), { hitboxes: 1, phase: "freeze" });
-  assert.deepStrictEqual(plain(result.afterWindup), { hitboxes: 1, struck: 0, health: 100, phase: "freeze" });
+  assert.deepStrictEqual(plain(result.immediately), { traces: 1, phase: "freeze" });
+  assert.deepStrictEqual(plain(result.afterWindup), { traces: 1, health: 100, phase: "freeze" });
 });
 
 // ---- The repeater (the user, 2026-11-11): ammunition with weight, cadence, reload, auto-aim, a bullet that travels and pierces ----
@@ -3395,4 +3400,58 @@ test("154 the Radar is the only truth about what can be aimed at: the Head gives
   assert.strictEqual(result.none, 0);
   assert.strictEqual(result.recipeHasRange, false);
   assert.strictEqual(result.starter, 312);
+});
+
+test("155 the visual state holds no truth: 600 frames of Chamber 2 with it and without it give exactly the same state, and the cross-check is clean", () => {
+  const result = run(`
+    const play = (withVisual) => {
+      const run = createRun(1, DEFINITIONS.combatBlueprint);
+      const s = createChamber2State(1, 1, run.blueprint);
+      const visual = withVisual ? createVisual() : null;
+      const history = createHistory(s, run.blueprint, visual);
+      let traces = 0;
+      for (let i = 0; i < 600; i++) {
+        const input = { move: { x: 0, y: 0 } };
+        step(s, input, run.blueprint, visual);
+        recordFrame(history, s, input, visual);
+        if (visual) traces = Math.max(traces, visual.traces.length);
+      }
+      return { state: JSON.stringify(s), check: crossCheck(history), traces };
+    };
+    const a = play(true);
+    const b = play(false);
+    return { same: a.state === b.state, check: a.check, traces: a.traces };
+  `);
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.check, null);
+  assert.ok(result.traces >= 1, "no trace was ever made");
+});
+
+test("156 a trace is born at age 0 where a one-frame hitbox was born, gets one frame older every step and goes when its age reaches traceFrames (12); a bullet, which flies, leaves none; the history keeps the visual state of every snap, and going back to a snap shows that frame's traces", () => {
+  const result = run(`
+    ${ARMED}
+    const visual = createVisual();
+    const t = armed(0);
+    t.s.actors[1].position.x = 250; t.s.actors[1].position.y = 0;
+    step(t.s, idle, t.bp, visual); // the repeater fires: a bullet flies
+    const afterShot = visual.traces.length;
+    const bite = createVisual();
+    const u = armed(0);
+    spawnHitbox(u.s, u.s.actors[1], "bite", 1, 0, { radius: 20, frames: 1, speed: 0, pierce: null }, bite);
+    const born = JSON.parse(JSON.stringify(bite.traces));
+    const ages = [];
+    for (let i = 0; i < 13; i++) { step(u.s, idle, u.bp, bite); ages.push(bite.traces.length === 0 ? null : bite.traces[0].age); }
+    const history = createHistory(u.s, u.bp, bite);
+    bite.traces.push({ position: { x: 1, y: 2 }, radius: 3, age: 4, frames: 12 });
+    recordFrame(history, u.s, idle, bite);
+    const back = visualFromSnap(history, 0);
+    const forward = visualFromSnap(history, 1);
+    return { afterShot, born, ages, backTraces: back.traces.length, forwardTraces: forward.traces.length, copy: back !== history.visuals[0] };
+  `);
+  assert.strictEqual(result.afterShot, 0);
+  assert.deepStrictEqual(plain(result.born), [{ position: plain(result.born)[0].position, radius: 20, age: 0, frames: 12 }]);
+  assert.deepStrictEqual(plain(result.ages), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, null, null]);
+  assert.strictEqual(result.backTraces, 0);
+  assert.strictEqual(result.forwardTraces, 1);
+  assert.strictEqual(result.copy, true);
 });

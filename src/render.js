@@ -9,7 +9,7 @@ const RADAR_COLOR = "rgba(255, 255, 255, 0.6)"; // the circle of the Radar: whit
 const HITBOX_COLOR = "#ffd23f"; // the hitboxes are yellow circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
 
-function draw(context, state, blueprint, fps) {
+function draw(context, state, blueprint, fps, visual = null) {
   const { width, height } = context.canvas;
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
@@ -47,6 +47,7 @@ function draw(context, state, blueprint, fps) {
     context.stroke();
   }
 
+  if (visual !== null) drawTraces(context, visual, player);
   drawHitboxes(context, state, player);
 
   drawDashStatus(context, player);
@@ -145,6 +146,18 @@ function drawHitboxes(context, state, player) {
   for (const hitbox of state.hitboxes) {
     context.beginPath();
     context.arc(hitbox.position.x - player.position.x + width / 2, hitbox.position.y - player.position.y + height / 2, hitbox.radius, 0, Math.PI * 2);
+    context.stroke();
+  }
+}
+
+// The traces of the visual state: the circle where a one-frame hitbox was, fainter as it ages. Only the screen reads them.
+function drawTraces(context, visual, player) {
+  const { width, height } = context.canvas;
+  context.lineWidth = 3;
+  for (const trace of visual.traces) {
+    context.strokeStyle = `rgba(255, 210, 63, ${0.8 * (1 - trace.age / trace.frames)})`;
+    context.beginPath();
+    context.arc(trace.position.x - player.position.x + width / 2, trace.position.y - player.position.y + height / 2, trace.radius, 0, Math.PI * 2);
     context.stroke();
   }
 }

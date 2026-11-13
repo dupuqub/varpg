@@ -53,6 +53,7 @@ let fpsSince = null;
 // and the run goes on from there with new inputs (the agent's default, to be confirmed by the user).
 let paused = false;
 let viewIndex = 0;
+let visual = null; // the visual state (src/sim.js): traces for the eye; the rules write it and never read it
 
 function startChamber(id) {
   stopChamber();
@@ -65,7 +66,8 @@ function startChamber(id) {
   if (canvas.width !== state.grid.screenWidth || canvas.height !== state.grid.screenHeight) {
     throw new Error("The canvas is " + canvas.width + " x " + canvas.height + " and the rules expect " + state.grid.screenWidth + " x " + state.grid.screenHeight);
   }
-  runHistory = createHistory(state, run.blueprint);
+  visual = createVisual();
+  runHistory = createHistory(state, run.blueprint, visual);
   paused = false;
   viewIndex = 0;
   lastTimestamp = null;
@@ -73,7 +75,7 @@ function startChamber(id) {
   fps = 0;
   fpsFrames = 0;
   fpsSince = null;
-  draw(context, state, run.blueprint, fps);
+  draw(context, state, run.blueprint, fps, visual);
   updateControls();
   animationId = requestAnimationFrame(loop);
 }
@@ -115,15 +117,15 @@ function loop(timestamp) {
     fpsSince = timestamp;
   }
 
-  draw(context, state, run.blueprint, fps);
+  draw(context, state, run.blueprint, fps, visual);
   updateControls();
 }
 
 // One step of the live game with the input of now, saved in the history. The shown snap is then the last one.
 function stepLive() {
   const input = readInput();
-  step(state, input, run.blueprint);
-  recordFrame(runHistory, state, input);
+  step(state, input, run.blueprint, visual);
+  recordFrame(runHistory, state, input, visual);
   viewIndex = runHistory.snaps.length - 1;
 }
 
@@ -146,7 +148,8 @@ function stepBack() {
   pauseGame();
   viewIndex -= 1;
   state = stateFromSnap(runHistory, viewIndex);
-  draw(context, state, run.blueprint, fps);
+  visual = visualFromSnap(runHistory, viewIndex);
+  draw(context, state, run.blueprint, fps, visual);
   updateControls();
 }
 
@@ -156,10 +159,11 @@ function stepForward() {
   if (viewIndex < runHistory.snaps.length - 1) {
     viewIndex += 1;
     state = stateFromSnap(runHistory, viewIndex);
+    visual = visualFromSnap(runHistory, viewIndex);
   } else {
     stepLive();
   }
-  draw(context, state, run.blueprint, fps);
+  draw(context, state, run.blueprint, fps, visual);
   updateControls();
 }
 

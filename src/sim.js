@@ -1132,7 +1132,7 @@ function collideActors(state, lastContacts) {
 // (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
 // deceleration), and then chases again. With windupFrames 0 it strikes at once.
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
-function think(state, actor, player) {
+function think(state, actor, player, visual) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
@@ -1146,7 +1146,7 @@ function think(state, actor, player) {
 
   // The strike: the hitbox is born toward where the avatar is now, and the freeze after it begins.
   const strike = () => {
-    spawnHitbox(state, actor, ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null });
+    spawnHitbox(state, actor, ai.attack, towardX, towardY, { radius: attack.hitbox.radius, frames: attack.hitbox.frames, speed: 0, pierce: null }, visual);
     ai.phase = "freeze";
     ai.frames = attack.freezeFrames;
     direction.x = 0;
@@ -1272,6 +1272,25 @@ function fireWeapons(state, player) {
   }
 }
 
+// ---- The visual state (the user, 2026-11-13) ----
+// A second state, beside the real one, only for what the eye sees for longer than the rules need. It holds no source of truth: the
+// rules write into it and NEVER read it, the screen reads it, and erasing it changes no decision. It is not in the snaps of the
+// state (they stay cheap to save and to feed a model); the history keeps its own copies of it, outside the cross-check.
+// A trace: { position, radius, age, frames }. It is born at age 0 where a hitbox that lives its frames was born, and goes when
+// its age reaches frames (the screen draws it fainter as it ages).
+function createVisual() {
+  return { traces: [] };
+}
+
+function traceHitbox(visual, hitbox) {
+  visual.traces.push({ position: { x: hitbox.position.x, y: hitbox.position.y }, radius: hitbox.radius, age: 0, frames: DEFINITIONS.constants.visual.traceFrames });
+}
+
+function ageVisual(visual) {
+  for (const trace of visual.traces) trace.age += 1;
+  visual.traces = visual.traces.filter((trace) => trace.age < trace.frames);
+}
+
 // ---- Hitboxes ----
 // A hitbox is the first thing in the game that is neither an actor nor an object: a circle that exists for a few frames
 // and hurts (the user's idea: an attack is a hitbox of size X). It carries the damage as it was calculated in the frame it
@@ -1287,9 +1306,9 @@ function fireWeapons(state, player) {
 // owner, toward (towardX, towardY) (a unit vector), with the damage the attack has right now. `shape` says what it is:
 // { radius, frames (how long it lives), speed (0 stays where it was born), pierce (how many things it crosses, or null for a
 // hitbox that does not end when it hits) }.
-function spawnHitbox(state, owner, attackName, towardX, towardY, shape) {
+function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual = null) {
   const attack = owner.attacks[attackName];
-  state.hitboxes.push({
+  const hitbox = {
     owner: owner.id,
     attack: attackName,
     position: { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius },
@@ -1299,7 +1318,9 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape) {
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
-  });
+  };
+  state.hitboxes.push(hitbox);
+  if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
 }
 
 // Whether the hitbox of an owner hurts a target (the same side rule as the body slam, in the same words: the avatar is one
@@ -1449,9 +1470,12 @@ function cellIndex(coordinate, cellSize) {
 }
 
 // Advances the state by one frame. Changes the state in place.
+// visual = the visual state (createVisual), optional: the rules WRITE into it (a trace when a hitbox is born) and never read it, so
+// a run with it and a run without it give the same state (a test proves it).
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 // blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
-function step(state, input, blueprint) {
+function step(state, input, blueprint, visual = null) {
+  if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   // 0. The dynamic values: every actor calculates them again and carries them for this frame (finalizeDynamic).
@@ -1464,7 +1488,7 @@ function step(state, input, blueprint) {
 
   // 1b. The minds: every actor that has `ai` decides where to go and whether to strike (think), before anyone moves.
   for (const actor of state.actors) {
-    if (actor.ai) think(state, actor, player);
+    if (actor.ai) think(state, actor, player, visual);
   }
 
   // 1c. The weapons of the avatar count down, reload, and fire at the closest target (fireWeapons).
