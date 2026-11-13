@@ -238,6 +238,14 @@ const PART_SPECS = ["speed", "health", "resistance", "dashSpeed", "dashCharges",
 // The target of an action (the user, 2026-11-13, issue 13): { pick, tag }, a rule to pick and the tag it picks among. The only rule for now is "closest".
 const TARGET_PICKS = ["closest"];
 
+// The place of exit of an action (the user, 2026-11-13, issue 13): where its hitbox is born. "center": at the center of whoever acts;
+// "front": one body ahead of it, toward its target.
+const EXITS = ["center", "front"];
+
+function checkExit(exit, where) {
+  if (!EXITS.includes(exit)) throw new Error("The exit of " + where + " must be one of " + EXITS.join(", ") + ", and it is " + JSON.stringify(exit));
+}
+
 function checkTarget(target, where) {
   if (!target || !TARGET_PICKS.includes(target.pick) || typeof target.tag !== "string" || target.tag === "") {
     throw new Error("The target of " + where + " must be { pick, tag }, with pick one of " + TARGET_PICKS.join(", ") + " and a tag that is a word: " + JSON.stringify(target));
@@ -296,6 +304,7 @@ function assertValidDefinitions() {
     if (!weapon) continue;
     const where = "the weapon of the part " + id;
     checkTarget(weapon.target, where);
+    checkExit(weapon.exit, where);
     const whole = (value, least) => Number.isInteger(value) && value >= least;
     if (!whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
     const rounds = weapon.rounds;
@@ -318,6 +327,7 @@ function assertValidDefinitions() {
     const where = "the melee of the part " + id;
     if (part.weapon) throw new Error("The part " + id + " has weapon and melee: a part is one or the other");
     checkTarget(melee.target, where);
+    checkExit(melee.exit, where);
     if (!Number.isInteger(melee.reach) || melee.reach < 1) throw new Error("The reach of " + where + " must be a whole number of pixels, 1 or more, and it is " + melee.reach);
     if (!(melee.angleDegrees > 0 && melee.angleDegrees <= 180)) throw new Error("The angleDegrees of " + where + " must be above 0 and at most 180 (half of it is the opening to each side, at most 90), and it is " + melee.angleDegrees);
     for (const field of ["windupFrames", "recoveryFrames"]) {
@@ -348,6 +358,7 @@ function assertValidDefinitions() {
         if (!Number.isInteger(attack[field]) || attack[field] < 0) throw new Error("The " + field + " of " + where + " must be a whole number, 0 or more, and it is " + attack[field]);
       }
       checkTarget(attack.target, where);
+      checkExit(attack.exit, where);
       const hitbox = attack.hitbox;
       if (!hitbox || !Number.isInteger(hitbox.radius) || hitbox.radius < 1 || !Number.isInteger(hitbox.frames) || hitbox.frames < 1) {
         throw new Error("The hitbox of " + where + " needs a whole radius and whole frames, 1 or more: " + JSON.stringify(hitbox));
@@ -1355,7 +1366,7 @@ function meleeStates(blueprint) {
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
-    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
   }
   // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
   // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
@@ -1367,6 +1378,7 @@ function addWeaponAttacks(actor) {
     actor.attacks[melee.part] = {
       base, now: { ...base }, terms: JSON.parse(JSON.stringify(recipe.damage)),
       target: { ...recipe.target },
+      exit: recipe.exit,
       ignores: [...recipe.ignores],
       reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
       windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
@@ -1603,13 +1615,12 @@ function emitStrikes(state, visual) {
 // A projectile is a hitbox with a velocity and a pierceLeft (the user's decision: a bullet is just a hitbox that moves).
 // pierce 0 crosses nothing: it ends at the first thing it hits; pierce 1 crosses one thing and ends at the second.
 
-// Where a hitbox is born. The user (2026-11-13): "the reach of the sword stays untouched; the point of origin is the center
-// of the avatar/actor". So every hitbox of the avatar (the cone of a sword, a bullet) is born at its center, and its reach is
-// counted from there: neither the body nor the ring of the shield changes it. The Biter is the exception, by the user's
-// answer the same day (issue 3): "the Biter can stay the same, the attack comes out of the front". Its bite is born one body
-// ahead of it, toward its target, and its reach stays the gap between the two bodies.
-function hitboxOrigin(owner, towardX, towardY) {
-  if (isAvatar(owner)) return { x: owner.position.x, y: owner.position.y };
+// Where a hitbox is born: the exit of its attack (a key of the action, the user, 2026-11-13, issue 13). "center" (the avatar's
+// bullets and swords: the user, "the reach of the sword stays untouched; the point of origin is the center of the avatar/actor"):
+// neither the body nor the ring of the shield changes it, and the reach is counted from there. "front" (the Biter's bite, issue 3:
+// "the attack comes out of the front"): one body ahead of the owner, toward its target, and its reach stays the gap between the two bodies.
+function hitboxOrigin(owner, exit, towardX, towardY) {
+  if (exit === "center") return { x: owner.position.x, y: owner.position.y };
   return { x: owner.position.x + towardX * owner.radius, y: owner.position.y + towardY * owner.radius };
 }
 
@@ -1622,7 +1633,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
   const hitbox = {
     owner: owner.id,
     attack: attackName,
-    position: hitboxOrigin(owner, towardX, towardY),
+    position: hitboxOrigin(owner, attack.exit, towardX, towardY),
     radius: shape.radius,
     // null: a round hitbox. Otherwise a cone (the strike of a sword): the tip is the position, "dir" is where it points
     // (fixed when it is born: it does not turn after), and it hurts what overlaps the slice (circleTouchesCone).

@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 54, hash: "f339c119d109a00a" };
+const DATA_FINGERPRINT = { version: 55, hash: "1047f031c8a19518" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2950,7 +2950,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, ignores: ["self", "ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"] });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3643,7 +3643,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -3653,7 +3653,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { cut: { flat: 30, perWeight: 0 } },", /not a type of damage/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
-  bad("      melee: {", "      weapon: { target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
+  bad("      melee: {", "      weapon: { exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
 test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
@@ -4223,4 +4223,40 @@ test("185 a Biter aims at the closest thing with the tag of its attack's target,
   assert.ok(r.toNeighbor.x > 0.99 && Math.abs(r.toNeighbor.y) < 0.01, "toward the neighbor made ally, to the right: " + JSON.stringify(r.toNeighbor));
   assert.deepStrictEqual(r.alone, { x: 0, y: 0 });
   assert.deepStrictEqual(r.tags, ["enemy", "vermin"]);
+});
+
+// ---- The place of exit (issue 13, step 2a) ----
+test("186 the place of exit is a key of the attack, not a rule about the avatar: the bite leaves from the front, the repeater and the sword from the center; a hitbox is born where its attack's exit says (a bite whose exit is center is born on the Biter, a bullet whose exit is front is born one body ahead of the avatar); an exit that is not center or front stops the game on load, the bite's included", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, a] = s.actors;
+    const blueprint = createRun(1, DEFINITIONS.combatBlueprint).blueprint;
+    const armed = createAvatar(blueprint);
+    a.position.x = 100; a.position.y = 50; a.radius = 16;
+    armed.position.x = 0; armed.position.y = 0; armed.radius = 24;
+    const born = (owner, name, exit) => {
+      if (exit) owner.attacks[name].exit = exit;
+      s.hitboxes = [];
+      spawnHitbox(s, owner, name, 1, 0, { radius: 5, frames: 1, speed: 0, pierce: null });
+      return { x: s.hitboxes[0].position.x - owner.position.x, y: s.hitboxes[0].position.y - owner.position.y };
+    };
+    return {
+      exits: { bite: a.attacks.bite.exit, repeater: armed.attacks["repeater-arm"].exit, sword: armed.attacks["sword-arm"].exit },
+      biteByDefault: born(a, "bite", null),
+      biteFromCenter: born(a, "bite", "center"),
+      bulletByDefault: born(armed, "repeater-arm", null),
+      bulletFromFront: born(armed, "repeater-arm", "front"),
+    };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.exits, { bite: "front", repeater: "center", sword: "center" });
+  assert.deepStrictEqual(r.biteByDefault, { x: 16, y: 0 });
+  assert.deepStrictEqual(r.biteFromCenter, { x: 0, y: 0 });
+  assert.deepStrictEqual(r.bulletByDefault, { x: 0, y: 0 });
+  assert.deepStrictEqual(r.bulletFromFront, { x: 24, y: 0 });
+  const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
+  bad('exit: "front",', 'exit: "behind",', /exit of the attack bite of the actor biter/);
+  bad('exit: "front",', '// no exit', /exit of the attack bite of the actor biter/);
+  bad('        exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', '        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', /exit of the weapon of the part repeater-arm/);
 });
