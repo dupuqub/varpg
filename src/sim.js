@@ -571,12 +571,13 @@ function slamObject(state, audit, attacker, hit, object) {
   return broken;
 }
 
-// Whether a collision between two things is a hit at all (the user's rule, 2026-11-10): the body slam hurts only where
-// the avatar is one of the two sides, in both directions. The avatar hurts actors and objects, and actors and objects
-// hurt the avatar; an actor against an object, an object against an actor, or two actors, hurt nobody. The weight of
-// the mecha is the center of the damage of contact, and nothing else fights by itself (the weapons will, later).
-function bodySlamHurts(a, b) {
-  return isAvatar(a) || isAvatar(b);
+// Whether the body of an attacker hurts a target in a collision (the user's rule of 2026-11-10, now as data, 2026-11-13: "Tags of
+// exclusion" in AGENTS.md): it does unless the target has a tag that the attacker's body ignores. Each direction is its own question.
+// With today's recipes this is the old rule: the body slam hurts only where the avatar is one of the two sides, in both directions.
+// The avatar hurts actors and objects, and actors and objects hurt the avatar; two enemies, or an enemy and an object, hurt nobody.
+// The weight of the mecha is the center of the damage of contact, and nothing else fights by itself (the weapons will, later).
+function bodyHurts(attacker, target) {
+  return !ignoresTarget(ignoredTagsOf(attacker), tagsOf(target));
 }
 
 // Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).
@@ -885,7 +886,7 @@ function objectsNear(state, actor) {
 // 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens.
 // 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
 //    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
-//    pair is one that hurts (bodySlamHurts: the avatar is one side), each side hurts the other with its own weight
+//    side hurts the other (bodyHurts: the tags its body ignores) with its own weight
 //    (damageOf, the body slam): the actor takes the damage of the object, and the object takes the damage of the
 //    actor. An object keeps its health in state.damagedObjects. An object that breaks has no collision: nothing is
 //    pushed, and the actor keeps its speed and goes on.
@@ -919,10 +920,10 @@ function collideWithObjects(state, actor, lastContacts, audit = null) {
     // A collision needs an impact of at least collision.minImpact; below it nothing triggers.
     const collides = goingIn < 0 && -goingIn >= DEFINITIONS.constants.collision.minImpact;
 
-    if (collides && isNewContact && bodySlamHurts(actor, object)) {
+    if (collides && isNewContact) {
       const hit = { impact: -goingIn };
-      slamActor(state, audit, object, hit, actor);
-      if (slamObject(state, audit, actor, hit, object)) continue; // the object broke: no collision
+      if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
+      if (bodyHurts(actor, object) && slamObject(state, audit, actor, hit, object)) continue; // the object broke: no collision
     }
     if (isNewContact) metSomethingNew = true;
 
@@ -1070,10 +1071,10 @@ function pushShare(a, b) {
 }
 
 // What happens when an actor that moves (not the avatar) touches another actor (the avatar or another that moves). If they overlap:
-// 1. If this is a NEW contact (the pair was not touching in the last frame), the pair is one that hurts (bodySlamHurts:
-//    only against the avatar) and the speed at which they close in on each other (the impact: the part of the
+// 1. If this is a NEW contact (the pair was not touching in the last frame), the speed at which they close in on each other (the impact: the part of the
 //    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
-//    the same body slam as the avatar's (damageOf), and BOTH sides hurt the other with their own weight.
+//    the same body slam as the avatar's (damageOf), and each side hurts the other with its own weight when bodyHurts says so
+//    (the tags its body ignores: two enemies hurt nobody).
 // 2. The two are pushed apart along the line until they just touch, the push split by weight (pushShare): the
 //    heavier moves less. Nobody's velocity changes.
 // 3. If the contact is new, each of the two reacts in its own way (reactToNewContact: a Dummy picks a new angle, a Biter
@@ -1087,12 +1088,12 @@ function touchActors(state, lastContacts, dummy, other, key, audit = null) {
   const isNewContact = !lastContacts.includes(key);
   state.contacts.push(key);
 
-  if (isNewContact && bodySlamHurts(dummy, other)) {
+  if (isNewContact) {
     const closing = -((dummy.move.velocity.x - other.move.velocity.x) * normalX + (dummy.move.velocity.y - other.move.velocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
       const hit = { impact: closing };
-      slamActor(state, audit, other, hit, dummy);
-      slamActor(state, audit, dummy, hit, other);
+      if (bodyHurts(other, dummy)) slamActor(state, audit, other, hit, dummy);
+      if (bodyHurts(dummy, other)) slamActor(state, audit, dummy, hit, other);
     }
   }
 

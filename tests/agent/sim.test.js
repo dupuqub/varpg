@@ -4051,3 +4051,30 @@ test("178 a hitbox carries a copy of its owner's ignored tags from its birth and
   assert.strictEqual(r.protectedHealth, r.before);
   assert.ok(r.afterExceptions < r.before, "without the tag in its list the bite hurts the neighbor: " + r.afterExceptions);
 });
+
+// ---- Tags of exclusion: the body (step E) ----
+// A game where the Biter ignores only "object": the "enemy" tag is taken out of its list, so Biters hurt each other by contact.
+const BITERS_HURT_BITERS = loadGame((text) => text.replace('biter: {\n      tags: ["enemy"],\n      ignores: ["enemy", "object"],', 'biter: {\n      tags: ["enemy"],\n      ignores: ["object"],'));
+
+test("179 the body slam hurts unless the target has a tag that the body ignores, each direction on its own: two Biters meeting head on at speed hurt nobody (enemies ignore enemy), and with the tag taken out of the Biter's list the same meeting hurts both", () => {
+  const code = `
+    ${ALONE_BITERS}
+    const meet = () => {
+      const s = aloneBiters(0, 1);
+      const [avatar, a, b] = s.actors;
+      avatar.position.x = 900; avatar.position.y = 900;
+      a.radius = 16; b.radius = 16;
+      a.position.x = 0; a.position.y = 0; b.position.x = 31; b.position.y = 0;
+      a.move.velocity.x = 3; b.move.velocity.x = -3;
+      a.ai.phase = "freeze"; b.ai.phase = "freeze";
+      a.ai.frames = 100; b.ai.frames = 100;
+      step(s, { move: { x: 0, y: 0 } });
+      return [a.health.now, b.health.now];
+    };
+    return meet();
+  `;
+  const normal = plain(run(code, QUIET));
+  const open = plain(run(code, BITERS_HURT_BITERS));
+  assert.deepStrictEqual(normal, [30, 30]);
+  assert.ok(open[0] < 30 && open[1] < 30, "with the tag out of the list both are hurt: " + open);
+});
