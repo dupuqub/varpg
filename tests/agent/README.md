@@ -259,6 +259,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 165 | The aim of the sword is locked when the windup starts but may be corrected: each frame of the windup it moves aimCorrection of the way toward where the target is now (length stays 1, no trigonometry); with 0 it never turns; with the target still it stays. | The user's decision: aim locked at the start of the windup with room to correct; step E of the sword. |
 | 166 | The blow comes even if the target is gone during the windup: it lands on nothing and the recovery begins at the same step. | Same rule as the Biter's strike (test 158 and the windup test); step F of the sword. |
 | 167 | The combat blueprint has the sword arm (right) and the repeater arm (left): 7750 kg loaded, one sword and one weapon in the avatar of Chamber 2. | The user's decision: the sword is the second arm, the right one; step G of the sword (the tests of the repeater keep their own blueprint, without the sword). |
+| 168 | AGENTS.md opens with the two foundations (go slowly; break big tasks into small closed steps), before any other section. | The user: these two are "the base of everything". |
 
 ### Benchmark of the grid (not a test)
 

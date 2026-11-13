@@ -3766,3 +3766,11 @@ test("167 the combat blueprint has the sword arm (the right arm) and the repeate
   assert.deepStrictEqual(r.weapons, ["repeater-arm"]);
   assert.ok(r.attacks.includes("sword-arm") && r.attacks.includes("repeater-arm"));
 });
+
+test("168 AGENTS.md opens with the two foundations (go slowly; break big tasks into small closed steps), before any other section, so no agent can miss them", () => {
+  const text = fs.readFileSync(path.join(__dirname, "..", "..", "AGENTS.md"), "utf8");
+  const first = text.indexOf("\n## ");
+  assert.ok(text.slice(first).startsWith("\n## The two foundations"), "the first section must be the two foundations");
+  const section = text.slice(first, text.indexOf("\n## ", first + 5));
+  assert.ok(/Go slowly and deliberately/.test(section) && /Break every big task into small steps/.test(section));
+});
