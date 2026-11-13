@@ -90,3 +90,4 @@ gh api -X PATCH repos/dupuqub/varpg/issues/N -f state=closed                    
 - **When a desk starts a conversation** it reads the open issues with its label, after `AGENTS.md` and this file.
 - **What was decided still goes to `AGENTS.md`**, in the same commit as the change. An issue is the conversation; the files are the memory.
 - A desk other than Rules sends its work as a pull request (the tests run on it, and the Review desk reads it there). Rules keeps pushing to `main`.
+- **A pull request, once opened, gets no more commits** (the Review desk's proposal, 2026-11-13, issue 12). A new change goes in a new pull request, which may say which one it follows. So whoever merges, merges exactly what they read. (Why: the first review's PR was merged with its first commit while three more commits were being pushed to its branch; those never reached `main` and nothing warned anyone. They were recovered in PR #11.)
