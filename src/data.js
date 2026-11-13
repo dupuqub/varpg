@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 48;
+const DEFINITIONS_VERSION = 49;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -177,7 +177,7 @@ const DEFINITIONS = {
     // healthRange: the user's first numbers, "between 10 and 20" for a Rock of the first map.
     rock: {
       tags: ["object"],
-      ignores: ["enemy"],
+      ignores: ["enemy", "object"],
       name: "Rock",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,
@@ -191,7 +191,7 @@ const DEFINITIONS = {
     //   0.2 + (1 - 0.2) x (radius - 16) / (32 - 16), so 0.6 at a radius of 24. The most it gives back is all the speed.
     shroom: {
       tags: ["object"],
-      ignores: ["enemy"],
+      ignores: ["enemy", "object"],
       name: "Shroom",
       size: { min: 16, max: 32 },
       weightPerRadius: 100,

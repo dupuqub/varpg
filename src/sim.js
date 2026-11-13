@@ -118,6 +118,12 @@ function ignoredTagsOf(thing) {
   return definitionOf(thing).ignores;
 }
 
+// Whether a list of ignored tags covers a target: true when the target has at least one of the tags in the list. A hit or a contact on
+// the target happens only when this is false (nothing is ignored by an empty list: it hurts everything).
+function ignoresTarget(ignores, targetTags) {
+  return ignores.some((tag) => targetTags.includes(tag));
+}
+
 // The definitions of the parts of a blueprint. An unknown id fails loudly.
 function partsOf(blueprint) {
   return blueprint.parts.map((id) => {

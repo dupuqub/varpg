@@ -2839,7 +2839,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 48, hash: "15200e62b798b5e3" };
+const DATA_FINGERPRINT = { version: 49, hash: "5ee791be14c96322" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3982,7 +3982,7 @@ test("175 the screen writes the two descriptive lines of the combat audit: start
 });
 
 // ---- Tags of exclusion (the user, 2026-11-13; step B) ----
-test("176 every type has tags and a list of ignored tags in its recipe: the avatar is ally and ignores ally; the Biter and the Dummy are enemy and ignore enemy and object; the rock and the Shroom are object and ignore enemy; tagsOf and ignoredTagsOf read them, from the recipe (the state carries none)", () => {
+test("176 every type has tags and a list of ignored tags in its recipe: the avatar is ally and ignores ally; the Biter and the Dummy are enemy and ignore enemy and object; the rock and the Shroom are object and ignore enemy and object; tagsOf and ignoredTagsOf read them, from the recipe (the state carries none)", () => {
   const result = run(`
     const types = ["avatar", "dummy", "biter", "rock", "shroom"];
     const table = {};
@@ -3994,8 +3994,32 @@ test("176 every type has tags and a list of ignored tags in its recipe: the avat
     avatar: { tags: ["ally"], ignores: ["ally"] },
     dummy: { tags: ["enemy"], ignores: ["enemy", "object"] },
     biter: { tags: ["enemy"], ignores: ["enemy", "object"] },
-    rock: { tags: ["object"], ignores: ["enemy"] },
-    shroom: { tags: ["object"], ignores: ["enemy"] },
+    rock: { tags: ["object"], ignores: ["enemy", "object"] },
+    shroom: { tags: ["object"], ignores: ["enemy", "object"] },
   });
   assert.ok(!r.state.includes("tags") && !r.state.includes("ignores"), "an actor of the state must carry no tags: " + r.state);
+});
+
+test("177 a list of ignored tags covers a target when the target has any of them: an empty list covers nothing, one tag covers what has it, a list covers what has any of its tags, and the tags of the target that are not in the list do not matter; the lists of the five types give today's table of who hurts whom (the avatar and the enemies and the objects, each pair in each direction)", () => {
+  const result = run(`
+    const cases = [
+      ignoresTarget([], ["enemy"]),
+      ignoresTarget(["enemy"], ["enemy"]),
+      ignoresTarget(["enemy"], ["ally"]),
+      ignoresTarget(["enemy", "object"], ["object"]),
+      ignoresTarget(["enemy"], ["ally", "enemy"]),
+      ignoresTarget(["enemy"], []),
+    ];
+    const types = ["avatar", "dummy", "biter", "rock", "shroom"];
+    const hurts = {};
+    for (const a of types) for (const b of types) hurts[a + ">" + b] = !ignoresTarget(ignoredTagsOf({ type: a }), tagsOf({ type: b }));
+    return { cases, hurts };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.cases, [false, true, false, true, true, false]);
+  const trues = Object.keys(r.hurts).filter((key) => r.hurts[key]).sort();
+  // Today: the avatar hurts every other type and every other type hurts the avatar, and nothing else (not even itself).
+  const expected = [];
+  for (const type of ["dummy", "biter", "rock", "shroom"]) expected.push("avatar>" + type, type + ">avatar");
+  assert.deepStrictEqual(trues, expected.sort());
 });
