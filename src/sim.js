@@ -591,12 +591,11 @@ function finalAttack(attacker, hit) {
 //   reduction = points / (points + resistanceScale), points = the resistance of the target to that type;
 //   after = amount x (1 - reduction).
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
-// by adding more). The total is the sum of the parts, and a packet with something in it always costs at least
-// damage.minDamage (the defense never makes the target immune). An empty packet costs nothing.
-// withShield false leaves the shield's resistance out (the part of a hit that goes past a broken shield, see landHit), and
-// minimum is the least the packet costs (damage.minDamage unless the caller says otherwise).
-// Returns { parts: [{ type, amount, points, fromShield, reduction, after }], total, minimumApplied }.
-function resolveDamage(packet, target, withShield = true, minimum = DEFINITIONS.constants.damage.minDamage) {
+// by adding more). The total is the sum of the parts. There is no minimum damage (the user, 2026-11-14): the curve alone is
+// what keeps a target from being immune, since it never takes everything off. An empty packet costs nothing.
+// withShield false leaves the shield's resistance out (the part of a hit that goes past a broken shield, see landHit).
+// Returns { parts: [{ type, amount, points, fromShield, reduction, after }], total }.
+function resolveDamage(packet, target, withShield = true) {
   const scale = DEFINITIONS.constants.damage.resistanceScale;
   const parts = [];
   let sum = 0;
@@ -610,8 +609,7 @@ function resolveDamage(packet, target, withShield = true, minimum = DEFINITIONS.
     parts.push({ type, amount, points, fromShield, reduction, after });
     sum += after;
   }
-  if (parts.length === 0) return { parts, total: 0, minimumApplied: false };
-  return { parts, total: Math.max(minimum, sum), minimumApplied: sum < minimum };
+  return { parts, total: sum };
 }
 
 // The damage of a body slam on a target, as one number: the packet of the hit (finalAttack) resolved against the target.
@@ -631,8 +629,7 @@ function nameOf(thing) {
 // share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
 // resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
 // share of the packet that did not fit (per type) is resolved again against the body alone and goes to health. The record then
-// carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took. The whole
-// hit still costs at least damage.minDamage, so the second calculation's minimum is only what the shield did not already take.
+// carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took.
 // Returns { resolved, taken, broken }; broken is true only for an object that reached 0 in this hit.
 function landHit(state, audit, sourceName, attackName, packet, target) {
   const isObject = target.id === undefined;
@@ -645,13 +642,12 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
     const share = (resolved.total - absorbed) / resolved.total;
     const rest = {};
     for (const part of resolved.parts) rest[part.type] = part.amount * share;
-    const body = resolveDamage(rest, target, false, Math.max(0, DEFINITIONS.constants.damage.minDamage - absorbed));
+    const body = resolveDamage(rest, target, false);
     applyDamage(target, absorbed); // empties the shield
     taken = { shield: absorbed, health: applyDamage(target, body.total).health };
     resolved = {
       parts: resolved.parts,
       total: absorbed + body.total,
-      minimumApplied: resolved.minimumApplied || body.minimumApplied,
       overflow: { withShield: resolved.total, absorbed, share, parts: body.parts, total: body.total },
     };
   } else {
@@ -1590,7 +1586,7 @@ function fireWeapons(state, player, byTag) {
 // grows. One line per damage calculation (one attack on one target), clear and minimal, as one JSON object per line, so a
 // person can read it and a script can parse it. Every line starts with the frame and the kind of event. The three kinds:
 //   hit     what came into effect in one damage calculation, with the ids of the two sides (an object is named by its type and
-//           place, see nameOf): { frame, event, source, attack, target, parts, total, minimumApplied, shield, health }. parts
+//           place, see nameOf): { frame, event, source, attack, target, parts, total, shield, health }. parts
 //           is what resolveDamage said per type of damage; shield and health are what the target really lost of each. frame is
 //           the frame the screen shows when the hit is seen (the state after its step).
 //   resume  the simulation resumed from frame X after a pause (written by the screen, which is where play is pressed), so
@@ -1606,7 +1602,6 @@ function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
     target,
     parts: resolved.parts,
     total: resolved.total,
-    minimumApplied: resolved.minimumApplied,
     shield: taken.shield,
     health: taken.health,
     overflow: resolved.overflow, // only on a hit that broke the shield (left out of the line otherwise)
@@ -1623,19 +1618,18 @@ function combatAuditStartLine(frame, run, chamber) {
 
 // The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,
 // resume) are skipped. Totals are by "kind:attack" (the kind is the source without its number or place: "biter_3" is "biter",
-// "rock 12,4" is "rock"): { hits, total, shield, health, minimumApplied } added up over every line given.
+// "rock 12,4" is "rock"): { hits, total, shield, health } added up over every line given.
 function combatAuditTotals(lines) {
   const totals = {};
   for (const line of lines) {
     const entry = JSON.parse(line);
     if (entry.event !== "hit") continue;
     const key = entry.source.replace(/_\d+$/, "").replace(/ .*$/, "") + ":" + entry.attack;
-    const t = totals[key] ?? (totals[key] = { hits: 0, total: 0, shield: 0, health: 0, minimumApplied: 0 });
+    const t = totals[key] ?? (totals[key] = { hits: 0, total: 0, shield: 0, health: 0 });
     t.hits += 1;
     t.total += entry.total;
     t.shield += entry.shield;
     t.health += entry.health;
-    if (entry.minimumApplied) t.minimumApplied += 1;
   }
   return totals;
 }

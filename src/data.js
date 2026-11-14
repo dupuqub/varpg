@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 57;
+const DEFINITIONS_VERSION = 58;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -265,9 +265,8 @@ const DEFINITIONS = {
     //     1%, so the user's "13% of resistance" is 13 points, a little less than 13%. The life the target is worth ("effective
     //     health") grows in a straight line with the points: every 100 points add the life it has without any. guess: the
     //     scale, to be tuned by playing with real items.
-    //   minDamage 1: the user's decision, a hit with something in its packet always costs at least 1 (the defense never
-    //     makes the target immune); an empty packet (a weight of 0) costs nothing.
-    damage: { resistanceScale: 100, minDamage: 1 },
+    //   There is no minimum damage (the user, 2026-11-14): the curve is what keeps anyone from being immune.
+    damage: { resistanceScale: 100 },
 
     // The ring of the shield (the user's idea, 2026-11-12): the avatar's body for collision and for being hit is a circle that goes
     // from the body (shield empty) to the ring (shield full) in a straight line with the share of the shield that is left, so

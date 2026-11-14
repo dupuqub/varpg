@@ -1041,7 +1041,7 @@ test("49 a graze is a weak hit: only the part of the speed going into the rock c
     step(s, { move: { x: 1, y: 0 } });
     return { avatar: p.health.now, damagedObjects: s.damagedObjects };
   `);
-  assert.strictEqual(result.avatar, 99); // the graze, after the resistance, is below the minimum damage, so 1
+  assert.ok(result.avatar > 99 && result.avatar < 100, "the graze should cost the avatar less than 1: " + result.avatar); // no minimum damage: a weak hit costs what the curve leaves
   const loss = 10 - result.damagedObjects["small:0,1"];
   assert.ok(loss > 0 && loss < 2.5, "a graze should hurt the rock less than the head-on walk of test 47 (2.5), it lost " + loss);
 });
@@ -1346,13 +1346,13 @@ test("67 the body slam comes from the weight alone: a thing with weightPerRadius
     const avatar = createAvatar(full);
     return { attack: finalAttack(rock, { impact: 12 }), damage: damageOf(rock, { impact: 12 }, avatar, full) };
   `;
-  assert.deepStrictEqual(plain(run(probe, weightless)), { attack: {}, damage: 0 }); // no minimum damage either: there is no attack
+  assert.deepStrictEqual(plain(run(probe, weightless)), { attack: {}, damage: 0 }); // there is no attack
   const normal = run(probe);
   assert.ok(Math.abs(normal.attack.blunt - 5.6) < 1e-9); // 2800 x 0.001 x 12 / 6
   assert.ok(Math.abs(normal.damage - resisted(5.6, 30)) < 1e-9); // 5.6 x 100 / 130
 });
 
-test("68 a hit always costs at least 1 (the resistance never makes the target immune), but no attack means no damage", () => {
+test("68 there is no minimum damage: a weak hit (0.8) costs what the curve leaves (0.62), a strong one (6.4) costs 4.92, and no impact means no damage", () => {
   const result = withBlueprints(`
     const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
     const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
@@ -1362,7 +1362,7 @@ test("68 a hit always costs at least 1 (the resistance never makes the target im
       noImpact: damageOf(large, { impact: 0 }, avatar, full),
     };
   `);
-  assert.strictEqual(result.weak, 1);
+  assert.ok(Math.abs(result.weak - resisted(0.8, 30)) < 1e-9);
   assert.ok(Math.abs(result.strong - resisted(6.4, 30)) < 1e-9);
   assert.strictEqual(result.noImpact, 0);
 });
@@ -1405,8 +1405,8 @@ test("72 a rock with weight 0 and health 1 is harmless and breaks at the first h
     step(s, { move: { x: 1, y: 0 }, dash: true });
     return { avatar: p.health.now, box: s.damagedObjects["small:0,1"], vx: p.move.velocity.x };
   `, box);
-  assert.strictEqual(result.avatar, 100); // attack 0: no damage, not even the minimum
-  assert.strictEqual(result.box, 0); // the avatar hit it for 10 (minimum damage 1 would be enough)
+  assert.strictEqual(result.avatar, 100); // attack 0: no damage
+  assert.strictEqual(result.box, 0); // the avatar hit it for 10
   assert.strictEqual(result.vx, 12); // broken: no stop, no bounce
 });
 
@@ -1699,9 +1699,9 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
   assert.strictEqual(result.kept, 0);
   assert.deepStrictEqual(plain(result.healthKept), [100, 100]); // no hit while the pair was already touching
   assert.strictEqual(result.turned, 1);
-  // The new contact is a hit at impact 2: the avatar (5000 kg) hits for 5000 x 0.001 x 2 / 6 = 1.667, the Dummy for less than the
-  // avatar's defense (3), so the minimum of 1.
-  assert.ok(Math.abs(result.health[0] - (100 - 5000 * 0.001 * 2 / 6)) < 1e-9 && result.health[1] === 99);
+  // The new contact is a hit at impact 2: the avatar (5000 kg) hits for 5000 x 0.001 x 2 / 6 = 1.667, the Dummy (800 to 1600 kg) for less than 1
+  // after the avatar's resistance (there is no minimum damage).
+  assert.ok(Math.abs(result.health[0] - (100 - 5000 * 0.001 * 2 / 6)) < 1e-9 && result.health[1] > 99 && result.health[1] < 100);
   assert.ok(Math.abs(result.gap) < 1e-9, "the pair was not pushed to just touching: " + result.gap);
   assert.ok(Math.abs(result.avatarPushed - result.expectedPush) < 1e-9, "the avatar moved " + result.avatarPushed + ", not its share " + result.expectedPush);
   assert.deepStrictEqual(plain(result.contacts), ["dummy_0|avatar_1", "dummy_0|avatar_1"]);
@@ -1753,7 +1753,7 @@ test("87 a Dummy that bumps into the avatar hurts it and is hurt by it, turns, a
   assert.ok(Math.abs(result.gap) < 1e-9);
   assert.ok(Math.abs(result.avatarX - result.expectedX) < 1e-9, "the avatar moved " + result.avatarX + " and its share is " + result.expectedX);
   assert.ok(result.avatarX < 0 && result.avatarX > -0.25, "a Dummy of 800 to 1600 kg moves a 5000 kg mecha by less than a quarter of the overlap: " + result.avatarX);
-  assert.strictEqual(result.health, 99); // the Dummy's attack is below the defense (3), so the minimum damage of 1
+  assert.ok(result.health > 99 && result.health < 100, "the avatar health is " + result.health); // a Dummy of 800 to 1600 kg at impact 2 hits for less than 1 after the resistance (no minimum damage)
 });
 
 test("88 leaving the window of the grid on one side brings a Dummy back on the opposite side, in both axes, around the avatar wherever it is", () => {
@@ -2527,12 +2527,12 @@ test("115 one routine for every actor that meets an object: a Shroom bounces a D
 // A hit is a packet with one amount per type of damage; the target resists each type on its own, by points that become a
 // share through the curve points / (points + 100); a hit with something in it costs at least 1.
 
-test("116 resistance is a curve: a hit of 10 blunt is 10 with no points, 8.85 with 13, 5 with 100, 3.33 with 200, 2.5 with 300 and 1 with 900; it never reaches 100% and every 100 points add the same life", () => {
+test("116 resistance is a curve: a hit of 10 blunt is 10 with no points, 8.85 with 13, 5 with 100, 3.33 with 200, 2.5 with 300 and 1 with 900; it never reaches 100% and every 100 points add the same life; with 9900 points 0.1 still goes through (no minimum damage)", () => {
   const result = run(`
     const rows = {};
     for (const points of [0, 13, 100, 200, 300, 900, 9900]) {
       const record = resolveDamage({ blunt: 10 }, { resistance: { blunt: points } });
-      rows[points] = { total: record.total, reduction: record.parts[0].reduction, minimumApplied: record.minimumApplied };
+      rows[points] = { total: record.total, reduction: record.parts[0].reduction };
     }
     return rows;
   `);
@@ -2544,10 +2544,10 @@ test("116 resistance is a curve: a hit of 10 blunt is 10 with no points, 8.85 wi
     assert.ok(Math.abs(life - (1 + points / 100)) < 1e-9, "the life is not a straight line at " + points + " points: " + life);
   }
   for (const points of [0, 13, 100, 200, 300, 900, 9900]) assert.ok(result[points].reduction < 1, "the curve reached 100%");
-  assert.deepStrictEqual([result[9900].total, result[9900].minimumApplied], [1, true]); // 0.1 left, but a hit costs at least 1
+  assert.ok(Math.abs(result[9900].total - 0.1) < 1e-9); // 0.1 left: there is no minimum damage, and the curve still lets something through
 });
 
-test("117 each type of a packet is resisted on its own (a fire sword against a creature resistant to fire still hits with its blade), the record lists the terms in the order of the types, an empty packet costs nothing and a tiny one costs 1", () => {
+test("117 each type of a packet is resisted on its own (a fire sword against a creature resistant to fire still hits with its blade), the record lists the terms in the order of the types, an empty packet costs nothing and a tiny one costs its own amount (no minimum damage)", () => {
   const result = run(`
     const target = { resistance: { puncture: 100, blunt: 0 } };
     const both = resolveDamage({ puncture: 6, blunt: 3 }, target);
@@ -2561,8 +2561,8 @@ test("117 each type of a packet is resisted on its own (a fire sword against a c
   assert.deepStrictEqual(plain(result.both.parts.map((part) => [part.type, part.amount, part.points, part.reduction, part.after])), [["blunt", 3, 0, 0, 3], ["puncture", 6, 100, 0.5, 3]]);
   assert.strictEqual(result.both.total, 6); // 3 + 3: half of the puncture is gone, the blunt goes through whole
   assert.strictEqual(result.onlyBlunt.total, 3); // a resistance to puncture does nothing to blunt
-  assert.deepStrictEqual(plain(result.empty), { parts: [], total: 0, minimumApplied: false });
-  assert.deepStrictEqual([result.tiny.total, result.tiny.minimumApplied], [1, true]);
+  assert.deepStrictEqual(plain(result.empty), { parts: [], total: 0 });
+  assert.strictEqual(result.tiny.total, 0.25);
   assert.strictEqual(result.noResistance.total, 9); // a target with no resistance at all takes everything
 });
 
@@ -2845,7 +2845,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 57, hash: "ba91428802fc4f83" };
+const DATA_FINGERPRINT = { version: 58, hash: "e8987280885bea36" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3548,12 +3548,12 @@ test("159 the combat audit writes every hit as a line with its numbers: a bite o
   assert.deepStrictEqual([part.type, part.points, part.fromShield], ["puncture", 10, 0]);
   assert.ok(Math.abs(part.reduction - 10 / 110) < 1e-12);
   assert.ok(Math.abs(part.after - part.amount * (1 - 10 / 110)) < 1e-12);
-  assert.ok(Math.abs(bite.total - part.after) < 1e-12 && bite.minimumApplied === false);
+  assert.ok(Math.abs(bite.total - part.after) < 1e-12);
   assert.strictEqual(bite.shield, 0);
   assert.ok(Math.abs(bite.health - bite.total) < 1e-9, "health lost " + bite.health);
   assert.ok(Math.abs(result.health - (100 - bite.total)) < 1e-9);
   const totals = plain(result.biteTotals)["biter:bite"];
-  assert.deepStrictEqual([Object.keys(plain(result.biteTotals)), totals.hits, totals.minimumApplied, totals.shield], [["biter:bite"], 1, 0, 0]);
+  assert.deepStrictEqual([Object.keys(plain(result.biteTotals)), totals.hits, totals.shield], [["biter:bite"], 1, 0]);
   assert.ok(Math.abs(totals.total - bite.total) < 1e-12 && Math.abs(totals.health - bite.total) < 1e-9);
   const bullet = plain(result.bullet);
   assert.deepStrictEqual([bullet.source, bullet.attack, bullet.target, bullet.total, bullet.parts[0].points], ["avatar_1", "repeater-arm", "biter_0", 10, 0]);
@@ -3909,7 +3909,7 @@ test("171 calling the static and dynamic lists again on a living avatar changes 
 // ---- The combat audit, "caudit": the lines (the user, 2026-11-13; build step 1) ----
 test("172 the combat audit writes one line per event, each a single JSON object that starts with the frame and the kind of event: a hit carries the ids of both sides and what came into effect in its damage calculation; a resume says the simulation resumed from frame X; a start names the run and the chamber", () => {
   const result = run(`
-    const resolved = { parts: [{ type: "puncture", amount: 10, points: 10, fromShield: 0, reduction: 10 / 110, after: 10 * (1 - 10 / 110) }], total: 10 * (1 - 10 / 110), minimumApplied: false };
+    const resolved = { parts: [{ type: "puncture", amount: 10, points: 10, fromShield: 0, reduction: 10 / 110, after: 10 * (1 - 10 / 110) }], total: 10 * (1 - 10 / 110) };
     const taken = { shield: 0, health: resolved.total };
     return {
       hit: combatAuditHitLine(42, "biter_3", "bite", "avatar_1", resolved, taken),
@@ -3924,32 +3924,32 @@ test("172 the combat audit writes one line per event, each a single JSON object 
     assert.deepStrictEqual(Object.keys(JSON.parse(line)).slice(0, 2), ["frame", "event"]);
   }
   const hit = JSON.parse(r.hit);
-  assert.deepStrictEqual(Object.keys(hit), ["frame", "event", "source", "attack", "target", "parts", "total", "minimumApplied", "shield", "health"]);
+  assert.deepStrictEqual(Object.keys(hit), ["frame", "event", "source", "attack", "target", "parts", "total", "shield", "health"]);
   assert.deepStrictEqual([hit.frame, hit.event, hit.source, hit.attack, hit.target], [42, "hit", "biter_3", "bite", "avatar_1"]);
   assert.deepStrictEqual(hit.parts, r.resolved.parts); // the numbers come out exactly as they went in
-  assert.deepStrictEqual([hit.total, hit.minimumApplied, hit.shield, hit.health], [r.resolved.total, false, 0, r.taken.health]);
+  assert.deepStrictEqual([hit.total, hit.shield, hit.health], [r.resolved.total, 0, r.taken.health]);
   assert.deepStrictEqual(JSON.parse(r.resume), { frame: 450, event: "resume" });
   assert.deepStrictEqual(JSON.parse(r.start), { frame: 0, event: "start", run: 1, chamber: "chamber-2" });
 });
 
-test("173 the combat audit totals are read from the lines: two bites and a bullet and a start and a resume give two kinds (\"biter:bite\" with 2 hits, \"avatar:repeater-arm\" with 1), summing total, shield and health and counting the minimum; the start and resume lines count for nothing, and an empty log gives no totals", () => {
+test("173 the combat audit totals are read from the lines: two bites and a bullet and a start and a resume give two kinds (\"biter:bite\" with 2 hits, \"avatar:repeater-arm\" with 1), summing total, shield and health; the start and resume lines count for nothing, and an empty log gives no totals", () => {
   const result = run(`
     const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
-    const hit = (frame, source, attack, target, total, shield, health, minimumApplied) =>
-      combatAuditHitLine(frame, source, attack, target, { parts: [part], total, minimumApplied }, { shield, health });
+    const hit = (frame, source, attack, target, total, shield, health) =>
+      combatAuditHitLine(frame, source, attack, target, { parts: [part], total }, { shield, health });
     const lines = [
       combatAuditStartLine(0, 1, "chamber-2"),
-      hit(10, "biter_3", "bite", "avatar_1", 8, 3, 5, false),
-      hit(11, "avatar_1", "repeater-arm", "biter_7", 4, 0, 4, true),
+      hit(10, "biter_3", "bite", "avatar_1", 8, 3, 5),
+      hit(11, "avatar_1", "repeater-arm", "biter_7", 4, 0, 4),
       combatAuditResumeLine(5),
-      hit(6, "biter_12", "bite", "avatar_1", 2, 0, 2, true),
+      hit(6, "biter_12", "bite", "avatar_1", 2, 0, 2),
     ];
     return { totals: combatAuditTotals(lines), empty: combatAuditTotals([]) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.totals, {
-    "biter:bite": { hits: 2, total: 10, shield: 3, health: 7, minimumApplied: 1 },
-    "avatar:repeater-arm": { hits: 1, total: 4, shield: 0, health: 4, minimumApplied: 1 },
+    "biter:bite": { hits: 2, total: 10, shield: 3, health: 7 },
+    "avatar:repeater-arm": { hits: 1, total: 4, shield: 0, health: 4 },
   });
   assert.deepStrictEqual(r.empty, {});
 });
