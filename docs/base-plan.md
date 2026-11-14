@@ -117,7 +117,7 @@ Today three places resolve, apply and record a hit: `slamActor`, `slamObject` an
 ## Blocked: needs the user's answer, do not build
 
 - **B1. "Closest" measured to the edge of the body.** One line in `pickTarget`: order by the distance between the centers minus the radius of the candidate. He asked what it costs (one square root per candidate). **Decided 2026-11-14: "Queria que fosse pela borda"; built, test 201.**
-- **B2. The shield's resistance on the part of a hit that goes through to health** (the review's point 9): keep it and write it down, or change it. No answer yet.
+- **B2. The shield's resistance on the part of a hit that goes through to health** (the review's point 9): keep it and write it down, or change it. **Decided 2026-11-14: the shield's resistance counts only for what the shield absorbs; the rest of the packet is tested against the body alone. Built, test 202.**
 
 ## The design of step 4 (for P4, P5 and P6)
 

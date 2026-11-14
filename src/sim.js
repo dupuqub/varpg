@@ -593,15 +593,17 @@ function finalAttack(attacker, hit) {
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
 // by adding more). The total is the sum of the parts, and a packet with something in it always costs at least
 // damage.minDamage (the defense never makes the target immune). An empty packet costs nothing.
-// Returns { parts: [{ type, amount, points, reduction, after }], total, minimumApplied }.
-function resolveDamage(packet, target) {
+// withShield false leaves the shield's resistance out (the part of a hit that goes past a broken shield, see landHit), and
+// minimum is the least the packet costs (damage.minDamage unless the caller says otherwise).
+// Returns { parts: [{ type, amount, points, fromShield, reduction, after }], total, minimumApplied }.
+function resolveDamage(packet, target, withShield = true, minimum = DEFINITIONS.constants.damage.minDamage) {
   const scale = DEFINITIONS.constants.damage.resistanceScale;
   const parts = [];
   let sum = 0;
   for (const type of DEFINITIONS.damageTypes) {
     const amount = packet[type];
     if (!(amount > 0)) continue;
-    const fromShield = shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
+    const fromShield = withShield && shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
     const points = (target.resistance?.[type] ?? 0) + fromShield;
     const reduction = points / (points + scale);
     const after = amount * (1 - reduction);
@@ -609,7 +611,6 @@ function resolveDamage(packet, target) {
     sum += after;
   }
   if (parts.length === 0) return { parts, total: 0, minimumApplied: false };
-  const minimum = DEFINITIONS.constants.damage.minDamage;
   return { parts, total: Math.max(minimum, sum), minimumApplied: sum < minimum };
 }
 
@@ -626,11 +627,36 @@ function nameOf(thing) {
 // Lands one hit (the user's rule: every hit is resolved, taken and recorded the same way, whoever hits and whatever is hit):
 // the packet is resolved against the target (resolveDamage), taken off an actor (applyDamage) or off an object (damageObject),
 // and recorded in the audit when there is one (recordHit). An object has no shield, so the audit says all of the total went to health.
+// A hit that breaks the shield (the user's rule, 2026-11-14: "the shield absorbs a part, with its resistances included, and the
+// share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
+// resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
+// share of the packet that did not fit (per type) is resolved again against the body alone and goes to health. The record then
+// carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took. The whole
+// hit still costs at least damage.minDamage, so the second calculation's minimum is only what the shield did not already take.
 // Returns { resolved, taken, broken }; broken is true only for an object that reached 0 in this hit.
 function landHit(state, audit, sourceName, attackName, packet, target) {
   const isObject = target.id === undefined;
-  const resolved = resolveDamage(packet, target);
-  const taken = isObject ? { shield: 0, health: resolved.total } : applyDamage(target, resolved.total);
+  let resolved = resolveDamage(packet, target);
+  let taken;
+  if (isObject) {
+    taken = { shield: 0, health: resolved.total };
+  } else if (shieldAlive(target) && resolved.total > target.shield.now) {
+    const absorbed = target.shield.now;
+    const share = (resolved.total - absorbed) / resolved.total;
+    const rest = {};
+    for (const part of resolved.parts) rest[part.type] = part.amount * share;
+    const body = resolveDamage(rest, target, false, Math.max(0, DEFINITIONS.constants.damage.minDamage - absorbed));
+    applyDamage(target, absorbed); // empties the shield
+    taken = { shield: absorbed, health: applyDamage(target, body.total).health };
+    resolved = {
+      parts: resolved.parts,
+      total: absorbed + body.total,
+      minimumApplied: resolved.minimumApplied || body.minimumApplied,
+      overflow: { withShield: resolved.total, absorbed, share, parts: body.parts, total: body.total },
+    };
+  } else {
+    taken = applyDamage(target, resolved.total);
+  }
   const broken = isObject ? damageObject(state, target, resolved.total) : false;
   if (audit !== null) recordHit(audit, state, sourceName, attackName, nameOf(target), resolved, taken);
   return { resolved, taken, broken };
@@ -1583,6 +1609,7 @@ function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
     minimumApplied: resolved.minimumApplied,
     shield: taken.shield,
     health: taken.health,
+    overflow: resolved.overflow, // only on a hit that broke the shield (left out of the line otherwise)
   });
 }
 

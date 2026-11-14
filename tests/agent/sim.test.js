@@ -4606,3 +4606,35 @@ test("201 pickTarget measures \"closest\" to the edge of the body (the user, 202
   assert.strictEqual(r.edgePick, r.ids[2]);
   assert.strictEqual(r.tiePick, r.ids[1]);
 });
+
+test("202 a hit that breaks the shield (the user, 2026-11-14): blunt 50 on a body of 30 points with a shield of 10 left and 11 points; with the shield's points the hit is 35.46, the shield takes its 10, and the share that did not fit (71.8% of the 50, so 35.90) is tested again against the body alone (30 points) and takes 27.62 of health, not 25.46; the audit line carries the overflow; a hit the shield holds whole is as before, with no overflow", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const audit = createAudit();
+    const make = (shieldNow) => ({ id: "target", health: { now: 100, max: 100 }, shield: { now: shieldNow, max: 40, quiet: 7, resistance: { blunt: 11 } }, resistance: { blunt: 30 } });
+    const broken = make(10);
+    const breaking = landHit(s, audit, "source", "poke", { blunt: 50 }, broken);
+    const holding = make(40);
+    const held = landHit(s, audit, "source", "poke", { blunt: 50 }, holding);
+    return { breaking, broken, held, holding, lines: audit.map((line) => JSON.parse(line)) };
+  `);
+  const r = plain(result);
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+  const withShield = 50 * (100 / 141);
+  const share = (withShield - 10) / withShield;
+  const toHealth = 50 * share * (100 / 130);
+  near(r.breaking.taken.shield, 10);
+  near(r.breaking.taken.health, toHealth);
+  near(toHealth, 27.615384615384617);
+  near(r.broken.health.now, 100 - toHealth);
+  assert.deepStrictEqual([r.broken.shield.now, r.broken.shield.quiet], [0, 0]);
+  near(r.breaking.resolved.total, 10 + toHealth);
+  near(r.lines[0].overflow.share, share);
+  near(r.lines[0].overflow.withShield, withShield);
+  assert.deepStrictEqual([r.lines[0].overflow.parts[0].points, r.lines[0].overflow.parts[0].fromShield], [30, 0]);
+  near(r.lines[0].shield + r.lines[0].health, r.lines[0].total);
+  near(r.held.taken.shield, withShield);
+  assert.strictEqual(r.held.taken.health, 0);
+  assert.strictEqual(r.holding.health.now, 100);
+  assert.ok(!("overflow" in r.lines[1]));
+});
