@@ -623,20 +623,28 @@ function nameOf(thing) {
   return thing.id !== undefined ? thing.id : thing.type + " " + objectKey(thing);
 }
 
-// A body slam of the attacker on an actor: resolved, applied and recorded in the audit (when there is one).
-function slamActor(state, audit, attacker, hit, target) {
-  if (target.health.now <= 0) return; // the user's rule, as for a hitbox: an actor with no health takes no hit
-  const resolved = resolveDamage(finalAttack(attacker, hit), target);
-  const taken = applyDamage(target, resolved.total);
-  if (audit !== null) recordHit(audit, state, nameOf(attacker), "bodySlam", nameOf(target), resolved, taken);
+// Lands one hit (the user's rule: every hit is resolved, taken and recorded the same way, whoever hits and whatever is hit):
+// the packet is resolved against the target (resolveDamage), taken off an actor (applyDamage) or off an object (damageObject),
+// and recorded in the audit when there is one (recordHit). An object has no shield, so the audit says all of the total went to health.
+// Returns { resolved, taken, broken }; broken is true only for an object that reached 0 in this hit.
+function landHit(state, audit, sourceName, attackName, packet, target) {
+  const isObject = target.id === undefined;
+  const resolved = resolveDamage(packet, target);
+  const taken = isObject ? { shield: 0, health: resolved.total } : applyDamage(target, resolved.total);
+  const broken = isObject ? damageObject(state, target, resolved.total) : false;
+  if (audit !== null) recordHit(audit, state, sourceName, attackName, nameOf(target), resolved, taken);
+  return { resolved, taken, broken };
 }
 
-// A body slam of the attacker on an object: resolved, applied and recorded. Returns true if the object broke.
+// A body slam of the attacker on an actor: the hit lands through landHit (resolved, applied and recorded in the audit).
+function slamActor(state, audit, attacker, hit, target) {
+  if (target.health.now <= 0) return; // the user's rule, as for a hitbox: an actor with no health takes no hit
+  landHit(state, audit, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), target);
+}
+
+// A body slam of the attacker on an object: the hit lands through landHit. Returns true if the object broke.
 function slamObject(state, audit, attacker, hit, object) {
-  const resolved = resolveDamage(finalAttack(attacker, hit), object);
-  const broken = damageObject(state, object, resolved.total);
-  if (audit !== null) recordHit(audit, state, nameOf(attacker), "bodySlam", nameOf(object), resolved, { shield: 0, health: resolved.total });
-  return broken;
+  return landHit(state, audit, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), object).broken;
 }
 
 // Whether the body of an attacker hurts a target in a collision (the user's rule of 2026-11-10, now as data, 2026-11-13: "Tags of
@@ -1743,10 +1751,7 @@ function resolveHitboxes(state, audit = null) {
       const name = nameOf(target);
       if (!hitboxHurts(hitbox, target) || (!isObject && target.health.now <= 0) || hitbox.struck.includes(name)) continue;
       if (!hitboxTouches(hitbox, target)) continue;
-      const resolved = resolveDamage(hitbox.damage, target);
-      const taken = isObject ? { shield: 0, health: resolved.total } : applyDamage(target, resolved.total);
-      if (isObject) damageObject(state, target, resolved.total);
-      if (audit !== null) recordHit(audit, state, hitbox.owner, hitbox.attack, name, resolved, taken);
+      landHit(state, audit, hitbox.owner, hitbox.attack, hitbox.damage, target); // the hit of the hitbox lands like any other
       hitbox.struck.push(name);
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here

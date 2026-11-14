@@ -4549,3 +4549,42 @@ test("198 every attack record carries its scale: the body slam of the avatar, of
   assert.deepStrictEqual(r.rock, { bodySlam: "impact" });
   assert.strictEqual(r.hitboxHasScale, false);
 });
+
+// ---- one function lands a hit (base plan P6) ----
+test("199 landHit on an actor: the shield takes its 3 first and the health the other 2 (blunt 5 against no resistance), one audit line says shield 3 and health 2 with the source and the attack, and the actor is not marked broken", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const audit = createAudit();
+    const target = { id: "target", health: { now: 10, max: 10 }, shield: { now: 3, max: 3, quiet: 7, resistance: {} }, resistance: {} };
+    const landed = landHit(s, audit, "source", "poke", { blunt: 5 }, target);
+    return { landed, shield: target.shield.now, quiet: target.shield.quiet, health: target.health.now, lines: audit.map((line) => JSON.parse(line)) };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.landed.resolved.total, 5);
+  assert.deepStrictEqual(r.landed.taken, { shield: 3, health: 2 });
+  assert.strictEqual(r.landed.broken, false);
+  assert.deepStrictEqual([r.shield, r.quiet, r.health], [0, 0, 8]);
+  assert.strictEqual(r.lines.length, 1);
+  assert.deepStrictEqual([r.lines[0].source, r.lines[0].attack, r.lines[0].target, r.lines[0].total, r.lines[0].shield, r.lines[0].health], ["source", "poke", "target", 5, 3, 2]);
+});
+
+test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6 and is not broken, a second of 6 takes it to 0 and is broken, and each hit writes one audit line with all of its total on health (and with no audit it still lands)", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const audit = createAudit();
+    const rock = { type: "rock", layer: "small", square: { x: 0, y: 1 }, health: { now: 10, max: 10 }, resistance: {} };
+    const first = landHit(s, audit, "source", "poke", { blunt: 4 }, rock);
+    const afterFirst = { ...s.damagedObjects };
+    const second = landHit(s, audit, "source", "poke", { blunt: 6 }, rock);
+    const afterSecond = { ...s.damagedObjects };
+    const quiet = landHit(s, null, "source", "poke", { blunt: 1 }, { ...rock, square: { x: 5, y: 5 } });
+    return { first, second, quiet, afterFirst, afterSecond, lines: audit.map((line) => JSON.parse(line)) };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.afterFirst, { "small:0,1": 6 });
+  assert.deepStrictEqual(r.afterSecond, { "small:0,1": 0 });
+  assert.deepStrictEqual([r.first.broken, r.second.broken, r.quiet.broken], [false, true, false]);
+  assert.deepStrictEqual(r.first.taken, { shield: 0, health: 4 });
+  assert.strictEqual(r.lines.length, 2);
+  assert.deepStrictEqual(r.lines.map((line) => [line.target, line.shield, line.health]), [["rock small:0,1", 0, 4], ["rock small:0,1", 0, 6]]);
+});
