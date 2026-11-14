@@ -257,6 +257,16 @@ function checkRepeat(repeat, attackName, where) {
   if (repeat !== expected) throw new Error("The repeat of " + where + " must be " + expected + " until another case is built, and it is " + repeat);
 }
 
+// How the damage of an attack grows at the hit (the user, 2026-11-14, "The design of step 4" in docs/base-plan.md): "none", the packet as it
+// is; "impact", times the impact over `referenceImpact`. Nothing reads it yet; the body slam is "impact" and every other attack is "none".
+const SCALES = ["none", "impact"];
+
+function checkScale(scale, attackName, where) {
+  if (!SCALES.includes(scale)) throw new Error("The scale of " + where + " must be one of " + SCALES.join(", ") + ", and it is " + JSON.stringify(scale));
+  const expected = attackName === "bodySlam" ? "impact" : "none";
+  if (scale !== expected) throw new Error("The scale of " + where + " must be " + expected + " until another case is built, and it is " + scale);
+}
+
 function checkTarget(target, where) {
   if (!target || !TARGET_PICKS.includes(target.pick) || typeof target.tag !== "string" || target.tag === "") {
     throw new Error("The target of " + where + " must be { pick, tag }, with pick one of " + TARGET_PICKS.join(", ") + " and a tag that is a word: " + JSON.stringify(target));
@@ -317,6 +327,7 @@ function assertValidDefinitions() {
     checkTarget(weapon.target, where);
     checkExit(weapon.exit, where);
     checkRepeat(weapon.repeat, id, where);
+    checkScale(weapon.scale, id, where);
     const whole = (value, least) => Number.isInteger(value) && value >= least;
     if (!whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
     const rounds = weapon.rounds;
@@ -341,6 +352,7 @@ function assertValidDefinitions() {
     checkTarget(melee.target, where);
     checkExit(melee.exit, where);
     checkRepeat(melee.repeat, id, where);
+    checkScale(melee.scale, id, where);
     if (!Number.isInteger(melee.reach) || melee.reach < 1) throw new Error("The reach of " + where + " must be a whole number of pixels, 1 or more, and it is " + melee.reach);
     if (!(melee.angleDegrees > 0 && melee.angleDegrees <= 180)) throw new Error("The angleDegrees of " + where + " must be above 0 and at most 180 (half of it is the opening to each side, at most 90), and it is " + melee.angleDegrees);
     for (const field of ["windupFrames", "recoveryFrames"]) {
@@ -355,8 +367,9 @@ function assertValidDefinitions() {
       if (!(amount.flat >= 0 && amount.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(amount));
     }
   }
-  // The body slam, the first attack of every thing (it lives in the constants, not in a recipe): its repeat is checked like the others.
+  // The body slam, the first attack of every thing (it lives in the constants, not in a recipe): its repeat and scale are checked like the others.
   checkRepeat(DEFINITIONS.constants.bodySlam.attack.repeat, "bodySlam", "the attack bodySlam of the constants");
+  checkScale(DEFINITIONS.constants.bodySlam.attack.scale, "bodySlam", "the attack bodySlam of the constants");
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
@@ -375,6 +388,7 @@ function assertValidDefinitions() {
       checkTarget(attack.target, where);
       checkExit(attack.exit, where);
       checkRepeat(attack.repeat, name, where);
+      checkScale(attack.scale, name, where);
       const hitbox = attack.hitbox;
       if (!hitbox || !Number.isInteger(hitbox.radius) || hitbox.radius < 1 || !Number.isInteger(hitbox.frames) || hitbox.frames < 1) {
         throw new Error("The hitbox of " + where + " needs a whole radius and whole frames, 1 or more: " + JSON.stringify(hitbox));
@@ -1383,7 +1397,7 @@ function meleeStates(blueprint) {
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
-    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, repeat: DEFINITIONS.parts[weapon.part].weapon.repeat, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, repeat: DEFINITIONS.parts[weapon.part].weapon.repeat, scale: DEFINITIONS.parts[weapon.part].weapon.scale, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
   }
   // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
   // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
@@ -1397,6 +1411,7 @@ function addWeaponAttacks(actor) {
       target: { ...recipe.target },
       exit: recipe.exit,
       repeat: recipe.repeat,
+      scale: recipe.scale,
       ignores: [...recipe.ignores],
       reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
       windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
