@@ -292,6 +292,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 198 | Every attack record carries its `scale`: the body slam of the avatar, of a Biter and of a Rock is `impact`; the bite, the repeater and the sword are `none`; a hitbox born from the bite does not carry the key (its damage is frozen at its birth). | Base plan P5: the body and an attack are described by the same keys; the hitbox does not need `scale`. |
 | 199 | `landHit` on an actor: a hit of blunt 5 on an actor with a shield of 3 and health 10 takes 3 from the shield (which restarts its wait) and 2 from the health, writes one audit line with source, attack, target, total 5, shield 3 and health 2, and is not marked broken. | Base plan P6: one function lands every hit (resolve, take, record); the shield absorbs first, as in `applyDamage`. |
 | 200 | `landHit` on a Rock of 10 health: a hit of 4 leaves it at 6 in `damagedObjects` and not broken; a second of 6 takes it to 0 and says broken; each hit writes one audit line with all of its total on health; with no audit the hit still lands. | Base plan P6: an object has no shield, and `broken` is true only on the hit that reaches 0. |
+| 201 | `pickTarget` measures "closest" to the edge of the body: a big Biter whose center is 100 away (edge 10) beats a small one whose center is 50 away (edge 50); with equal edges the first in the list wins. | The user's answer (2026-11-14, open item B1): "Queria que fosse pela borda". Base plan B1. |
 
 ### Benchmark of the grid (not a test)
 

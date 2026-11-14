@@ -1459,9 +1459,13 @@ function pickTarget(state, from, target, range, index = null) {
     const dy = actor.position.y - from.position.y;
     const distance = dx * dx + dy * dy;
     const reach = range + actor.radius;
-    if (distance <= reach * reach && distance < bestDistance) {
-      best = actor;
-      bestDistance = distance;
+    if (distance <= reach * reach) {
+      // "Closest" is measured to the edge of the body (the user, 2026-11-14): centers minus the candidate's radius.
+      const edge = Math.sqrt(distance) - actor.radius;
+      if (edge < bestDistance) {
+        best = actor;
+        bestDistance = edge;
+      }
     }
   }
   return best;

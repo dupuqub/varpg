@@ -4588,3 +4588,21 @@ test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6
   assert.strictEqual(r.lines.length, 2);
   assert.deepStrictEqual(r.lines.map((line) => [line.target, line.shield, line.health]), [["rock small:0,1", 0, 4], ["rock small:0,1", 0, 6]]);
 });
+
+test("201 pickTarget measures \"closest\" to the edge of the body (the user, 2026-11-14): a big Biter whose center is 100 away (edge 10) is closer than a small one whose center is 50 away (edge 50), so the big one is picked; a tie of edges goes to the first in the list", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0, 1);
+    const [avatar, small, big] = s.actors;
+    avatar.position.x = 0; avatar.position.y = 0;
+    small.position.x = 50; small.position.y = 0; small.radius = 0;
+    big.position.x = 100; big.position.y = 0; big.radius = 90;
+    const edgePick = pickTarget(s, avatar, { pick: "closest", tag: "enemy" }, 1000).id;
+    big.position.x = 50; big.radius = 0; small.radius = 0;
+    const tiePick = pickTarget(s, avatar, { pick: "closest", tag: "enemy" }, 1000).id;
+    return { ids: [avatar.id, small.id, big.id], edgePick, tiePick };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.edgePick, r.ids[2]);
+  assert.strictEqual(r.tiePick, r.ids[1]);
+});
