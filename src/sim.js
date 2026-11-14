@@ -246,6 +246,17 @@ function checkExit(exit, where) {
   if (!EXITS.includes(exit)) throw new Error("The exit of " + where + " must be one of " + EXITS.join(", ") + ", and it is " + JSON.stringify(exit));
 }
 
+// When an attack may hurt the same target again (the user, 2026-11-14, "The design of step 4" in docs/base-plan.md): "life", each target once in
+// the life of the hitbox (`struck`); "contact", once per new contact of two bodies (`state.contacts`). Nothing reads it yet; the one case
+// built for each is the one below: the body slam is "contact" and every other attack is "life".
+const REPEATS = ["life", "contact"];
+
+function checkRepeat(repeat, attackName, where) {
+  if (!REPEATS.includes(repeat)) throw new Error("The repeat of " + where + " must be one of " + REPEATS.join(", ") + ", and it is " + JSON.stringify(repeat));
+  const expected = attackName === "bodySlam" ? "contact" : "life";
+  if (repeat !== expected) throw new Error("The repeat of " + where + " must be " + expected + " until another case is built, and it is " + repeat);
+}
+
 function checkTarget(target, where) {
   if (!target || !TARGET_PICKS.includes(target.pick) || typeof target.tag !== "string" || target.tag === "") {
     throw new Error("The target of " + where + " must be { pick, tag }, with pick one of " + TARGET_PICKS.join(", ") + " and a tag that is a word: " + JSON.stringify(target));
@@ -305,6 +316,7 @@ function assertValidDefinitions() {
     const where = "the weapon of the part " + id;
     checkTarget(weapon.target, where);
     checkExit(weapon.exit, where);
+    checkRepeat(weapon.repeat, id, where);
     const whole = (value, least) => Number.isInteger(value) && value >= least;
     if (!whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
     const rounds = weapon.rounds;
@@ -328,6 +340,7 @@ function assertValidDefinitions() {
     if (part.weapon) throw new Error("The part " + id + " has weapon and melee: a part is one or the other");
     checkTarget(melee.target, where);
     checkExit(melee.exit, where);
+    checkRepeat(melee.repeat, id, where);
     if (!Number.isInteger(melee.reach) || melee.reach < 1) throw new Error("The reach of " + where + " must be a whole number of pixels, 1 or more, and it is " + melee.reach);
     if (!(melee.angleDegrees > 0 && melee.angleDegrees <= 180)) throw new Error("The angleDegrees of " + where + " must be above 0 and at most 180 (half of it is the opening to each side, at most 90), and it is " + melee.angleDegrees);
     for (const field of ["windupFrames", "recoveryFrames"]) {
@@ -342,6 +355,8 @@ function assertValidDefinitions() {
       if (!(amount.flat >= 0 && amount.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(amount));
     }
   }
+  // The body slam, the first attack of every thing (it lives in the constants, not in a recipe): its repeat is checked like the others.
+  checkRepeat(DEFINITIONS.constants.bodySlam.attack.repeat, "bodySlam", "the attack bodySlam of the constants");
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
@@ -359,6 +374,7 @@ function assertValidDefinitions() {
       }
       checkTarget(attack.target, where);
       checkExit(attack.exit, where);
+      checkRepeat(attack.repeat, name, where);
       const hitbox = attack.hitbox;
       if (!hitbox || !Number.isInteger(hitbox.radius) || hitbox.radius < 1 || !Number.isInteger(hitbox.frames) || hitbox.frames < 1) {
         throw new Error("The hitbox of " + where + " needs a whole radius and whole frames, 1 or more: " + JSON.stringify(hitbox));
@@ -1367,7 +1383,7 @@ function meleeStates(blueprint) {
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
-    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, repeat: DEFINITIONS.parts[weapon.part].weapon.repeat, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
   }
   // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
   // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
@@ -1380,6 +1396,7 @@ function addWeaponAttacks(actor) {
       base, now: { ...base }, terms: JSON.parse(JSON.stringify(recipe.damage)),
       target: { ...recipe.target },
       exit: recipe.exit,
+      repeat: recipe.repeat,
       ignores: [...recipe.ignores],
       reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
       windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
@@ -1668,6 +1685,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
+    repeat: attack.repeat, // when it may hurt the same target again (nothing reads it yet)
     ignores: [...attack.ignores], // the tags it does not hurt: a copy of its attack's list at its birth (the owner may be gone before it ends)
   };
   state.hitboxes.push(hitbox);

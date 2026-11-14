@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 55;
+const DEFINITIONS_VERSION = 56;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -145,6 +145,7 @@ const DEFINITIONS = {
           freezeFrames: 10,
           hitbox: { radius: 20, frames: 1 },
           exit: "front", // where its hitbox is born (the user, 2026-11-13, issues 3 and 13: "the attack comes out of the front"): one body ahead of it, toward the target
+          repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox's life
           target: { pick: "closest", tag: "ally" }, // what the bite aims at: the closest thing that is "ally" (the avatar is the only one today)
           ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
         },
@@ -254,7 +255,7 @@ const DEFINITIONS = {
     //   attack.damage.blunt.perWeight 0.001 (flat 0): the user's first number, a weight of 5000 kg (the avatar's) hits for 5 at the reference impact.
     //   referenceImpact 6: the user's first number (the old "minimum impact"), now the impact where the attack is exactly flat + perWeight x weight, the same form as every other attack (the body slam is written like the bite of a Biter).
     //     Walking (3) hits for half of it, a dash (12) for double.
-    bodySlam: { attack: { damage: { blunt: { flat: 0, perWeight: 0.001 } } }, referenceImpact: 6 },
+    bodySlam: { attack: { damage: { blunt: { flat: 0, perWeight: 0.001 } }, repeat: "contact" }, referenceImpact: 6 },
 
     // How a packet of damage hurts (see resolveDamage in src/sim.js), the same for every hit and every type.
     //   resistanceScale 100: the user's wish (2026-11-11): nobody is immortal, and there is always something to gain by adding
@@ -342,6 +343,7 @@ const DEFINITIONS = {
       weapon: {
         ignores: ["self", "ally"], // the tags its bullets do not hurt (each attack has its own list; the hitbox copies it at its birth)
         exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar
+        repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox's life
         target: { pick: "closest", tag: "enemy" },
         intervalFrames: 10,
         reloadFrames: 90,
@@ -369,6 +371,7 @@ const DEFINITIONS = {
       melee: {
         ignores: ["self", "ally"], // the tags its blows do not hurt
         exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar
+        repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox's life
         target: { pick: "closest", tag: "enemy" },
         reach: 90,
         angleDegrees: 90,
