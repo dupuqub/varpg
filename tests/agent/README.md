@@ -285,6 +285,7 @@ Tests 80 to 101 (most run in a game without objects, so only the collisions the 
 | 191 | A step on an aborted state changes nothing: the state is the same (5 more steps, with input and dash, a Biter on top of the avatar), the visual state does not change and the audit gets no new line. | Same decision: the run stops where the avatar died, the observer's notebooks included. |
 | 192 | Whoever has no health is never a target: a Biter finds no `ally` when the avatar is at 0 health (it stands still), the avatar finds no `enemy` when the only Biter is at 0, and with both alive the Biter picks the avatar. | The parameter `living` of `pickTarget` went away with the avatar's death (issue 13). |
 | 193 | `recordFrame` skips a state that did not advance: the same frame again, or an aborted state, leave the lists as they were (1, then 2 after a step, then 3 after the step of the death, and 3 more steps on the aborted state add nothing); the last snap says `aborted`. | A state that stopped must not fill the 120 snaps of the history with copies of one frame. |
+| 194 | A body slam does not hurt an actor with no health, as a hitbox does: the avatar dashes into a Biter at 0 health and the audit has no line with that Biter as target; the same scene with 1 health has one such line. | The review's point 10: `slamActor` returns at once for a target at zero health, the same rule as a hitbox. |
 
 ### Benchmark of the grid (not a test)
 

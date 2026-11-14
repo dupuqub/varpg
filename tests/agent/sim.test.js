@@ -4441,3 +4441,23 @@ test("193 recordFrame does not record a state that did not advance: recording th
   assert.strictEqual(result.unchanged, true);
   assert.strictEqual(result.lastMission, "aborted");
 });
+test("194 a body slam does not hurt an actor with no health, as a hitbox does: the avatar dashes into a Biter at 0 health and the audit has no line with that Biter as target; the same scene with 1 health has one such line", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    ${ARMED}
+    const dashInto = (health) => {
+      const audit = createAudit();
+      const s = aloneBiters(0);
+      const b = s.actors[1];
+      b.position.x = 16 + b.radius + 2; b.position.y = 0;
+      b.attacks.bite.windupFrames = 0;
+      b.health.now = health;
+      s.actors[0].position.x = 0; s.actors[0].position.y = 0;
+      step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, null, audit);
+      return audit.map((line) => JSON.parse(line)).filter((entry) => entry.target === b.id);
+    };
+    return { dead: dashInto(0), alive: dashInto(1) };
+  `, QUIET);
+  assert.strictEqual(result.dead.length, 0, JSON.stringify(result.dead));
+  assert.strictEqual(result.alive.length, 1, JSON.stringify(result.alive));
+});

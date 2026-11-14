@@ -595,6 +595,7 @@ function nameOf(thing) {
 
 // A body slam of the attacker on an actor: resolved, applied and recorded in the audit (when there is one).
 function slamActor(state, audit, attacker, hit, target) {
+  if (target.health.now <= 0) return; // the user's rule, as for a hitbox: an actor with no health takes no hit
   const resolved = resolveDamage(finalAttack(attacker, hit), target);
   const taken = applyDamage(target, resolved.total);
   if (audit !== null) recordHit(audit, state, nameOf(attacker), "bodySlam", nameOf(target), resolved, taken);
