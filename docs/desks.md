@@ -85,7 +85,7 @@ gh api -X PATCH repos/dupuqub/varpg/issues/N -f state=closed                    
 
 
 - **One task, one issue**, with the label of the desk that will do it: `desk:rules`, `desk:review`, `desk:screen`, `desk:bench`. The user points a desk at it ("take issue 3").
-- **A request to another desk is an issue** with that desk's label: who asks, what, why. The desk that does it says so in a comment (the commit, and what was left out) and closes it. **The Review desk audits afterwards** (the user, 2026-11-13): when it opens a conversation it reads the issues closed since its last pass and reopens, with a comment, any that does not convince it. So the desk that did the work closes, and nobody waits for a second desk to open a conversation.
+- **A request to another desk is an issue** with that desk's label: who asks, what, why. The desk that does it says so in a comment (the commit, and what was left out) and closes it. **The Review desk reviews afterwards** (the user, 2026-11-13): when it opens a conversation it reads the issues closed since its last pass and reopens, with a comment, any that does not convince it. So the desk that did the work closes, and nobody waits for a second desk to open a conversation.
 - **A question for the user** gets the label `question-for-user`, one question per issue. No desk answers for him.
 - **When a desk starts a conversation** it reads the open issues with its label, after `AGENTS.md` and this file.
 - **What was decided still goes to `AGENTS.md`**, in the same commit as the change. An issue is the conversation; the files are the memory.
