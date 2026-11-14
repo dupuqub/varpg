@@ -1272,8 +1272,8 @@ function think(state, actor, byTag) {
   const direction = actor.move.direction;
 
   // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: how far a non-avatar actor
-  // sees is open, issue 13; living false: it still chases the avatar at zero health, as before). With none it stands still.
-  const target = pickTarget(state, actor, attack.target, Infinity, false, byTag);
+  // sees is open, issue 13). Whoever has no health is not a target. With none it stands still.
+  const target = pickTarget(state, actor, attack.target, Infinity, byTag);
   if (target === null) {
     direction.x = 0;
     direction.y = 0;
@@ -1389,8 +1389,8 @@ function addWeaponAttacks(actor) {
 // The target of an action (the user, 2026-11-13, issue 13): the rule target.pick applied to the things that carry target.tag, within
 // range of "from" (their body reaches it: the distance to the center minus their radius), or null when there is none. The tag is
 // absolute, not relative to who acts. The only rule today is "closest" (the first in the list on a tie, so runs stay reproducible).
-// "living": whoever has no health is not a target; the Biter passes false (it still chases the avatar at zero health: what the death
-// of the avatar does is open, issue 13). A range of 0 (no Head, no Radar) sees nothing.
+// Whoever has no health is not a target (the avatar at zero health ends the mission, see step, so nobody chases it any more).
+// A range of 0 (no Head, no Radar) sees nothing.
 // "index": the index by tag of this step (tagIndex), or null for the plain walk over every actor. Both give the same answer: the index
 // only skips the actors without the tag, in the same list order, so a tie still goes to the first (the plain walk is the reference in the tests).
 // The actors that carry each tag, in list order, made again at the start of every step and never part of the state (issue 22: one Biter
@@ -1407,13 +1407,13 @@ function tagIndex(actors) {
   return index;
 }
 
-function pickTarget(state, from, target, range, living = true, index = null) {
+function pickTarget(state, from, target, range, index = null) {
   if (!(range > 0)) return null;
   let best = null;
   let bestDistance = Infinity;
   const candidates = index === null ? state.actors : index.get(target.tag) ?? [];
   for (const actor of candidates) {
-    if ((index === null && !tagsOf(actor).includes(target.tag)) || (living && actor.health.now <= 0)) continue;
+    if ((index === null && !tagsOf(actor).includes(target.tag)) || actor.health.now <= 0) continue;
     const dx = actor.position.x - from.position.x;
     const dy = actor.position.y - from.position.y;
     const distance = dx * dx + dy * dy;
@@ -1438,7 +1438,7 @@ function swingMelees(state, player, visual, byTag) {
       // Room to correct (the user, 2026-11-13): the aim was locked when the windup began, but each frame it moves a part
       // (attack.aimCorrection) of the way toward where the closest target is now. No trigonometry: blend the two directions and
       // give the result length 1 again. Opposite directions would blend to nothing: then the aim stays as it was.
-      const aimed = pickTarget(state, player, attack.target, player.radar, true, byTag);
+      const aimed = pickTarget(state, player, attack.target, player.radar, byTag);
       if (aimed !== null && attack.aimCorrection > 0) {
         const dx = aimed.position.x - player.position.x;
         const dy = aimed.position.y - player.position.y;
@@ -1465,7 +1465,7 @@ function swingMelees(state, player, visual, byTag) {
       if (sword.frames > 0) continue;
       sword.phase = "idle";
     }
-    const target = pickTarget(state, player, attack.target, player.radar, true, byTag);
+    const target = pickTarget(state, player, attack.target, player.radar, byTag);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
@@ -1500,7 +1500,7 @@ function fireWeapons(state, player, byTag) {
     }
     if (weapon.interval > 0) continue;
     const attack = player.attacks[weapon.part];
-    const target = pickTarget(state, player, attack.target, player.radar, true, byTag);
+    const target = pickTarget(state, player, attack.target, player.radar, byTag);
     if (target === null) continue;
     const dx = target.position.x - player.position.x;
     const dy = target.position.y - player.position.y;
@@ -1610,7 +1610,7 @@ function emitStrikes(state, visual, byTag) {
     actor.ai.strike = false;
     if (actor.health.now <= 0) continue; // the user, 2026-11-13: whoever died in this step does not strike (the flag triggers nothing)
     const attack = actor.attacks[actor.ai.attack];
-    const target = pickTarget(state, actor, attack.target, Infinity, false, byTag); // toward where its target is now, after everyone moved
+    const target = pickTarget(state, actor, attack.target, Infinity, byTag); // toward where its target is now, after everyone moved
     if (target === null) continue;
     const dx = target.position.x - actor.position.x;
     const dy = target.position.y - actor.position.y;
@@ -1737,7 +1737,7 @@ function resolveHitboxes(state, audit = null) {
 // ---- Destruction ----
 // The one place where an actor leaves the scene (the user's decision, 2026-11-11: for now it only removes the actor, so it
 // is not drawn and is not in the state any more; a drop, an explosion or a sound will be written here). The others keep
-// their order. The avatar is not destroyed yet: nothing has been decided about what its end does to the run.
+// their order. The avatar is not removed: its end is the end of the mission (step, phase 8).
 function destroyActor(state, actor) {
   state.actors.splice(state.actors.indexOf(actor), 1);
 }
@@ -1788,6 +1788,10 @@ function createChamberState(populate, runId, seed, blueprint) {
 
     // Version of the definitions this state was made with (see src/data.js).
     definitionsVersion: DEFINITIONS_VERSION,
+
+    // The mission: "running" while the avatar has health, "aborted" from the step in which it has none (the user, 2026-11-14: the
+    // pilot ejects). An aborted state no longer advances (see step).
+    mission: "running",
 
     // Collision grid: the numbers live in src/data.js (constants.grid, each with its reason). A copy goes in the state, so a
     // run can be reproduced exactly and a test can change it.
@@ -1844,6 +1848,7 @@ function cellIndex(coordinate, cellSize) {
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 // blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
 function step(state, input, blueprint, visual = null, audit = null) {
+  if (state.mission === "aborted") return; // the pilot ejected: the state, the visual and the audit stay as they were
   if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
@@ -1934,6 +1939,9 @@ function step(state, input, blueprint, visual = null, audit = null) {
   for (const actor of state.actors) if (actor.shield) regenerateShield(actor);
 
   state.frame += 1;
+
+  // 8. The avatar with no health ends the mission (the user, 2026-11-14: the pilot ejects). The next call of step does nothing.
+  if (player.health.now <= 0) state.mission = "aborted";
 }
 
 assertValidDefinitions();

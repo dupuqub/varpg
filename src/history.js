@@ -27,7 +27,9 @@ function createHistory(state, blueprint, visual = null) {
 
 // Call right after step(): saves the new state and the input that produced it.
 // The oldest ones (index 0) leave when there are more than HISTORY_SIZE.
+// A state that did not advance (its frame is the last snap's, as with an aborted mission) is not recorded twice.
 function recordFrame(history, state, input, visual = null) {
+  if (state.frame === history.snaps[history.snaps.length - 1].frame) return;
   history.snaps.push(copyOf(state));
   history.inputs.push(copyOf(input));
   history.visuals.push(visual === null ? null : copyOf(visual));

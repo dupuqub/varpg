@@ -438,6 +438,7 @@ test("20 history: two aligned lists, index 0 is the oldest, and the snaps are co
     s.actors[0].position.x = 999; // changing the live state...
     const unchanged = h.snaps[5].actors[0].position.x === x; // ...must not change the history
     const inputCopy = { move: { x: 1, y: 0 } };
+    step(s, inputCopy); // a state that did not advance is not recorded (test 193), so it advances first
     recordFrame(h, s, inputCopy);
     inputCopy.move.x = 42; // changing the input afterwards...
     const inputUnchanged = h.inputs[h.inputs.length - 1].move.x === 1;
@@ -3452,6 +3453,7 @@ test("156 a trace is born at age 0 where a one-frame hitbox was born, gets one f
     const ages = [];
     for (let i = 0; i < 13; i++) { step(u.s, idle, u.bp, bite); ages.push(bite.traces.length === 0 ? null : bite.traces[0].age); }
     const history = createHistory(u.s, u.bp, bite);
+    step(u.s, idle, u.bp, bite); // one more step: a state that did not advance is not recorded (test 193)
     bite.traces.push({ position: { x: 1, y: 2 }, radius: 3, age: 4, frames: 12 });
     recordFrame(history, u.s, idle, bite);
     const back = visualFromSnap(history, 0);
@@ -3564,6 +3566,7 @@ test("160 the audit holds no truth and has no limit: 3000 frames of Chamber 2 wi
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, run.blueprint);
       const audit = withAudit ? createAudit() : null;
+      s.actors[0].health.now = 1e9; // the fight must go on for 3000 frames: at zero health the mission would be aborted (test 190)
       for (let i = 0; i < 3000; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, audit);
       return { state: JSON.stringify(s), audit };
     };
@@ -4181,7 +4184,7 @@ test("183 the target of an attack is a record { pick, tag } written into the att
   bad('          target: { pick: "closest", tag: "ally" },', '          // no target', /target of the attack bite of the actor biter/);
 });
 
-test("184 pickTarget picks among the things that carry the tag, whoever asks: from the avatar the closest enemy (a Biter), from a Biter the closest ally (the avatar, never another Biter, however close), nothing for a tag that nobody carries, and the dead are skipped unless living is false", () => {
+test("184 pickTarget picks among the things that carry the tag, whoever asks: from the avatar the closest enemy (a Biter), from a Biter the closest ally (the avatar, never another Biter, however close), nothing for a tag that nobody carries, and the dead are skipped", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0, 1);
@@ -4189,15 +4192,14 @@ test("184 pickTarget picks among the things that carry the tag, whoever asks: fr
     avatar.position.x = 0; avatar.position.y = 0;
     a.position.x = 100; a.position.y = 0;
     b.position.x = 110; b.position.y = 0;
-    const pick = (from, tag, living) => pickTarget(s, from, { pick: "closest", tag }, 1000, living)?.id ?? null;
+    const pick = (from, tag) => pickTarget(s, from, { pick: "closest", tag }, 1000)?.id ?? null;
     const out = { fromAvatar: pick(avatar, "enemy"), fromBiter: pick(b, "ally"), nobody: pick(avatar, "ghost") };
     avatar.health.now = 0;
     out.deadAvatarSkipped = pick(b, "ally");
-    out.deadAvatarChased = pick(b, "ally", false);
     return { out, ids: [avatar.id, a.id, b.id] };
   `);
   const r = plain(result);
-  assert.deepStrictEqual(r.out, { fromAvatar: r.ids[1], fromBiter: r.ids[0], nobody: null, deadAvatarSkipped: null, deadAvatarChased: r.ids[0] });
+  assert.deepStrictEqual(r.out, { fromAvatar: r.ids[1], fromBiter: r.ids[0], nobody: null, deadAvatarSkipped: null });
 });
 
 test("185 a Biter aims at the closest thing with the tag of its attack's target, not at the avatar by name: with a second Biter made ally and nearer than the avatar, the first Biter walks toward it, and after one step its bite (born later) points at it; with nothing tagged ally in the scene it stands still; the Biter is enemy and vermin", () => {
@@ -4302,22 +4304,20 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
     const picks = [];
     for (const from of crowd.actors.slice(0, 12)) {
       for (const tag of ["ally", "enemy", "vermin", "object", "ghost"]) {
-        for (const living of [true, false]) {
-          const plain = pickTarget(crowd, from, { pick: "closest", tag }, 600, living)?.id ?? null;
-          const indexed = pickTarget(crowd, from, { pick: "closest", tag }, 600, living, index)?.id ?? null;
-          picks.push(plain === indexed);
-        }
+        const plain = pickTarget(crowd, from, { pick: "closest", tag }, 600)?.id ?? null;
+        const indexed = pickTarget(crowd, from, { pick: "closest", tag }, 600, index)?.id ?? null;
+        picks.push(plain === indexed);
       }
     }
     const twins = createChamber2State(1, 1, run.blueprint);
     twins.actors[2].position = { ...twins.actors[3].position };
     twins.actors[2].radius = twins.actors[3].radius;
-    const tie = [pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, true)?.id, pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, true, tagIndex(twins.actors))?.id];
+    const tie = [pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000)?.id, pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, tagIndex(twins.actors))?.id];
     return { state: JSON.stringify(s), audit: audit.join("\\n"), picks, tie };
   `;
   const indexed = run(code);
   const plain = run(code, PLAIN_WALK);
-  assert.ok(indexed.picks.length === 120 && indexed.picks.every(Boolean), "the index must pick what the plain walk picks");
+  assert.ok(indexed.picks.length === 60 && indexed.picks.every(Boolean), "the index must pick what the plain walk picks");
   assert.strictEqual(indexed.tie[0], indexed.tie[1]);
   assert.strictEqual(indexed.state, plain.state);
   assert.strictEqual(indexed.audit, plain.audit);
@@ -4355,4 +4355,89 @@ test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock o
   assert.strictEqual(huge.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit").length, 1, "a broken rock is not hit again");
   const pierced = run(code(null, "0"));
   assert.strictEqual(pierced.hitboxes, 0, "a pierce of 0 ends the hitbox on the first thing it hurts, the rock");
+});
+
+// ---- The avatar's death: the mission is aborted (the user, 2026-11-14) ----
+
+test("190 a step that ends with the avatar at zero health says the mission is aborted, and a step that does not says it is running: a new state is running; with the avatar at 1 health and no one near it, the step leaves it running; with the avatar at 0 it says aborted, and the frame still counted", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const fresh = s.mission;
+    s.actors[0].health.now = 1;
+    step(s, { move: { x: 0, y: 0 } });
+    const alive = s.mission;
+    s.actors[0].health.now = 0;
+    step(s, { move: { x: 0, y: 0 } });
+    return { fresh, alive, dead: s.mission, frame: s.frame };
+  `, QUIET);
+  assert.strictEqual(result.fresh, "running");
+  assert.strictEqual(result.alive, "running");
+  assert.strictEqual(result.dead, "aborted");
+  assert.strictEqual(result.frame, 2);
+});
+
+test("191 a step on an aborted state changes nothing: the JSON of the state is the same, the visual state has no new trace and does not age, and the audit has no new line, even with the avatar's input and a Biter on top of it", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    s.actors[1].position.x = s.actors[0].position.x + 20; s.actors[1].position.y = s.actors[0].position.y;
+    s.actors[0].health.now = 0;
+    const visual = createVisual();
+    visual.traces.push({ position: { x: 1, y: 2 }, radius: 3, age: 4, frames: 12 });
+    const audit = createAudit();
+    step(s, { move: { x: 0, y: 0 } }, undefined, visual, audit);
+    const state = JSON.stringify(s), traces = JSON.stringify(visual), lines = audit.length;
+    for (let i = 0; i < 5; i++) step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, visual, audit);
+    return { aborted: s.mission, same: JSON.stringify(s) === state, visualSame: JSON.stringify(visual) === traces, lines, linesAfter: audit.length };
+  `, QUIET);
+  assert.strictEqual(result.aborted, "aborted");
+  assert.strictEqual(result.same, true);
+  assert.strictEqual(result.visualSame, true);
+  assert.strictEqual(result.linesAfter, result.lines);
+});
+
+test("192 an actor with no health is never a target, whoever it is: a Biter does not chase the avatar at zero health (it stands still), and the avatar's weapons skip a Biter at zero health", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const avatar = s.actors[0], biter = s.actors[1];
+    const target = { pick: "closest", tag: "ally" };
+    avatar.health.now = 0;
+    const deadAvatar = pickTarget(s, biter, target, Infinity)?.id ?? null;
+    avatar.health.now = 10; biter.health.now = 0;
+    const deadBiter = pickTarget(s, avatar, { pick: "closest", tag: "enemy" }, Infinity)?.id ?? null;
+    biter.health.now = 10;
+    const alive = pickTarget(s, biter, target, Infinity)?.id ?? null;
+    return { deadAvatar, deadBiter, alive, avatar: avatar.id };
+  `, QUIET);
+  assert.strictEqual(result.deadAvatar, null);
+  assert.strictEqual(result.deadBiter, null);
+  assert.strictEqual(result.alive, result.avatar);
+});
+
+test("193 recordFrame does not record a state that did not advance: recording the same frame again, or an aborted state that step no longer advances, leaves snaps, inputs and visuals as they were; a state that advanced is recorded", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const h = createHistory(s, createRun(1).blueprint);
+    const idle = { move: { x: 0, y: 0 } };
+    recordFrame(h, s, idle); // frame 0 again: nothing advanced
+    const afterSame = h.snaps.length;
+    step(s, idle);
+    recordFrame(h, s, idle);
+    const afterStep = h.snaps.length;
+    s.actors[0].health.now = 0;
+    step(s, idle); // the step in which the avatar dies still advances
+    recordFrame(h, s, idle);
+    const afterDeath = h.snaps.length;
+    const before = JSON.stringify(h);
+    for (let i = 0; i < 3; i++) { step(s, idle); recordFrame(h, s, idle); }
+    return { afterSame, afterStep, afterDeath, unchanged: JSON.stringify(h) === before, lastMission: h.snaps[h.snaps.length - 1].mission };
+  `, QUIET);
+  assert.strictEqual(result.afterSame, 1);
+  assert.strictEqual(result.afterStep, 2);
+  assert.strictEqual(result.afterDeath, 3);
+  assert.strictEqual(result.unchanged, true);
+  assert.strictEqual(result.lastMission, "aborted");
 });
