@@ -7,7 +7,7 @@ const AVATAR_COLOR = "#ffffff";
 const ACTOR_COLORS = { dummy: "#3d8bff", biter: "#e0453a" }; // by actor type (not the avatar): a new actor type needs its color here
 const RADAR_COLOR = "rgba(255, 255, 255, 0.6)"; // the circle of the Radar: white, no fill
 const HITBOX_COLOR = "#ffd23f"; // the hitboxes are yellow circles
-const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a" }; // by object type: a new object type needs its color here
+const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a", branch: "#7a5a3c" }; // by object type: a new object type needs its color here. The Branch is a wood brown (the planner's choice), so it reads apart from the gray rock and the beige Shroom.
 
 function draw(context, state, blueprint, fps, visual = null) {
   const { width, height } = context.canvas;

@@ -62,7 +62,7 @@ If the merge has a conflict, stop and call the user.
 
 ## The parcels
 
-### [ ] T1. A color for the Branch (model: haiku; issue 52)
+### [x] T1. A color for the Branch (model: haiku; issue 52)
 
 **Files:** `src/render.js`.
 
