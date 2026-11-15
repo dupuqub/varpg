@@ -4658,3 +4658,21 @@ test("203 resistance points that are not finite are refused when the definitions
   assert.throws(() => loadGame((text) => text.replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: Infinity"), { shield: true }), /shieldResistance of the part generator to blunt must be a finite number/);
   assert.doesNotThrow(() => loadGame(null, { shield: true }));
 });
+
+// ---- The audit says what an object really lost (issue 29) ----
+test("204 an overkill on a Rock writes in the combat audit only the health the Rock had: a Rock of 10 health hit by blunt 30 through landHit writes total 30 and health 10, ends at 0 and broken; a hit of 4 on a fresh Rock writes health 4, the whole total", () => {
+  const result = run(`
+    const s = createChamber1State();
+    const audit = createAudit();
+    const rock = (x) => ({ type: "rock", layer: "small", square: { x, y: 1 }, health: { now: 10, max: 10 }, resistance: {} });
+    const over = landHit(s, audit, "source", "poke", { blunt: 30 }, rock(0));
+    const small = landHit(s, audit, "source", "poke", { blunt: 4 }, rock(7));
+    return { over: { taken: over.taken, broken: over.broken }, small: small.taken, left: s.damagedObjects["small:0,1"], lines: audit.map((line) => JSON.parse(line)) };
+  `);
+  const r = plain(result);
+  assert.deepStrictEqual(r.lines.map((line) => [line.total, line.health]), [[30, 10], [4, 4]]);
+  assert.deepStrictEqual(r.over, { taken: { shield: 0, health: 10 }, broken: true });
+  assert.strictEqual(r.left, 0);
+  assert.deepStrictEqual(r.small, { shield: 0, health: 4 });
+});
+

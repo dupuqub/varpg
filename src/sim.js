@@ -620,7 +620,8 @@ function nameOf(thing) {
 
 // Lands one hit (the user's rule: every hit is resolved, taken and recorded the same way, whoever hits and whatever is hit):
 // the packet is resolved against the target (resolveDamage), taken off an actor (applyDamage) or off an object (damageObject),
-// and recorded in the audit when there is one (recordHit). An object has no shield, so the audit says all of the total went to health.
+// and recorded in the audit when there is one (recordHit). An object has no shield; the audit says what it really lost of its health
+// (issue 29): the whole total, or only the health it had when the hit is more than that (an overkill), the same as for an actor.
 // A hit that breaks the shield (the user's rule, 2026-11-14: "the shield absorbs a part, with its resistances included, and the
 // share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
 // resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
@@ -631,8 +632,11 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
   const isObject = target.id === undefined;
   let resolved = resolveDamage(packet, target);
   let taken;
+  let broken = false;
   if (isObject) {
-    taken = { shield: 0, health: resolved.total };
+    const before = objectHealth(state, target);
+    broken = damageObject(state, target, resolved.total);
+    taken = { shield: 0, health: Math.min(resolved.total, before) }; // what it really lost: the overkill is not health taken
   } else if (shieldAlive(target) && resolved.total > target.shield.now) {
     const absorbed = target.shield.now;
     const share = (resolved.total - absorbed) / resolved.total;
@@ -649,7 +653,6 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
   } else {
     taken = applyDamage(target, resolved.total);
   }
-  const broken = isObject ? damageObject(state, target, resolved.total) : false;
   if (audit !== null) recordHit(audit, state, sourceName, attackName, nameOf(target), resolved, taken);
   return { resolved, taken, broken };
 }

@@ -89,7 +89,7 @@ In `assertValidDefinitions`, refuse `resistance` and `shieldResistance` points t
 
 From issue 48, R3.5 for the code: move the tests that call `damageOf` to `resolveDamage(finalAttack(...), target).total` (the same numbers, so the same assertions), delete `damageOf`, fix the comments above `collideWithObjects` and `touchActors` and the mentions in `AGENTS.md` ("Damage", "The Dummy", "Code layout"). The whole-state tests must not move. Comment on issue 48; if parts 1 to 4 are all done and only the parts waiting for issues 45 and 46 remain, say so and leave it open.
 
-### [ ] I11. The audit says what an object really lost (model: sonnet; issue 29)
+### [x] I11. The audit says what an object really lost (model: sonnet; issue 29)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
