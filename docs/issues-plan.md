@@ -47,19 +47,19 @@ Issue 38, one paragraph: a change of a formula the user decides in conversation 
 
 No new tests. Closes issues 36 and 38.
 
-### [ ] I4. The order of a step says how the mission ends (model: haiku; issue 30, in part)
+### [x] I4. The order of a step says how the mission ends (model: haiku; issue 30, in part)
 
 **Files:** `docs/step-order.md`.
 
 Add stage 8 to the table (`if (player.health.now <= 0) state.mission = "aborted"`, after the frame is counted; the next `step` returns at its first line); add to the rules that follow from the order that an aborted state does not advance (test 191); fix row 6: the avatar stays in the scene and ends the mission. **Do not touch** the line "whoever died in this step does not strike": it waits for the user's answer to issue 28. Comment on issue 30 that this part is done and the rest waits for 28; do not close it.
 
-### [ ] I5. Comments of `src/sim.js` that say more than the code (model: haiku; issue 48, part 1)
+### [x] I5. Comments of `src/sim.js` that say more than the code (model: haiku; issue 48, part 1)
 
 **Files:** `src/sim.js`.
 
 From issue 48, only: R1.2 (`think`), R1.8 (split the comment above `pickTarget` and `tagIndex`, and write "closest is measured to the edge of the body", the user, 2026-11-14), R5.6 for `landHit` and R5.3 for `combatAuditHitLine` (name `overflow` and each of its fields). **Not** the `finalAttack` comment (it waits for issue 46). Comments only: no line of code changes; the suite must be the same. No new tests. Comment on issue 48 which findings are done.
 
-### [ ] I6. AGENTS.md and the docs against the code (model: haiku; issue 48, part 2)
+### [x] I6. AGENTS.md and the docs against the code (model: haiku; issue 48, part 2)
 
 **Files:** `AGENTS.md`, `docs/weapons.md`, `docs/review-2026-11-13.md`, `docs/method.md`.
 

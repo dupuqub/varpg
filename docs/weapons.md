@@ -83,7 +83,7 @@ Preparation for swords, spears and hammers (an experiment, not decisions): `docs
 - **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered; the repeater has a fixed value for now. A range needs a salt per shot and makes the record of a hit store the rolled value.
 - Can a slot be truly **empty**? The user said an empty arm "is really empty", then chose one item per slot with armor-only parts; the two are not settled together.
 - Two-handed weapons, a bonus for the same sword in both arms, and set bonuses were discussed and **left out on purpose** for now. They can come later as part variants or as mods with a condition.
-- Does a bullet stop at a rock or a Shroom? Today it passes over objects.
+- Decided (the user, 2026-11-14): a bullet stops on a rock or a Shroom and applies its damage there, unless its pierce is above 0 (see "Shots and objects" in `AGENTS.md`).
 - A bullet must be slower than the smallest radius it should not skip (the data checks it at load). Fast bullets will need a swept test.
-- The avatar at zero health stays and keeps firing; what its death does is still open.
+- The avatar at zero health ends the mission (decided 2026-11-14, tests 190 to 193); the screen of that alert is the Screen desk's.
 - Order proposed earlier and still ahead (the record of a hit is done): a bench of weapons, then grenade, mine and the emission at the end of a life.
