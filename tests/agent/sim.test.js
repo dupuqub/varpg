@@ -3525,28 +3525,28 @@ test("158 a Biter that died in the step does not strike: its decision to strike 
   assert.deepStrictEqual(plain(result.flags), [false, false]);
 });
 
-test("159 the combat audit writes every hit as a line with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance), with the frame the screen shows when it is seen (the state after its step), and a bullet on a Biter, and the totals read from the lines add them up by kind of hit", () => {
+test("159 the combat journal writes every hit as a line with its numbers: a bite on the avatar (puncture 10 against 10 points of resistance), with the frame the screen shows when it is seen (the state after its step), and a bullet on a Biter, and the totals read from the lines add them up by kind of hit", () => {
   const result = run(`
     ${ALONE_BITERS}
     ${ARMED}
-    const audit = createAudit();
+    const journal = createJournal();
     const s = aloneBiters(0);
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 16 + b.radius + 5; b.position.y = 0;
     b.attacks.bite.windupFrames = 0;
     const frameBefore = s.frame;
-    step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
-    const bite = JSON.parse(audit[0]);
+    step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+    const bite = JSON.parse(journal[0]);
     const frames = { before: frameBefore, after: s.frame };
 
     const t = armed(0);
     const target = t.s.actors[1];
     target.position.x = 250; target.position.y = 0;
-    const shots = createAudit();
+    const shots = createJournal();
     for (let i = 0; i < 60 && shots.length === 0; i++) step(t.s, { move: { x: 0, y: 0 } }, t.bp, null, shots);
     const bullet = JSON.parse(shots[0]);
-    return { bite, frames, bullet, biteTotals: combatAuditTotals(audit), bulletTotals: combatAuditTotals(shots), health: avatar.health.now };
+    return { bite, frames, bullet, biteTotals: combatJournalTotals(journal), bulletTotals: combatJournalTotals(shots), health: avatar.health.now };
   `, QUIET);
   const bite = plain(result.bite);
   assert.deepStrictEqual([bite.source, bite.attack, bite.target], ["biter_0", "bite", "avatar_1"]);
@@ -3570,23 +3570,23 @@ test("159 the combat audit writes every hit as a line with its numbers: a bite o
   assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
 });
 
-test("160 the audit holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
+test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
   const result = run(`
-    const play = (withAudit) => {
+    const play = (withJournal) => {
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
       const s = createChamber2State(1, 1, run.blueprint);
-      const audit = withAudit ? createAudit() : null;
+      const journal = withJournal ? createJournal() : null;
       s.actors[0].health.now = 1e9; // the fight must go on for 3000 frames: at zero health the mission would be aborted (test 190)
-      for (let i = 0; i < 3000; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, audit);
-      return { state: JSON.stringify(s), audit };
+      for (let i = 0; i < 3000; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, journal);
+      return { state: JSON.stringify(s), journal };
     };
     const a = play(true);
     const b = play(false);
-    const entries = a.audit.map((line) => JSON.parse(line));
-    const counted = Object.values(combatAuditTotals(a.audit)).reduce((sum, t) => sum + t.hits, 0);
+    const entries = a.journal.map((line) => JSON.parse(line));
+    const counted = Object.values(combatJournalTotals(a.journal)).reduce((sum, t) => sum + t.hits, 0);
     let ordered = true;
     for (let i = 1; i < entries.length; i++) if (entries[i].frame < entries[i - 1].frame) ordered = false;
-    return { same: a.state === b.state, lines: a.audit.length, allHits: entries.every((e) => e.event === "hit"), ordered, counted, none: b.audit };
+    return { same: a.state === b.state, lines: a.journal.length, allHits: entries.every((e) => e.event === "hit"), ordered, counted, none: b.journal };
   `);
   assert.strictEqual(result.same, true);
   assert.ok(result.lines > 100, "the log must keep more than the old limit of 100: " + result.lines);
@@ -3916,15 +3916,15 @@ test("171 calling the static and dynamic lists again on a living avatar changes 
   assert.deepStrictEqual(r.again, r.once);
 });
 
-// ---- The combat audit, "caudit": the lines (the user, 2026-11-13; build step 1) ----
-test("172 the combat audit writes one line per event, each a single JSON object that starts with the frame and the kind of event: a hit carries the ids of both sides and what came into effect in its damage calculation; a resume says the simulation resumed from frame X; a start names the run and the chamber", () => {
+// ---- The combat journal: the lines (the user, 2026-11-13; build step 1) ----
+test("172 the combat journal writes one line per event, each a single JSON object that starts with the frame and the kind of event: a hit carries the ids of both sides and what came into effect in its damage calculation; a resume says the simulation resumed from frame X; a start names the run and the chamber", () => {
   const result = run(`
     const resolved = { parts: [{ type: "puncture", amount: 10, points: 10, fromShield: 0, reduction: 10 / 110, after: 10 * (1 - 10 / 110) }], total: 10 * (1 - 10 / 110) };
     const taken = { shield: 0, health: resolved.total };
     return {
-      hit: combatAuditHitLine(42, "biter_3", "bite", "avatar_1", resolved, taken),
-      resume: combatAuditResumeLine(450),
-      start: combatAuditStartLine(0, 1, "chamber-2"),
+      hit: combatJournalHitLine(42, "biter_3", "bite", "avatar_1", resolved, taken),
+      resume: combatJournalResumeLine(450),
+      start: combatJournalStartLine(0, 1, "chamber-2"),
       resolved, taken,
     };
   `);
@@ -3942,19 +3942,19 @@ test("172 the combat audit writes one line per event, each a single JSON object 
   assert.deepStrictEqual(JSON.parse(r.start), { frame: 0, event: "start", run: 1, chamber: "chamber-2" });
 });
 
-test("173 the combat audit totals are read from the lines: two bites and a bullet and a start and a resume give two kinds (\"biter:bite\" with 2 hits, \"avatar:repeater-arm\" with 1), summing total, shield and health; the start and resume lines count for nothing, and an empty log gives no totals", () => {
+test("173 the combat journal totals are read from the lines: two bites and a bullet and a start and a resume give two kinds (\"biter:bite\" with 2 hits, \"avatar:repeater-arm\" with 1), summing total, shield and health; the start and resume lines count for nothing, and an empty log gives no totals", () => {
   const result = run(`
     const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
     const hit = (frame, source, attack, target, total, shield, health) =>
-      combatAuditHitLine(frame, source, attack, target, { parts: [part], total }, { shield, health });
+      combatJournalHitLine(frame, source, attack, target, { parts: [part], total }, { shield, health });
     const lines = [
-      combatAuditStartLine(0, 1, "chamber-2"),
+      combatJournalStartLine(0, 1, "chamber-2"),
       hit(10, "biter_3", "bite", "avatar_1", 8, 3, 5),
       hit(11, "avatar_1", "repeater-arm", "biter_7", 4, 0, 4),
-      combatAuditResumeLine(5),
+      combatJournalResumeLine(5),
       hit(6, "biter_12", "bite", "avatar_1", 2, 0, 2),
     ];
-    return { totals: combatAuditTotals(lines), empty: combatAuditTotals([]) };
+    return { totals: combatJournalTotals(lines), empty: combatJournalTotals([]) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.totals, {
@@ -3964,20 +3964,20 @@ test("173 the combat audit totals are read from the lines: two bites and a bulle
   assert.deepStrictEqual(r.empty, {});
 });
 
-test("174 the history keeps no copy of the combat audit: its record has only the snaps, the inputs, the visual copies and the blueprint, and stepping a run on writes lines only into the log, which is never rewound by the history (discarding after a snap leaves it whole)", () => {
+test("174 the history keeps no copy of the combat journal: its record has only the snaps, the inputs, the visual copies and the blueprint, and stepping a run on writes lines only into the log, which is never rewound by the history (discarding after a snap leaves it whole)", () => {
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const s = createChamber2State(1, 1, run.blueprint);
-    const audit = createAudit();
+    const journal = createJournal();
     const history = createHistory(s, run.blueprint, null);
     for (let i = 0; i < 1500; i++) {
       const input = { move: { x: 0, y: 0 } };
-      step(s, input, run.blueprint, null, audit);
+      step(s, input, run.blueprint, null, journal);
       recordFrame(history, s, input, null);
     }
-    const written = audit.length;
+    const written = journal.length;
     discardAfter(history, 10);
-    return { keys: Object.keys(history), written, after: audit.length, snaps: history.snaps.length, hasFromSnap: typeof auditFromSnap };
+    return { keys: Object.keys(history), written, after: journal.length, snaps: history.snaps.length, hasFromSnap: typeof journalFromSnap };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.keys, ["snaps", "inputs", "visuals", "blueprint"]);
@@ -3987,7 +3987,7 @@ test("174 the history keeps no copy of the combat audit: its record has only the
   assert.strictEqual(r.hasFromSnap, "undefined");
 });
 
-test("175 the screen writes the two descriptive lines of the combat audit: startChamber writes the start line (the frame, the run and the chamber) right after creating the log, playGame writes the resume line with the frame it resumes from, and stepBack and stepForward write nothing themselves (walking through saved states leaves the log alone)", () => {
+test("175 the screen writes the two descriptive lines of the combat journal: startChamber writes the start line (the frame, the run and the chamber) right after creating the log, playGame writes the resume line with the frame it resumes from, and stepBack and stepForward write nothing themselves (walking through saved states leaves the log alone)", () => {
   const main = readSource("main.js");
   const body = (name) => {
     const at = main.indexOf("function " + name + "(");
@@ -3995,10 +3995,10 @@ test("175 the screen writes the two descriptive lines of the combat audit: start
     return main.slice(at, main.indexOf("\n}\n", at));
   };
   const start = body("startChamber");
-  assert.ok(start.indexOf("audit = createAudit();") >= 0 && start.indexOf("audit.push(combatAuditStartLine(state.frame, run.id, id))") > start.indexOf("audit = createAudit();"), "startChamber must write the start line after creating the log");
-  assert.ok(body("playGame").includes("audit.push(combatAuditResumeLine(state.frame))"), "playGame must write the resume line");
-  assert.ok(!body("stepBack").includes("audit"), "stepBack must not touch the log");
-  assert.ok(!body("stepForward").includes("audit"), "stepForward must not touch the log itself (a new step goes through stepLive, which the rules write from)");
+  assert.ok(start.indexOf("journal = createJournal();") >= 0 && start.indexOf("journal.push(combatJournalStartLine(state.frame, run.id, id))") > start.indexOf("journal = createJournal();"), "startChamber must write the start line after creating the log");
+  assert.ok(body("playGame").includes("journal.push(combatJournalResumeLine(state.frame))"), "playGame must write the resume line");
+  assert.ok(!body("stepBack").includes("journal"), "stepBack must not touch the log");
+  assert.ok(!body("stepForward").includes("journal"), "stepForward must not touch the log itself (a new step goes through stepLive, which the rules write from)");
 });
 
 // ---- Tags of exclusion (the user, 2026-11-13; step B) ----
@@ -4303,12 +4303,12 @@ test("187 the gap that the reach is compared with is counted from the exit of th
 // The same game with the plain walk over every actor instead of the index: the reference that the index must equal.
 const PLAIN_WALK = loadGame(null, { patchSim: (text) => text.replace("const byTag = tagIndex(state.actors);", "const byTag = null;") });
 
-test("188 the index by tag gives the same answer as the plain walk, tie included, and the same whole run: the same pick for every asker and tag in a crowd (a tie goes to the first in the list), and 900 frames of Chamber 2 with the combat blueprint end in the same state and the same combat audit with the index and with the plain walk", () => {
+test("188 the index by tag gives the same answer as the plain walk, tie included, and the same whole run: the same pick for every asker and tag in a crowd (a tie goes to the first in the list), and 900 frames of Chamber 2 with the combat blueprint end in the same state and the same combat journal with the index and with the plain walk", () => {
   const code = `
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const s = createChamber2State(1, 1, run.blueprint);
-    const audit = createAudit();
-    for (let i = 0; i < 900; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, audit);
+    const journal = createJournal();
+    for (let i = 0; i < 900; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, journal);
     const crowd = createChamber2State(1, 1, run.blueprint);
     const index = tagIndex(crowd.actors);
     const picks = [];
@@ -4323,22 +4323,22 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
     twins.actors[2].position = { ...twins.actors[3].position };
     twins.actors[2].radius = twins.actors[3].radius;
     const tie = [pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000)?.id, pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, tagIndex(twins.actors))?.id];
-    return { state: JSON.stringify(s), audit: audit.join("\\n"), picks, tie };
+    return { state: JSON.stringify(s), journal: journal.join("\\n"), picks, tie };
   `;
   const indexed = run(code);
   const plain = run(code, PLAIN_WALK);
   assert.ok(indexed.picks.length === 60 && indexed.picks.every(Boolean), "the index must pick what the plain walk picks");
   assert.strictEqual(indexed.tie[0], indexed.tie[1]);
   assert.strictEqual(indexed.state, plain.state);
-  assert.strictEqual(indexed.audit, plain.audit);
-  assert.ok(indexed.audit.length > 0, "the run must have fought, or the comparison proves little");
+  assert.strictEqual(indexed.journal, plain.journal);
+  assert.ok(indexed.journal.length > 0, "the run must have fought, or the comparison proves little");
 });
 
 // ---- Hitboxes and objects ----
-test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock of seed 1 takes its whole damage off the rock (a rock has no resistance: the 6 puncture of the shot is 6 health; written in damagedObjects, one line in the combat audit with the rock's name), hurts it once however many frames it stays, does nothing to a rock far from it, does nothing when its list ignores object (the same shot, the tag is what protected the rock), and a rock that broke is no longer hit; a pierce of 0 ends the hitbox on the rock", () => {
+test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock of seed 1 takes its whole damage off the rock (a rock has no resistance: the 6 puncture of the shot is 6 health; written in damagedObjects, one line in the combat journal with the rock's name), hurts it once however many frames it stays, does nothing to a rock far from it, does nothing when its list ignores object (the same shot, the tag is what protected the rock), and a rock that broke is no longer hit; a pierce of 0 ends the hitbox on the rock", () => {
   const code = (ignores, pierce, damage) => `
     const s = createChamber1State();
-    const audit = createAudit();
+    const journal = createJournal();
     const avatar = s.actors[0];
     avatar.position.x = 900; avatar.position.y = 900; // out of the way
     const name = "shot"; // Chamber 1 has no weapon: the avatar is given one by hand
@@ -4347,12 +4347,12 @@ test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock o
     spawnHitbox(s, avatar, name, 1, 0, { radius: 10, frames: 3, speed: 0, pierce: ${pierce} });
     Object.assign(s.hitboxes[0].damage, ${JSON.stringify(damage ?? null)} ?? {});
     s.hitboxes[0].position.x = ${ROCK.x}; s.hitboxes[0].position.y = ${ROCK.y};
-    for (let i = 0; i < 3; i++) step(s, { move: { x: 0, y: 0 } }, undefined, null, audit);
-    return { rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, audit: audit.slice(), hitboxes: s.hitboxes.length, struck: s.hitboxes[0]?.struck ?? null };
+    for (let i = 0; i < 3; i++) step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+    return { rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, journal: journal.slice(), hitboxes: s.hitboxes.length, struck: s.hitboxes[0]?.struck ?? null };
   `;
   const hit = run(code(null, "null"));
   assert.strictEqual(ROCK.health - hit.rock, 6, "a rock has no resistance, so the shot takes its whole 6: " + hit.rock);
-  const lines = hit.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit");
+  const lines = hit.journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit");
   assert.strictEqual(lines.length, 1, "the shot hurts the rock once, however many frames it stays");
   assert.strictEqual(lines[0].target, "rock small:0,1");
   assert.ok(Math.abs(lines[0].health - (ROCK.health - hit.rock)) < 1e-9);
@@ -4362,7 +4362,7 @@ test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock o
   assert.strictEqual(protectedRock.rock, ROCK.health, "with object in the list the rock is not hurt");
   const huge = run(code(null, "null", { puncture: 1000 }));
   assert.strictEqual(huge.rock, 0, "a rock that breaks stays at 0");
-  assert.strictEqual(huge.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit").length, 1, "a broken rock is not hit again");
+  assert.strictEqual(huge.journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit").length, 1, "a broken rock is not hit again");
   const pierced = run(code(null, "0"));
   assert.strictEqual(pierced.hitboxes, 0, "a pierce of 0 ends the hitbox on the first thing it hurts, the rock");
 });
@@ -4387,7 +4387,7 @@ test("190 a step that ends with the avatar at zero health says the mission is ab
   assert.strictEqual(result.frame, 2);
 });
 
-test("191 a step on an aborted state changes nothing: the JSON of the state is the same, the visual state has no new trace and does not age, and the audit has no new line, even with the avatar's input and a Biter on top of it", () => {
+test("191 a step on an aborted state changes nothing: the JSON of the state is the same, the visual state has no new trace and does not age, and the journal has no new line, even with the avatar's input and a Biter on top of it", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -4395,11 +4395,11 @@ test("191 a step on an aborted state changes nothing: the JSON of the state is t
     s.actors[0].health.now = 0;
     const visual = createVisual();
     visual.traces.push({ position: { x: 1, y: 2 }, radius: 3, age: 4, frames: 12 });
-    const audit = createAudit();
-    step(s, { move: { x: 0, y: 0 } }, undefined, visual, audit);
-    const state = JSON.stringify(s), traces = JSON.stringify(visual), lines = audit.length;
-    for (let i = 0; i < 5; i++) step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, visual, audit);
-    return { aborted: s.mission, same: JSON.stringify(s) === state, visualSame: JSON.stringify(visual) === traces, lines, linesAfter: audit.length };
+    const journal = createJournal();
+    step(s, { move: { x: 0, y: 0 } }, undefined, visual, journal);
+    const state = JSON.stringify(s), traces = JSON.stringify(visual), lines = journal.length;
+    for (let i = 0; i < 5; i++) step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, visual, journal);
+    return { aborted: s.mission, same: JSON.stringify(s) === state, visualSame: JSON.stringify(visual) === traces, lines, linesAfter: journal.length };
   `, QUIET);
   assert.strictEqual(result.aborted, "aborted");
   assert.strictEqual(result.same, true);
@@ -4462,20 +4462,20 @@ test("193 recordFrame does not record a state that did not advance: recording th
   assert.strictEqual(result.unchanged, true);
   assert.strictEqual(result.lastMission, "aborted");
 });
-test("194 a body slam does not hurt an actor with no health, as a hitbox does: the avatar dashes into a Biter at 0 health and the audit has no line with that Biter as target; the same scene with 1 health has one such line", () => {
+test("194 a body slam does not hurt an actor with no health, as a hitbox does: the avatar dashes into a Biter at 0 health and the journal has no line with that Biter as target; the same scene with 1 health has one such line", () => {
   const result = run(`
     ${ALONE_BITERS}
     ${ARMED}
     const dashInto = (health) => {
-      const audit = createAudit();
+      const journal = createJournal();
       const s = aloneBiters(0);
       const b = s.actors[1];
       b.position.x = 16 + b.radius + 2; b.position.y = 0;
       b.attacks.bite.windupFrames = 0;
       b.health.now = health;
       s.actors[0].position.x = 0; s.actors[0].position.y = 0;
-      step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, null, audit);
-      return audit.map((line) => JSON.parse(line)).filter((entry) => entry.target === b.id);
+      step(s, { move: { x: 1, y: 0 }, dash: true }, undefined, null, journal);
+      return journal.map((line) => JSON.parse(line)).filter((entry) => entry.target === b.id);
     };
     return { dead: dashInto(0), alive: dashInto(1) };
   `, QUIET);
@@ -4484,13 +4484,13 @@ test("194 a body slam does not hurt an actor with no health, as a hitbox does: t
 });
 
 // ---- one function lands a hit (base plan P6) ----
-test("199 landHit on an actor: the shield takes its 3 first and the health the other 2 (blunt 5 against no resistance), one audit line says shield 3 and health 2 with the source and the attack, and the actor is not marked broken", () => {
+test("199 landHit on an actor: the shield takes its 3 first and the health the other 2 (blunt 5 against no resistance), one journal line says shield 3 and health 2 with the source and the attack, and the actor is not marked broken", () => {
   const result = run(`
     const s = createChamber1State();
-    const audit = createAudit();
+    const journal = createJournal();
     const target = { id: "target", health: { now: 10, max: 10 }, shield: { now: 3, max: 3, quiet: 7, resistance: {} }, resistance: {} };
-    const landed = landHit(s, audit, "source", "poke", { blunt: 5 }, target);
-    return { landed, shield: target.shield.now, quiet: target.shield.quiet, health: target.health.now, lines: audit.map((line) => JSON.parse(line)) };
+    const landed = landHit(s, journal, "source", "poke", { blunt: 5 }, target);
+    return { landed, shield: target.shield.now, quiet: target.shield.quiet, health: target.health.now, lines: journal.map((line) => JSON.parse(line)) };
   `);
   const r = plain(result);
   assert.strictEqual(r.landed.resolved.total, 5);
@@ -4501,22 +4501,22 @@ test("199 landHit on an actor: the shield takes its 3 first and the health the o
   assert.deepStrictEqual([r.lines[0].source, r.lines[0].attack, r.lines[0].target, r.lines[0].total, r.lines[0].shield, r.lines[0].health], ["source", "poke", "target", 5, 3, 2]);
 });
 
-test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6 and is not broken, a second of 6 takes it to 0 and is broken, and each hit writes one audit line with all of its total on health; with no audit the hit still lands (another rock goes from 10 to 9) and no line is written", () => {
+test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6 and is not broken, a second of 6 takes it to 0 and is broken, and each hit writes one journal line with all of its total on health; with no journal the hit still lands (another rock goes from 10 to 9) and no line is written", () => {
   const result = run(`
     const s = createChamber1State();
-    const audit = createAudit();
+    const journal = createJournal();
     const rock = { type: "rock", layer: "small", square: { x: 0, y: 1 }, health: { now: 10, max: 10 }, resistance: {} };
-    const first = landHit(s, audit, "source", "poke", { blunt: 4 }, rock);
+    const first = landHit(s, journal, "source", "poke", { blunt: 4 }, rock);
     const afterFirst = { ...s.damagedObjects };
-    const second = landHit(s, audit, "source", "poke", { blunt: 6 }, rock);
+    const second = landHit(s, journal, "source", "poke", { blunt: 6 }, rock);
     const afterSecond = { ...s.damagedObjects };
     const quiet = landHit(s, null, "source", "poke", { blunt: 1 }, { ...rock, square: { x: 5, y: 5 } });
-    return { first, second, quiet, quietRock: s.damagedObjects["small:5,5"], afterFirst, afterSecond, lines: audit.map((line) => JSON.parse(line)) };
+    return { first, second, quiet, quietRock: s.damagedObjects["small:5,5"], afterFirst, afterSecond, lines: journal.map((line) => JSON.parse(line)) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.afterFirst, { "small:0,1": 6 });
   assert.deepStrictEqual(r.afterSecond, { "small:0,1": 0 });
-  assert.strictEqual(r.quietRock, 9, "with no audit the hit still lands: the quiet rock goes from 10 to 9");
+  assert.strictEqual(r.quietRock, 9, "with no journal the hit still lands: the quiet rock goes from 10 to 9");
   assert.deepStrictEqual([r.first.broken, r.second.broken, r.quiet.broken], [false, true, false]);
   assert.deepStrictEqual(r.first.taken, { shield: 0, health: 4 });
   assert.strictEqual(r.lines.length, 2);
@@ -4541,16 +4541,16 @@ test("201 pickTarget measures \"closest\" to the edge of the body (the user, 202
   assert.strictEqual(r.tiePick, r.ids[1]);
 });
 
-test("202 a hit that breaks the shield (the user, 2026-11-14): blunt 50 on a body of 30 points with a shield of 10 left and 11 points; with the shield's points the hit is 35.46, the shield takes its 10, and the share that did not fit (71.8% of the 50, so 35.90) is tested again against the body alone (30 points) and takes 27.62 of health, not 25.46; the audit line carries the overflow; a hit the shield holds whole is as before, with no overflow", () => {
+test("202 a hit that breaks the shield (the user, 2026-11-14): blunt 50 on a body of 30 points with a shield of 10 left and 11 points; with the shield's points the hit is 35.46, the shield takes its 10, and the share that did not fit (71.8% of the 50, so 35.90) is tested again against the body alone (30 points) and takes 27.62 of health, not 25.46; the journal line carries the overflow; a hit the shield holds whole is as before, with no overflow", () => {
   const result = run(`
     const s = createChamber1State();
-    const audit = createAudit();
+    const journal = createJournal();
     const make = (shieldNow) => ({ id: "target", health: { now: 100, max: 100 }, shield: { now: shieldNow, max: 40, quiet: 7, resistance: { blunt: 11 } }, resistance: { blunt: 30 } });
     const broken = make(10);
-    const breaking = landHit(s, audit, "source", "poke", { blunt: 50 }, broken);
+    const breaking = landHit(s, journal, "source", "poke", { blunt: 50 }, broken);
     const holding = make(40);
-    const held = landHit(s, audit, "source", "poke", { blunt: 50 }, holding);
-    return { breaking, broken, held, holding, lines: audit.map((line) => JSON.parse(line)) };
+    const held = landHit(s, journal, "source", "poke", { blunt: 50 }, holding);
+    return { breaking, broken, held, holding, lines: journal.map((line) => JSON.parse(line)) };
   `);
   const r = plain(result);
   const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
@@ -4581,15 +4581,15 @@ test("203 resistance points that are not finite are refused when the definitions
   assert.doesNotThrow(() => loadGame(null, { shield: true }));
 });
 
-// ---- The audit says what an object really lost (issue 29) ----
-test("204 an overkill on a Rock writes in the combat audit only the health the Rock had: a Rock of 10 health hit by blunt 30 through landHit writes total 30 and health 10, ends at 0 and broken; a hit of 4 on a fresh Rock writes health 4, the whole total", () => {
+// ---- The journal says what an object really lost (issue 29) ----
+test("204 an overkill on a Rock writes in the combat journal only the health the Rock had: a Rock of 10 health hit by blunt 30 through landHit writes total 30 and health 10, ends at 0 and broken; a hit of 4 on a fresh Rock writes health 4, the whole total", () => {
   const result = run(`
     const s = createChamber1State();
-    const audit = createAudit();
+    const journal = createJournal();
     const rock = (x) => ({ type: "rock", layer: "small", square: { x, y: 1 }, health: { now: 10, max: 10 }, resistance: {} });
-    const over = landHit(s, audit, "source", "poke", { blunt: 30 }, rock(0));
-    const small = landHit(s, audit, "source", "poke", { blunt: 4 }, rock(7));
-    return { over: { taken: over.taken, broken: over.broken }, small: small.taken, left: s.damagedObjects["small:0,1"], lines: audit.map((line) => JSON.parse(line)) };
+    const over = landHit(s, journal, "source", "poke", { blunt: 30 }, rock(0));
+    const small = landHit(s, journal, "source", "poke", { blunt: 4 }, rock(7));
+    return { over: { taken: over.taken, broken: over.broken }, small: small.taken, left: s.damagedObjects["small:0,1"], lines: journal.map((line) => JSON.parse(line)) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.lines.map((line) => [line.total, line.health]), [[30, 10], [4, 4]]);
@@ -4599,19 +4599,19 @@ test("204 an overkill on a Rock writes in the combat audit only the health the R
 });
 
 // ---- One rule: a target with no health takes no hit (issue 32) ----
-test("205 a target with no health takes no hit, by one rule asked in landHit (canTakeHit): landHit twice on the same Rock with an overkill lands once (one audit line, broken once; the second says landed false and broken false), and landHit on a Biter at 0 health writes no line and takes nothing; a Biter with health is hit", () => {
+test("205 a target with no health takes no hit, by one rule asked in landHit (canTakeHit): landHit twice on the same Rock with an overkill lands once (one journal line, broken once; the second says landed false and broken false), and landHit on a Biter at 0 health writes no line and takes nothing; a Biter with health is hit", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
-    const audit = createAudit();
+    const journal = createJournal();
     const rock = { type: "rock", layer: "small", square: { x: 0, y: 1 }, health: { now: 10, max: 10 }, resistance: {} };
-    const first = landHit(s, audit, "source", "poke", { blunt: 30 }, rock);
-    const second = landHit(s, audit, "source", "poke", { blunt: 30 }, rock);
+    const first = landHit(s, journal, "source", "poke", { blunt: 30 }, rock);
+    const second = landHit(s, journal, "source", "poke", { blunt: 30 }, rock);
     const biter = s.actors[1];
-    const alive = landHit(s, audit, "source", "poke", { blunt: 1 }, biter).landed;
+    const alive = landHit(s, journal, "source", "poke", { blunt: 1 }, biter).landed;
     biter.health.now = 0;
-    const dead = landHit(s, audit, "source", "poke", { blunt: 1 }, biter);
-    return { first: [first.landed, first.broken], second: [second.landed, second.broken], alive, dead: [dead.landed, dead.taken], health: biter.health.now, lines: audit.length };
+    const dead = landHit(s, journal, "source", "poke", { blunt: 1 }, biter);
+    return { first: [first.landed, first.broken], second: [second.landed, second.broken], alive, dead: [dead.landed, dead.taken], health: biter.health.now, lines: journal.length };
   `, QUIET);
   const r = plain(result);
   assert.deepStrictEqual(r.first, [true, true]);
@@ -4706,7 +4706,7 @@ test("208 the scene of issue 47, with the user's rule (2026-11-15: things with n
 });
 
 // ---- The avatar's death stops the world (issue 28) ----
-test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the audit has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
+test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the journal has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
@@ -4723,17 +4723,17 @@ test("209 the avatar's death stops the world (issue 28, the scene of finding R2.
     first.position.x = body + first.radius + 4; first.position.y = -6;
     second.position.x = body + second.radius + 4; second.position.y = 6;
     const magazines = avatar.weapons.map((weapon) => weapon.magazine);
-    const audit = createAudit();
-    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
-    const after = JSON.stringify(s), lines = audit.length;
-    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    const journal = createJournal();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, journal);
+    const after = JSON.stringify(s), lines = journal.length;
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, journal);
     return {
       mission: s.mission, frame: s.frame, health: avatar.health.now,
       first: first.health.now, second: second.health.now,
       hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
       swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
-      audit: audit.slice(0, lines).map((line) => JSON.parse(line)),
-      same: JSON.stringify(s) === after, linesAfter: audit.length, lines,
+      journal: journal.slice(0, lines).map((line) => JSON.parse(line)),
+      same: JSON.stringify(s) === after, linesAfter: journal.length, lines,
     };
   `, QUIET);
   const r = plain(result);
@@ -4743,16 +4743,16 @@ test("209 the avatar's death stops the world (issue 28, the scene of finding R2.
   assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born after the death");
   assert.deepStrictEqual(r.magazinesAfter, r.magazines, "no round is spent");
   assert.deepStrictEqual(r.swords, ["windup 1"], "the sword did not swing");
-  assert.strictEqual(r.lines, 2, JSON.stringify(r.audit));
-  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["avatar_1 > biter_0", "biter_0 > avatar_1"], "the audit ends on the contact that killed, both sides of it");
-  assert.strictEqual(r.audit[1].health, 0.01, "the last line is the hit that took the avatar's last 0.01");
+  assert.strictEqual(r.lines, 2, JSON.stringify(r.journal));
+  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target), ["avatar_1 > biter_0", "biter_0 > avatar_1"], "the journal ends on the contact that killed, both sides of it");
+  assert.strictEqual(r.journal[1].health, 0.01, "the last line is the hit that took the avatar's last 0.01");
   assert.strictEqual(r.mission, "aborted");
   assert.strictEqual(r.frame, 1);
   assert.strictEqual(r.same, true, "the next step changes nothing");
   assert.strictEqual(r.linesAfter, 2, "the next step writes no line");
 });
 
-test("210 the avatar's death in a contact with an object stops the world too: the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into the rock of seed 1 at 99,456 while a Biter chases it from 200 px away; the rock's slam (4.31 after resistance) kills it and its own slam (15.5) still breaks the rock of 10 in the same contact; then the Biter does not move (same place, speed 0), no shot is fired and no sword swings, the audit has only the two lines of that contact, and the mission is aborted", () => {
+test("210 the avatar's death in a contact with an object stops the world too: the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into the rock of seed 1 at 99,456 while a Biter chases it from 200 px away; the rock's slam (4.31 after resistance) kills it and its own slam (15.5) still breaks the rock of 10 in the same contact; then the Biter does not move (same place, speed 0), no shot is fired and no sword swings, the journal has only the two lines of that contact, and the mission is aborted", () => {
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
@@ -4766,22 +4766,22 @@ test("210 the avatar's death in a contact with an object stops the world too: th
     biter.position.x = avatar.position.x; biter.position.y = avatar.position.y - 200; biter.ai.phase = "chase";
     const before = JSON.stringify({ position: biter.position, velocity: biter.move.velocity });
     const magazines = avatar.weapons.map((weapon) => weapon.magazine);
-    const audit = createAudit();
-    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    const journal = createJournal();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, journal);
     return {
       health: avatar.health.now, rock: s.damagedObjects["${ROCK.key}"], mission: s.mission,
       biterStill: JSON.stringify({ position: biter.position, velocity: biter.move.velocity }) === before,
       hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
       swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
-      audit: audit.map((line) => JSON.parse(line)),
+      journal: journal.map((line) => JSON.parse(line)),
     };
   `);
   const r = plain(result);
   assert.strictEqual(r.health, 0);
   assert.strictEqual(r.rock, 0, "inside the contact that kills, the avatar's slam still lands and breaks the rock");
-  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["rock small:0,1 > avatar_1", "avatar_1 > rock small:0,1"]);
-  assert.ok(Math.abs(r.audit[0].total - 4.3076923076923075) < 1e-9 && r.audit[0].health === 0.01, "the rock's slam: 5.6 less 23% = 4.31, of which only the last 0.01 was health");
-  assert.strictEqual(r.audit[1].total, 15.5);
+  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target), ["rock small:0,1 > avatar_1", "avatar_1 > rock small:0,1"]);
+  assert.ok(Math.abs(r.journal[0].total - 4.3076923076923075) < 1e-9 && r.journal[0].health === 0.01, "the rock's slam: 5.6 less 23% = 4.31, of which only the last 0.01 was health");
+  assert.strictEqual(r.journal[1].total, 15.5);
   assert.strictEqual(r.biterStill, true, "the Biter after the avatar in the list does not move");
   assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born");
   assert.deepStrictEqual(r.magazinesAfter, r.magazines);
@@ -4789,7 +4789,7 @@ test("210 the avatar's death in a contact with an object stops the world too: th
   assert.strictEqual(r.mission, "aborted");
 });
 
-test("211 the avatar's death by a hitbox stops the world inside stage 5: the avatar of the combat blueprint at 0.01 health (the test game has no shield), its sword one frame from the blow, and a Biter 2 px from it whose bite strikes at once (windup 0); the bite is born first and kills it (6 of damage, 0.01 of health), the sword's cone is born after it in the same step and does not hurt the Biter (still 30), the audit has only the bite's line, the bite that killed is gone from the hitboxes as before, the cone is left as it was born (one frame left, nothing struck), and the mission is aborted", () => {
+test("211 the avatar's death by a hitbox stops the world inside stage 5: the avatar of the combat blueprint at 0.01 health (the test game has no shield), its sword one frame from the blow, and a Biter 2 px from it whose bite strikes at once (windup 0); the bite is born first and kills it (6 of damage, 0.01 of health), the sword's cone is born after it in the same step and does not hurt the Biter (still 30), the journal has only the bite's line, the bite that killed is gone from the hitboxes as before, the cone is left as it was born (one frame left, nothing struck), and the mission is aborted", () => {
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
@@ -4801,18 +4801,18 @@ test("211 the avatar's death by a hitbox stops the world inside stage 5: the ava
     for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
     biter.position.x = avatar.bodyRadius + biter.radius + 2; biter.position.y = 0;
     biter.ai.phase = "chase"; biter.attacks.bite.windupFrames = 0; biter.health.now = 30; biter.health.max = 30;
-    const audit = createAudit();
-    step(s, { move: { x: 0, y: 0 } }, bp, null, audit);
+    const journal = createJournal();
+    step(s, { move: { x: 0, y: 0 } }, bp, null, journal);
     return {
       health: avatar.health.now, biter: biter.health.now, mission: s.mission,
       hitboxes: s.hitboxes.map((hitbox) => ({ attack: hitbox.attack, framesLeft: hitbox.framesLeft, struck: hitbox.struck })),
-      audit: audit.map((line) => JSON.parse(line)),
+      journal: journal.map((line) => JSON.parse(line)),
     };
   `, QUIET);
   const r = plain(result);
   assert.strictEqual(r.health, 0);
-  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter_0 > avatar_1 bite"]);
-  assert.strictEqual(r.audit[0].health, 0.01);
+  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter_0 > avatar_1 bite"]);
+  assert.strictEqual(r.journal[0].health, 0.01);
   assert.strictEqual(r.biter, 30, "the sword's cone, born after the bite, hurts nobody");
   assert.ok(!r.hitboxes.some((hitbox) => hitbox.attack === "bite"), "the bite that killed ended its turn and is gone, as before");
   assert.deepStrictEqual(r.hitboxes.filter((hitbox) => hitbox.attack === "sword-arm"), [{ attack: "sword-arm", framesLeft: 1, struck: [] }], "the cone is left as it was born");
@@ -4843,7 +4843,7 @@ const FIRST_SCENE = (biterX, x0, { pierce = 0, ignores = null, struck = null, fr
   const { s } = armed(0);
   const [avatar, biter] = s.actors;
   biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
-  const audit = createAudit();
+  const journal = createJournal();
   spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
   const bullet = s.hitboxes[0];
   bullet.position.x = ${x0}; bullet.position.y = 428;
@@ -4851,19 +4851,19 @@ const FIRST_SCENE = (biterX, x0, { pierce = 0, ignores = null, struck = null, fr
   ${struck ? "bullet.struck = " + JSON.stringify(struck) + ";" : ""}
   const frames = [];
   for (let i = 0; i < ${frames}; i++) {
-    resolveHitboxes(s, audit);
-    frames.push({ targets: audit.map((line) => JSON.parse(line).target), biter: biter.health.now, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ x: h.position.x, pierceLeft: h.pierceLeft, struck: [...h.struck] })) });
+    resolveHitboxes(s, journal);
+    frames.push({ targets: journal.map((line) => JSON.parse(line).target), biter: biter.health.now, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ x: h.position.x, pierceLeft: h.pierceLeft, struck: [...h.struck] })) });
   }
   return { hits: bullet.hits, frames };
 `;
 
-test("213 a bullet hits only the first thing its path meets in the frame (the scene of finding R3.1): a pierce 0 bullet of the repeater (hits first) going right from x 78 to 86 along y 428 first touches the Rock of seed 1 at x 79.71 and a Biter standing just above the Rock at x 83.39, both in the same frame: the Rock takes the hit (one audit line, its 10 health gone), the Biter is untouched (30), and the bullet ends", () => {
+test("213 a bullet hits only the first thing its path meets in the frame (the scene of finding R3.1): a pierce 0 bullet of the repeater (hits first) going right from x 78 to 86 along y 428 first touches the Rock of seed 1 at x 79.71 and a Biter standing just above the Rock at x 83.39, both in the same frame: the Rock takes the hit (one journal line, its 10 health gone), the Biter is untouched (30), and the bullet ends", () => {
   const r = plain(run(FIRST_SCENE(100, 78)));
   assert.strictEqual(r.hits, "first", "the bullet carries the key of its attack");
   assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [] });
 });
 
-test("214 the mirror of test 213: with the Biter at x 95 the bullet going right from x 76 to 84 first touches the Biter (at x 78.39) and the Rock after it (at 79.71), both in the same frame: the Biter takes the hit (one audit line, 30 - 10 = 20 health: it resists no puncture), the Rock is untouched (10), and the bullet ends", () => {
+test("214 the mirror of test 213: with the Biter at x 95 the bullet going right from x 76 to 84 first touches the Biter (at x 78.39) and the Rock after it (at 79.71), both in the same frame: the Biter takes the hit (one journal line, 30 - 10 = 20 health: it resists no puncture), the Rock is untouched (10), and the bullet ends", () => {
   const r = plain(run(FIRST_SCENE(95, 76)));
   assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] });
 });
@@ -4875,7 +4875,7 @@ test("215 a bullet with pierce 1 that touches two things in one frame hits only 
   assert.deepStrictEqual(r.frames[2], r.frames[1]);
 });
 
-test("216 what the bullet cannot hit never counts as first, and it passes it: in the scene of test 213 (the Rock first on the path), with the Rock already struck by this bullet, or with object in its ignored tags, the Biter behind it takes the hit (20) and the bullet ends, the Rock untouched (10); and a Biter at 0 health first on a path (at x 129, met at x 111) is passed for the living Biter met after it (at x 117.03, in the same frame from x 110 to 118): only the living one has an audit line", () => {
+test("216 what the bullet cannot hit never counts as first, and it passes it: in the scene of test 213 (the Rock first on the path), with the Rock already struck by this bullet, or with object in its ignored tags, the Biter behind it takes the hit (20) and the bullet ends, the Rock untouched (10); and a Biter at 0 health first on a path (at x 129, met at x 111) is passed for the living Biter met after it (at x 117.03, in the same frame from x 110 to 118): only the living one has a journal line", () => {
   for (const options of [{ struck: ["rock " + ROCK.key] }, { ignores: ["self", "ally", "object"] }]) {
     const r = plain(run(FIRST_SCENE(100, 78, options)));
     assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] }, JSON.stringify(options));
@@ -4886,16 +4886,16 @@ test("216 what the bullet cannot hit never counts as first, and it passes it: in
     const [avatar, alive, corpse] = s.actors;
     alive.radius = 12; alive.position.x = 132; alive.position.y = 10;
     corpse.radius = 12; corpse.position.x = 129; corpse.position.y = 0; corpse.health.now = 0;
-    const audit = createAudit();
+    const journal = createJournal();
     spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
     s.hitboxes[0].position.x = 110; s.hitboxes[0].position.y = 0;
-    resolveHitboxes(s, audit);
-    return { targets: audit.map((line) => JSON.parse(line).target), alive: alive.health.now, corpse: corpse.health.now, bullets: s.hitboxes.length };
+    resolveHitboxes(s, journal);
+    return { targets: journal.map((line) => JSON.parse(line).target), alive: alive.health.now, corpse: corpse.health.now, bullets: s.hitboxes.length };
   `));
   assert.deepStrictEqual(dead, { targets: ["biter_0"], alive: 20, corpse: 0, bullets: 0 });
 });
 
-test("217 a sword's cone hits all it touches (hits all): the cone of the sword-arm of the combat blueprint, born at the avatar at 39,456 pointing right (reach 90, 90 degrees), over two Biters (radius 10, at 60,440 and 60,472) and the Rock of seed 1 at 99,456, writes three audit lines, one for each (the Biters in list order, then the Rock), each hit once", () => {
+test("217 a sword's cone hits all it touches (hits all): the cone of the sword-arm of the combat blueprint, born at the avatar at 39,456 pointing right (reach 90, 90 degrees), over two Biters (radius 10, at 60,440 and 60,472) and the Rock of seed 1 at 99,456, writes three journal lines, one for each (the Biters in list order, then the Rock), each hit once", () => {
   const r = plain(run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const s = createChamber2State(1, 1, run.blueprint);
@@ -4905,12 +4905,12 @@ test("217 a sword's cone hits all it touches (hits all): the cone of the sword-a
     a.radius = 10; a.position.x = 60; a.position.y = 440;
     b.radius = 10; b.position.x = 60; b.position.y = 472;
     const attack = avatar.attacks["sword-arm"];
-    const audit = createAudit();
+    const journal = createJournal();
     spawnHitbox(s, avatar, "sword-arm", 1, 0, { radius: 0, frames: 1, speed: 0, pierce: null, cone: { reach: attack.reach, cosHalf: attack.cosHalf, sinHalf: attack.sinHalf } });
     const hits = s.hitboxes[0].hits;
-    resolveHitboxes(s, audit);
-    resolveHitboxes(s, audit); // the cone is gone after its one frame: nothing more
-    return { hits, targets: audit.map((line) => JSON.parse(line).target) };
+    resolveHitboxes(s, journal);
+    resolveHitboxes(s, journal); // the cone is gone after its one frame: nothing more
+    return { hits, targets: journal.map((line) => JSON.parse(line).target) };
   `));
   assert.deepStrictEqual(r, { hits: "all", targets: ["biter_0", "biter_1", "rock small:0,1"] });
 });
@@ -4921,11 +4921,11 @@ test("218 a hitbox that hits first and did not move in the frame met everything 
     const { s } = armed(0);
     const [avatar, biter] = s.actors;
     biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
-    const audit = createAudit();
+    const journal = createJournal();
     spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 0, pierce: 0 });
     s.hitboxes[0].position.x = 80; s.hitboxes[0].position.y = 428;
-    resolveHitboxes(s, audit);
-    return audit.map((line) => JSON.parse(line).target);
+    resolveHitboxes(s, journal);
+    return journal.map((line) => JSON.parse(line).target);
   `));
   assert.deepStrictEqual(still(85), ["biter_0"]);
   assert.deepStrictEqual(still(500), ["rock small:0,1"]);
@@ -4939,21 +4939,21 @@ test("219 how a hitbox hits is checked on load: without its hits, the bite of th
   refused('        hits: "first", // how its bullets hit', '        hits: "some", // how its bullets hit', /hits of the weapon of the part repeater-arm must be one of first, all, and it is "some"/);
 });
 
-test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three scenes of finding R5.1): landHit with an empty packet writes one audit line with total 0 and the totals count it as 1 hit and 0 damage; a bullet whose damage is 0 marks the Rock it touches as struck, spends its pierce (1 left becomes 0) and, with pierce 0, ends on the Rock, which keeps its 10 health; a hit of 0 on a target with a shield leaves the shield's quiet at 7, and a hit of 1 blunt sets it to 0; and the real case, the avatar's body slam into a Branch (weight 0), writes the Branch's slam of 0 and then the avatar's hit", () => {
-  // Scene 1: the audit.
-  const audit = plain(run(`
+test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three scenes of finding R5.1): landHit with an empty packet writes one journal line with total 0 and the totals count it as 1 hit and 0 damage; a bullet whose damage is 0 marks the Rock it touches as struck, spends its pierce (1 left becomes 0) and, with pierce 0, ends on the Rock, which keeps its 10 health; a hit of 0 on a target with a shield leaves the shield's quiet at 7, and a hit of 1 blunt sets it to 0; and the real case, the avatar's body slam into a Branch (weight 0), writes the Branch's slam of 0 and then the avatar's hit", () => {
+  // Scene 1: the journal.
+  const journal = plain(run(`
     const s = createChamber1State();
-    const lines = createAudit();
+    const lines = createJournal();
     const target = { id: "target", health: { now: 10, max: 10 }, resistance: {} };
     const result = landHit(s, lines, "source", "poke", {}, target);
-    return { landed: result.landed, total: result.resolved.total, health: target.health.now, lines: lines.slice(), totals: combatAuditTotals(lines) };
+    return { landed: result.landed, total: result.resolved.total, health: target.health.now, lines: lines.slice(), totals: combatJournalTotals(lines) };
   `));
-  assert.strictEqual(audit.landed, true);
-  assert.strictEqual(audit.health, 10, "nothing was taken");
-  assert.strictEqual(audit.lines.length, 1, "one line");
-  const line = JSON.parse(audit.lines[0]);
+  assert.strictEqual(journal.landed, true);
+  assert.strictEqual(journal.health, 10, "nothing was taken");
+  assert.strictEqual(journal.lines.length, 1, "one line");
+  const line = JSON.parse(journal.lines[0]);
   assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.parts, line.total, line.shield, line.health], ["hit", "source", "poke", "target", [], 0, 0, 0]);
-  assert.deepStrictEqual(audit.totals, { "source:poke": { hits: 1, total: 0, shield: 0, health: 0 } });
+  assert.deepStrictEqual(journal.totals, { "source:poke": { hits: 1, total: 0, shield: 0, health: 0 } });
 
   // Scene 2: a bullet of 0 on the Rock of seed 1 (radius 28 at 99,456, 10 health), from x 78 to 86 along y 428, the Biter far away.
   const bullet = (pierce) => plain(run(`
@@ -4961,7 +4961,7 @@ test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three s
     const { s } = armed(0);
     const [avatar, biter] = s.actors;
     biter.position.x = 500; biter.position.y = 408;
-    const lines = createAudit();
+    const lines = createJournal();
     spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
     const hitbox = s.hitboxes[0];
     hitbox.damage = { puncture: 0 }; // a packet that resolves to 0
@@ -4996,7 +4996,7 @@ test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three s
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber1State();
-    const lines = createAudit();
+    const lines = createJournal();
     const p = s.actors[0];
     p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
     p.move.velocity.x = 3; p.move.velocity.y = 0;
@@ -5008,14 +5008,14 @@ test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three s
   assert.deepStrictEqual([branch.lines[1].source, branch.lines[1].target], ["avatar_1", "branch " + branch.name], "then the avatar's hit");
 });
 
-test("221 the aborted line of the combat audit is { frame, event: \"aborted\" } in that order, and the totals skip it: the text of combatAuditAbortedLine(37) is exactly '{\"frame\":37,\"event\":\"aborted\"}', and the totals of a log with one hit and the aborted line are the same as the totals of the log with only the hit", () => {
+test("221 the aborted line of the combat journal is { frame, event: \"aborted\" } in that order, and the totals skip it: the text of combatJournalAbortedLine(37) is exactly '{\"frame\":37,\"event\":\"aborted\"}', and the totals of a log with one hit and the aborted line are the same as the totals of the log with only the hit", () => {
   const result = run(`
     const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
-    const hit = combatAuditHitLine(12, "biter_3", "bite", "avatar_1", { parts: [part], total: 8 }, { shield: 3, health: 5 });
+    const hit = combatJournalHitLine(12, "biter_3", "bite", "avatar_1", { parts: [part], total: 8 }, { shield: 3, health: 5 });
     return {
-      text: combatAuditAbortedLine(37),
-      withAborted: combatAuditTotals([hit, combatAuditAbortedLine(37)]),
-      without: combatAuditTotals([hit]),
+      text: combatJournalAbortedLine(37),
+      withAborted: combatJournalTotals([hit, combatJournalAbortedLine(37)]),
+      without: combatJournalTotals([hit]),
     };
   `);
   const r = plain(result);
@@ -5025,7 +5025,7 @@ test("221 the aborted line of the combat audit is { frame, event: \"aborted\" } 
 
 // The scene of tests 222 to 225 (issue 42): the avatar with 0.01 health (no shield in the test game) and one Biter 200 px away that
 // chases it and bites. It dies a few frames in, by the rules alone. The history is recorded as the screen does (createHistory,
-// recordFrame after each step), the audit is written as the screen writes it (a start line, the hit lines of step, an aborted line
+// recordFrame after each step), the journal is written as the screen writes it (a start line, the hit lines of step, an aborted line
 // right after the step in which the mission became aborted, a resume line when play goes on from a past frame).
 const DEATH_HISTORY = `
   ${ALONE_BITERS}
@@ -5035,14 +5035,14 @@ const DEATH_HISTORY = `
     s.actors[0].health.now = 0.01;
     s.actors[1].position.x = s.actors[0].position.x + 200; s.actors[1].position.y = s.actors[0].position.y;
     const h = createHistory(s, createRun(1).blueprint);
-    const audit = createAudit();
-    audit.push(combatAuditStartLine(s.frame, 1, 2));
+    const journal = createJournal();
+    journal.push(combatJournalStartLine(s.frame, 1, 2));
     for (let i = 0; i < 300 && s.mission === "running"; i++) {
-      step(s, IDLE, undefined, null, audit);
+      step(s, IDLE, undefined, null, journal);
       recordFrame(h, s, IDLE);
     }
-    audit.push(combatAuditAbortedLine(s.frame));
-    return { s, h, audit };
+    journal.push(combatJournalAbortedLine(s.frame));
+    return { s, h, journal };
   }
 `;
 
@@ -5117,15 +5117,15 @@ test("224 crossCheck is clean over a history that ends in the aborted snap and o
 test("225 the combat log only grows when the user goes back and resumes (issue 42, with the lines of issue 58): a log of the death run ends in the aborted line; going back two snaps and playing on cuts the history (discardAfter) but takes nothing out of the log, and the resume line is pushed after the aborted one with the frame it resumed from, which is lower; the lines written before are the same text as before, and the log of that run reads: start, hits, aborted, resume", () => {
   const result = run(`
     ${DEATH_HISTORY}
-    const { s, h, audit } = deadHistory();
-    const before = audit.slice();
+    const { s, h, journal } = deadHistory();
+    const before = journal.slice();
     const kept = h.snaps.length - 3;
     discardAfter(h, kept);
     const live = stateFromSnap(h, kept);
-    audit.push(combatAuditResumeLine(live.frame));
-    for (let i = 0; i < 5; i++) { step(live, IDLE, undefined, null, audit); recordFrame(h, live, IDLE); }
-    const events = audit.map((text) => JSON.parse(text)).map((entry) => entry.event);
-    return { before, after: audit.slice(0, before.length), events, beforeLength: before.length, resumeFrame: live.frame, abortedFrame: s.frame, snapFrame: h.snaps[kept].frame, totals: combatAuditTotals(before) };
+    journal.push(combatJournalResumeLine(live.frame));
+    for (let i = 0; i < 5; i++) { step(live, IDLE, undefined, null, journal); recordFrame(h, live, IDLE); }
+    const events = journal.map((text) => JSON.parse(text)).map((entry) => entry.event);
+    return { before, after: journal.slice(0, before.length), events, beforeLength: before.length, resumeFrame: live.frame, abortedFrame: s.frame, snapFrame: h.snaps[kept].frame, totals: combatJournalTotals(before) };
   `, QUIET);
   assert.deepStrictEqual(result.after, result.before, "the lines written before are kept, in the same order");
   const start = result.events.indexOf("start"), aborted = result.events.indexOf("aborted"), resume = result.events.indexOf("resume");
@@ -5138,14 +5138,14 @@ test("225 the combat log only grows when the user goes back and resumes (issue 4
   assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
 });
 
-test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes one audit line, a hit of total 0 from the Biter on the Branch (I28: everything that breaks a weightless thing writes a line; its body ignores `object`, so the hit is an empty packet), is not pushed or stopped and keeps its speed and its place", () => {
+test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes one journal line, a hit of total 0 from the Biter on the Branch (I28: everything that breaks a weightless thing writes a line; its body ignores `object`, so the hit is an empty packet), is not pushed or stopped and keeps its speed and its place", () => {
   const result = plain(run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber2State(1, 1);
     const biter = s.actors.find((actor) => actor.id === "biter_0");
     s.actors = [s.actors[0], biter];
-    const lines = createAudit();
+    const lines = createJournal();
     biter.position.x = branch.position.x - (biter.radius + branch.radius) + 1; biter.position.y = branch.position.y;
     const place = { x: biter.position.x, y: biter.position.y };
     biter.move.velocity.x = 3; biter.move.velocity.y = 0;
@@ -5165,18 +5165,18 @@ test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the us
   assert.strictEqual(result.biterHealth, result.biterMax, "the Biter loses nothing");
 });
 
-test("227 breaking a weightless Branch still writes the audit lines (issue 47, hits of 0 are hits, issue 46): the avatar walking into an isolated Branch of seed 1 writes exactly two lines in this order, the Branch's slam on the avatar (bodySlam, total 0, the avatar loses nothing) and then the avatar's hit on the Branch (target the Branch, health taken at most its 1), the totals count both as hits, and the Branch is broken", () => {
+test("227 breaking a weightless Branch still writes the journal lines (issue 47, hits of 0 are hits, issue 46): the avatar walking into an isolated Branch of seed 1 writes exactly two lines in this order, the Branch's slam on the avatar (bodySlam, total 0, the avatar loses nothing) and then the avatar's hit on the Branch (target the Branch, health taken at most its 1), the totals count both as hits, and the Branch is broken", () => {
   const result = plain(run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber1State();
-    const lines = createAudit();
+    const lines = createJournal();
     const p = s.actors[0];
     const before = p.health.now;
     p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
     p.move.velocity.x = 3; p.move.velocity.y = 0;
     step(s, { move: { x: 1, y: 0 } }, undefined, null, lines);
-    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit"), totals: combatAuditTotals(lines), lost: before - p.health.now, broken: isObjectBroken(s, branch) };
+    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit"), totals: combatJournalTotals(lines), lost: before - p.health.now, broken: isObjectBroken(s, branch) };
   `, BRANCHY));
   const name = "branch " + result.name;
   assert.strictEqual(result.lines.length, 2, "two lines");
@@ -5193,7 +5193,7 @@ test("227 breaking a weightless Branch still writes the audit lines (issue 47, h
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber1State();
-    const lines = createAudit();
+    const lines = createJournal();
     const p = s.actors[0];
     p.position.x = branch.position.x - (p.radius + branch.radius) + 2; p.position.y = branch.position.y;
     step(s, { move: { x: 0, y: 0 } }, undefined, null, lines);
@@ -5296,7 +5296,7 @@ test("231 amplified damage cannot take the shield or the health past their limit
   assert.ok(result.held.shield.now <= result.held.shield.max && result.held.health.now === 100);
 });
 
-test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too (issue 47, I27): landHit with an empty packet on an isolated Branch of seed 1 breaks it (landed, broken, one audit line of total 0); a bullet of 0 breaks it and spends its pierce like on any hit (pierce 1 goes on with 0 left, pierce 0 ends on it); and the same empty packet on a Rock leaves it whole", () => {
+test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too (issue 47, I27): landHit with an empty packet on an isolated Branch of seed 1 breaks it (landed, broken, one journal line of total 0); a bullet of 0 breaks it and spends its pierce like on any hit (pierce 1 goes on with 0 left, pierce 0 ends on it); and the same empty packet on a Rock leaves it whole", () => {
   const scene = (pierce) => plain(run(`
     ${ARMED}
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
@@ -5306,7 +5306,7 @@ test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too
     const [avatar, biter] = s.actors;
     biter.position.x = branch.position.x + 5000; biter.position.y = branch.position.y;
     avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y; // near, so the bullet stays in the window of the grid
-    const lines = createAudit();
+    const lines = createJournal();
     const direct = landHit(s, lines, "source", "poke", {}, branch);
     const directBroken = isObjectBroken(s, branch);
     delete s.damagedObjects[objectKey(branch)]; // whole again: the bullet's turn
@@ -5317,7 +5317,7 @@ test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too
     const hitbox = s.hitboxes[0];
     hitbox.damage = { puncture: 0 };
     hitbox.position.x = branch.position.x - 20; hitbox.position.y = branch.position.y;
-    const shotLines = createAudit();
+    const shotLines = createJournal();
     resolveHitboxes(s, shotLines);
     return {
       direct: { landed: direct.landed, total: direct.resolved.total, broken: direct.broken, lines: lines.map((text) => JSON.parse(text).total), directBroken },
@@ -5353,7 +5353,7 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
           actor.position.x = object.position.x - (actor.radius + object.radius) + 1; actor.position.y = object.position.y;
           actor.move.velocity.x = ${speed}; actor.move.velocity.y = 0;
           const place = { x: actor.position.x, y: actor.position.y };
-          const lines = createAudit();
+          const lines = createJournal();
           collideWithObjects(s, actor, [], lines);
           return { broken: isObjectBroken(s, object), vx: actor.move.velocity.x, moved: [actor.position.x - place.x, actor.position.y - place.y], lines: lines.map((text) => JSON.parse(text)).map((e) => [e.source, e.target]) };
         };
@@ -5368,7 +5368,7 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
   }
 });
 
-test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 47, I28; the user, 2026-11-15: \"we have to know why projectiles were lost\"): a bullet of pierce 0 and real damage that ends on an isolated Branch of seed 1 writes one audit line, source the owner, attack the weapon, target `branch <place>`, and the bullet is gone from the list", () => {
+test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 47, I28; the user, 2026-11-15: \"we have to know why projectiles were lost\"): a bullet of pierce 0 and real damage that ends on an isolated Branch of seed 1 writes one journal line, source the owner, attack the weapon, target `branch <place>`, and the bullet is gone from the list", () => {
   const result = plain(run(`
     ${ARMED}
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
@@ -5379,7 +5379,7 @@ test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 
     avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y;
     spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
     s.hitboxes[0].position.x = branch.position.x - 20; s.hitboxes[0].position.y = branch.position.y;
-    const lines = createAudit();
+    const lines = createJournal();
     resolveHitboxes(s, lines);
     return { name: objectKey(branch), broken: isObjectBroken(s, branch), bullets: s.hitboxes.length, lines: lines.map((text) => JSON.parse(text)) };
   `, BRANCHY));

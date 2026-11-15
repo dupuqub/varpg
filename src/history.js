@@ -20,7 +20,7 @@ function copyOf(value) {
 // of the run (it does not change during a run), because replaying needs it.
 // The visual state (src/sim.js, createVisual) is optional: when given, the history keeps a copy of it per snap, in `visuals`
 // (the same index), so stepping back can show the traces of that frame. The cross-check never reads `visuals`.
-// The combat audit (createAudit) is NOT kept here: it is the observer's notebook, outside the history, and only grows (the user, 2026-11-13).
+// The combat journal (createJournal) is NOT kept here: it is the observer's notebook, outside the history, and only grows (the user, 2026-11-13).
 function createHistory(state, blueprint, visual = null) {
   return { snaps: [copyOf(state)], inputs: [null], visuals: [visual === null ? null : copyOf(visual)], blueprint: copyOf(blueprint) };
 }

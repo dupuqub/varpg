@@ -54,7 +54,7 @@ let fpsSince = null;
 // (issue 42); in the finished game a death will not be undone.
 let paused = false;
 let viewIndex = 0;
-let audit = null; // the combat audit (src/sim.js), a log of lines outside the state and the history: the rules write every hit into it and never read it; it only grows
+let journal = null; // the combat journal (src/sim.js), a log of lines outside the state and the history: the rules write every hit into it and never read it; it only grows
 let visual = null; // the visual state (src/sim.js): traces for the eye; the rules write it and never read it
 
 function startChamber(id) {
@@ -69,8 +69,8 @@ function startChamber(id) {
     throw new Error("The canvas is " + canvas.width + " x " + canvas.height + " and the rules expect " + state.grid.screenWidth + " x " + state.grid.screenHeight);
   }
   visual = createVisual();
-  audit = createAudit();
-  audit.push(combatAuditStartLine(state.frame, run.id, id)); // the log says which run and chamber the lines after it belong to
+  journal = createJournal();
+  journal.push(combatJournalStartLine(state.frame, run.id, id)); // the log says which run and chamber the lines after it belong to
   runHistory = createHistory(state, run.blueprint, visual);
   paused = false;
   viewIndex = 0;
@@ -134,9 +134,9 @@ function missionAborted() {
 // One step of the live game with the input of now, saved in the history. The shown snap is then the last one.
 function stepLive() {
   const input = readInput();
-  step(state, input, run.blueprint, visual, audit);
+  step(state, input, run.blueprint, visual, journal);
   // Written here because a new state was just calculated. After the death nothing calls stepLive on an aborted state, so this line is written once per death. A death undone by the history and died again writes it again, like any other line of the log.
-  if (missionAborted()) audit.push(combatAuditAbortedLine(state.frame));
+  if (missionAborted()) journal.push(combatJournalAbortedLine(state.frame));
   recordFrame(runHistory, state, input, visual);
   viewIndex = runHistory.snaps.length - 1;
 }
@@ -150,7 +150,7 @@ function pauseGame() {
 function playGame() {
   if (missionAborted()) return; // nothing to play after the death, and no resume line for a play that did not happen
   if (viewIndex < runHistory.snaps.length - 1) discardAfter(runHistory, viewIndex); // playing from a past frame
-  audit.push(combatAuditResumeLine(state.frame)); // every play after a pause says where the simulation resumed from, so a frame that repeats in the log can be understood
+  journal.push(combatJournalResumeLine(state.frame)); // every play after a pause says where the simulation resumed from, so a frame that repeats in the log can be understood
   paused = false;
   accumulatedMs = 0;
   lastTimestamp = null;

@@ -51,9 +51,9 @@ function checkT2() {
   const hits = JSON.parse(vm.runInContext(`(() => {
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const state = createChamber2State(run.id, 1, run.blueprint);
-    const audit = createAudit();
-    for (let i = 0; i < 900; i++) step(state, { move: { x: 0, y: 0 }, dash: false }, run.blueprint, null, audit);
-    return JSON.stringify(audit.map((line) => JSON.parse(line)).filter((entry) => entry.event === "hit"));
+    const journal = createJournal();
+    for (let i = 0; i < 900; i++) step(state, { move: { x: 0, y: 0 }, dash: false }, run.blueprint, null, journal);
+    return JSON.stringify(journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "hit"));
   })()`, game));
   const lines = report.split("\n");
   const number = (value) => value.toFixed(2);
@@ -105,7 +105,7 @@ async function checkT3() {
     const part = (name) => document.querySelector(`#${id} [data-control="${name}"]`);
     const alert = part("aborted");
     return {
-      frame: state.frame, mission: state.mission, paused, snaps: runHistory.snaps.length, viewIndex, lines: audit.length, last: audit[audit.length - 1],
+      frame: state.frame, mission: state.mission, paused, snaps: runHistory.snaps.length, viewIndex, lines: journal.length, last: journal[journal.length - 1],
       status: part("status").textContent, toggleOff: part("toggle").disabled, backOff: part("back").disabled, forwardOff: part("forward").disabled,
       alert: alert === null ? "none" : alert.hidden ? "hidden" : "shown",
     };
@@ -155,7 +155,7 @@ async function checkT3() {
   await page.click(`#${two} [data-control="toggle"]`);
   await wait(400);
   const resumed = await look(two);
-  const resumeLines = await page.evaluate(() => audit.map((line) => JSON.parse(line)).filter((entry) => entry.event === "resume").length);
+  const resumeLines = await page.evaluate(() => journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "resume").length);
   expect(resumed.mission === "running" && resumed.frame > dead.frame && !resumed.paused, "play from an earlier frame goes on past the frame of the death (the death is undone)");
   expect(resumeLines === 1, "that play wrote the only resume line of the log");
   expect((await page.evaluate(() => crossCheck(runHistory))) === null, "the cross-check of the history says none");
@@ -185,7 +185,7 @@ async function checkT3() {
 // with the frame of the death, once per death: a death undone by the history and died again writes it again.
 async function checkT4() {
   const { browser, page, errors, wait, kill } = await openGame();
-  const log = () => page.evaluate(() => ({ frame: state.frame, mission: state.mission, entries: audit.map((line) => JSON.parse(line)) }));
+  const log = () => page.evaluate(() => ({ frame: state.frame, mission: state.mission, entries: journal.map((line) => JSON.parse(line)) }));
   const aborted = (entries) => entries.filter((entry) => entry.event === "aborted");
 
   await kill();

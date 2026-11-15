@@ -634,7 +634,7 @@ function finalAttack(attacker, hit) {
 }
 
 // How a packet hurts a target, in the order the terms are applied, so the damage can be explained (the damage trace
-// the user wants will read this record; the audit keeps it, see recordHit). For each type with an amount:
+// the user wants will read this record; the journal keeps it, see recordHit). For each type with an amount:
 //   reduction = points / (points + resistanceScale), points = the resistance of the target to that type;
 //   after = amount x (1 - reduction).
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
@@ -664,14 +664,14 @@ function resolveDamage(packet, target, withShield = true) {
   return { parts, total: sum };
 }
 
-// The name of a thing in the audit: the id of an actor, or the type and the place of an object.
+// The name of a thing in the journal: the id of an actor, or the type and the place of an object.
 function nameOf(thing) {
   return thing.id !== undefined ? thing.id : thing.type + " " + objectKey(thing);
 }
 
 // Lands one hit (the user's rule: every hit is resolved, taken and recorded the same way, whoever hits and whatever is hit):
 // the packet is resolved against the target (resolveDamage), taken off an actor (applyDamage) or off an object (damageObject),
-// and recorded in the audit when there is one (recordHit). An object has no shield; the audit says what it really lost of its health
+// and recorded in the journal when there is one (recordHit). An object has no shield; the journal says what it really lost of its health
 // (issue 29): the whole total, or only the health it had when the hit is more than that (an overkill), the same as for an actor.
 // A hit that breaks the shield (the user's rule, 2026-11-14: "the shield absorbs a part, with its resistances included, and the
 // share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
@@ -683,7 +683,7 @@ function nameOf(thing) {
 // the caller marks and spends a pierce; it takes nothing and, being no damage, does not restart the shield's wait (applyDamage).
 // Returns { landed, resolved, taken, broken }; landed is false (and the rest null) when the target could not take the hit;
 // broken is true only for an object that reached 0 in this hit, or one of weight 0, which any hit that lands breaks (a resolved 0 too).
-function landHit(state, audit, sourceName, attackName, packet, target) {
+function landHit(state, journal, sourceName, attackName, packet, target) {
   if (!canTakeHit(state, target)) return { landed: false, resolved: null, taken: null, broken: false };
   const isObject = target.id === undefined;
   let resolved = resolveDamage(packet, target);
@@ -710,7 +710,7 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
   } else {
     taken = applyDamage(target, resolved.total);
   }
-  if (audit !== null) recordHit(audit, state, sourceName, attackName, nameOf(target), resolved, taken);
+  if (journal !== null) recordHit(journal, state, sourceName, attackName, nameOf(target), resolved, taken);
   return { landed: true, resolved, taken, broken };
 }
 
@@ -721,14 +721,14 @@ function canTakeHit(state, target) {
   return target.id === undefined ? !isObjectBroken(state, target) : target.health.now > 0;
 }
 
-// A body slam of the attacker on an actor: the hit lands through landHit (resolved, applied and recorded in the audit).
-function slamActor(state, audit, attacker, hit, target) {
-  landHit(state, audit, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), target);
+// A body slam of the attacker on an actor: the hit lands through landHit (resolved, applied and recorded in the journal).
+function slamActor(state, journal, attacker, hit, target) {
+  landHit(state, journal, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), target);
 }
 
 // A body slam of the attacker on an object: the hit lands through landHit. Returns true if the object broke.
-function slamObject(state, audit, attacker, hit, object) {
-  return landHit(state, audit, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), object).broken;
+function slamObject(state, journal, attacker, hit, object) {
+  return landHit(state, journal, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), object).broken;
 }
 
 // Whether the body of an attacker hurts a target in a collision (the user's rule of 2026-11-10, now as data, 2026-11-13: "Tags of
@@ -1009,12 +1009,12 @@ function crushObject(state, actor, object) {
 // projectiles were lost"): the object's slam on the actor where bodyHurts says it hurts it (total 0), then the actor's hit on the
 // object; a body that ignores objects (the Biter's, the Dummy's) lands an empty packet through the same door, a hit of total 0 (issue 46),
 // no invented damage. `impact` is the speed going into the object (0 when the actor is not going in). Returns true if the object broke.
-function breakWeightless(state, audit, actor, object, impact) {
+function breakWeightless(state, journal, actor, object, impact) {
   if (object.weight !== 0) return false;
   const hit = { impact };
-  if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
-  if (bodyHurts(actor, object)) slamObject(state, audit, actor, hit, object);
-  else landHit(state, audit, nameOf(actor), "bodySlam", {}, object); // a body that does not hurt objects: a hit of 0, same door
+  if (bodyHurts(object, actor)) slamActor(state, journal, object, hit, actor);
+  if (bodyHurts(actor, object)) slamObject(state, journal, actor, hit, object);
+  else landHit(state, journal, nameOf(actor), "bodySlam", {}, object); // a body that does not hurt objects: a hit of 0, same door
   breakObject(state, object);
   return true;
 }
@@ -1097,7 +1097,7 @@ function objectsNear(state, actor) {
 //    How hard the actor hits depends on the angle: a glancing blow loses little.
 // Returns true if the actor met an object it was not touching in the last frame (and the object is still there),
 // so an actor that reacts to a new contact can (the Dummy turns).
-function collideWithObjects(state, actor, lastContacts, audit = null) {
+function collideWithObjects(state, actor, lastContacts, journal = null) {
   let metSomethingNew = false;
   for (const object of objectsNear(state, actor)) {
     if (worldStops(state)) break; // the contact before this one killed the avatar: the world stops (no more contacts)
@@ -1107,7 +1107,7 @@ function collideWithObjects(state, actor, lastContacts, audit = null) {
     const { normalX, normalY, overlap } = contact;
     const velocity = actor.move.velocity;
     const goingIn = velocity.x * normalX + velocity.y * normalY; // negative when the actor is going toward the object
-    if (breakWeightless(state, audit, actor, object, Math.max(0, -goingIn))) continue;
+    if (breakWeightless(state, journal, actor, object, Math.max(0, -goingIn))) continue;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
@@ -1120,8 +1120,8 @@ function collideWithObjects(state, actor, lastContacts, audit = null) {
 
     if (collides && isNewContact) {
       const hit = { impact: -goingIn };
-      if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
-      if (bodyHurts(actor, object) && slamObject(state, audit, actor, hit, object)) continue; // the object broke: no collision
+      if (bodyHurts(object, actor)) slamActor(state, journal, object, hit, actor);
+      if (bodyHurts(actor, object) && slamObject(state, journal, actor, hit, object)) continue; // the object broke: no collision
     }
     if (isNewContact) metSomethingNew = true;
 
@@ -1278,7 +1278,7 @@ function pushShare(a, b) {
 // 3. If the contact is new, each of the two reacts in its own way (reactToNewContact: a Dummy picks a new angle, a Biter
 //    does nothing), hit or not. A pair that was already touching still pushes, but does not hurt and does not react.
 // Returns true if they touched (so the cells of both must be written again).
-function touchActors(state, lastContacts, dummy, other, key, audit = null) {
+function touchActors(state, lastContacts, dummy, other, key, journal = null) {
   const contact = contactBetween(dummy, other);
   if (contact === null) return false;
   const { normalX, normalY, overlap } = contact;
@@ -1290,8 +1290,8 @@ function touchActors(state, lastContacts, dummy, other, key, audit = null) {
     const closing = -((dummy.move.velocity.x - other.move.velocity.x) * normalX + (dummy.move.velocity.y - other.move.velocity.y) * normalY);
     if (closing >= DEFINITIONS.constants.collision.minImpact) {
       const hit = { impact: closing };
-      if (bodyHurts(other, dummy)) slamActor(state, audit, other, hit, dummy);
-      if (bodyHurts(dummy, other)) slamActor(state, audit, dummy, hit, other);
+      if (bodyHurts(other, dummy)) slamActor(state, journal, other, hit, dummy);
+      if (bodyHurts(dummy, other)) slamActor(state, journal, dummy, hit, other);
     }
   }
 
@@ -1382,7 +1382,7 @@ function nextInCells(inCell, cells, after) {
 //   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
 //   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
 //   list made before.
-function collideActors(state, lastContacts, audit = null) {
+function collideActors(state, lastContacts, journal = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const dummies = state.actors.filter((actor) => actor.move && !isAvatar(actor));
 
@@ -1400,7 +1400,7 @@ function collideActors(state, lastContacts, audit = null) {
     const dummy = dummies[i];
 
     if (shareCell(dummy.cells, player.cells)) {
-      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, audit)) {
+      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, journal)) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
@@ -1409,7 +1409,7 @@ function collideActors(state, lastContacts, audit = null) {
 
     let j = nextInCells(inCell, dummy.cells, i);
     while (j !== -1) {
-      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, audit)) {
+      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, journal)) {
         refreshCells(i);
         refreshCells(j);
       }
@@ -1679,7 +1679,7 @@ function fireWeapons(state, player, byTag) {
   }
 }
 
-// ---- The combat audit, "caudit" (the user, 2026-11-13) ----
+// ---- The combat journal (the user, 2026-11-13) ----
 // A log outside everything: someone in the stands watching the simulation and writing it down. It never interferes with the
 // gameplay (the rules write lines into it and never read it), it is tied to nothing (not the history either), and it only
 // grows. One line per damage calculation (one attack on one target), clear and minimal, as one JSON object per line, so a
@@ -1695,7 +1695,7 @@ function fireWeapons(state, player, byTag) {
 //           line says which run and chamber the lines after it belong to.
 //   aborted the mission is aborted: { frame, event }. The user (2026-11-15, issue 58) asked for it, like start and resume; the screen
 //           writes it once, right after the step in which the mission became aborted.
-function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
+function combatJournalHitLine(frame, source, attack, target, resolved, taken) {
   return JSON.stringify({
     frame,
     event: "hit",
@@ -1710,24 +1710,24 @@ function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
   });
 }
 
-function combatAuditResumeLine(frame) {
+function combatJournalResumeLine(frame) {
   return JSON.stringify({ frame, event: "resume" });
 }
 
-function combatAuditStartLine(frame, run, chamber) {
+function combatJournalStartLine(frame, run, chamber) {
   return JSON.stringify({ frame, event: "start", run, chamber });
 }
 
 // The user (2026-11-15, issue 58) asked for a line when the mission is aborted, like start and resume. The screen writes it once,
 // right after the step in which the mission became aborted; the rules never read the log.
-function combatAuditAbortedLine(frame) {
+function combatJournalAbortedLine(frame) {
   return JSON.stringify({ frame, event: "aborted" });
 }
 
 // The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,
 // resume) are skipped. Totals are by "kind:attack" (the kind is the source without its number or place: "biter_3" is "biter",
 // "rock 12,4" is "rock"): { hits, total, shield, health } added up over every line given.
-function combatAuditTotals(lines) {
+function combatJournalTotals(lines) {
   const totals = {};
   for (const line of lines) {
     const entry = JSON.parse(line);
@@ -1743,16 +1743,16 @@ function combatAuditTotals(lines) {
 }
 
 // ---- The log the rules write (the user, 2026-11-13; build step 3) ----
-// The audit is now the combat audit: a plain array of lines (createAudit) that the rules only ever PUSH to, one line per damage
-// calculation (combatAuditHitLine), and never read, so erasing it changes no decision. It has no limit and no copy per snap: it is
-// the observer's notebook, outside the state and outside the history. The totals are read from it (combatAuditTotals).
-function createAudit() {
+// The journal is now the combat journal: a plain array of lines (createJournal) that the rules only ever PUSH to, one line per damage
+// calculation (combatJournalHitLine), and never read, so erasing it changes no decision. It has no limit and no copy per snap: it is
+// the observer's notebook, outside the state and outside the history. The totals are read from it (combatJournalTotals).
+function createJournal() {
   return [];
 }
 
-function recordHit(audit, state, source, attack, target, resolved, taken) {
+function recordHit(journal, state, source, attack, target, resolved, taken) {
   // the frame the hit is seen in: state.frame counts up at the end of the step, so the state the screen shows after this step says state.frame + 1
-  audit.push(combatAuditHitLine(state.frame + 1, source, attack, target, resolved, taken));
+  journal.push(combatJournalHitLine(state.frame + 1, source, attack, target, resolved, taken));
 }
 
 // ---- The visual state (the user, 2026-11-13) ----
@@ -1913,7 +1913,7 @@ function hitsThisFrame(hitbox, from, candidates) {
 // validation of weapons), so it cannot jump a target between two frames. When a hit kills the avatar the world stops
 // (worldStops): that hitbox hits nothing else and loses its frame, the ones after it in the list are left as they were,
 // and the spent ones are still cleared at the end (bookkeeping, not an action: a bite that killed is gone, as before).
-function resolveHitboxes(state, audit = null) {
+function resolveHitboxes(state, journal = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID); // the window of a bullet is centered on it
   for (const hitbox of state.hitboxes) {
     const from = { x: hitbox.position.x, y: hitbox.position.y }; // where its movement of this frame starts (firstTouchAt)
@@ -1929,7 +1929,7 @@ function resolveHitboxes(state, audit = null) {
     const { order, onlyOne } = hitsThisFrame(hitbox, from, candidates);
     for (const target of order) {
       // The hit lands like any other; a target that cannot take it (no health, canTakeHit) is not struck and spends no pierce.
-      if (!landHit(state, audit, hitbox.owner, hitbox.attack, hitbox.damage, target).landed) continue;
+      if (!landHit(state, journal, hitbox.owner, hitbox.attack, hitbox.damage, target).landed) continue;
       hitbox.struck.push(nameOf(target));
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here
@@ -2072,18 +2072,18 @@ function cellIndex(coordinate, cellSize) {
 }
 
 // Advances the state by one frame. Changes the state in place.
-// audit = the audit of the hits (createAudit), optional like the visual state: the rules write every hit into it and never read it.
+// journal = the journal of the hits (createJournal), optional like the visual state: the rules write every hit into it and never read it.
 // visual = the visual state (createVisual), optional: the rules WRITE into it (a trace when a hitbox is born) and never read it, so
 // a run with it and a run without it give the same state (a test proves it).
 // input = { move: { x, y }, dash: true or false }  (dash is optional, and means "pressed in this frame")
 // blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
-function step(state, input, blueprint, visual = null, audit = null) {
-  if (state.mission === "aborted") return; // the pilot ejected: the state, the visual and the audit stay as they were
+function step(state, input, blueprint, visual = null, journal = null) {
+  if (state.mission === "aborted") return; // the pilot ejected: the state, the visual and the journal stay as they were
   if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
 
   // Stages 0 to 5: what happens in the frame. They return early when the avatar's death is tested (worldStops): the rest
   // of them runs for nobody. The end of the step below always runs, so a death anywhere ends the step as a death in stage 5 does.
-  playStages(state, input, blueprint, visual, audit);
+  playStages(state, input, blueprint, visual, journal);
 
   // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor). It runs after an early stop
   // too: it is the bookkeeping of the hurts that happened, not an action (a Biter killed in the contact that killed the avatar
@@ -2105,7 +2105,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
 
 // Stages 0 to 5 of a step (see step and docs/step-order.md). Returns early, after stage 2 or 4, when the avatar's death was
 // tested there (worldStops); a death in stage 5 stops inside resolveHitboxes, which is the last of them anyway.
-function playStages(state, input, blueprint, visual, audit) {
+function playStages(state, input, blueprint, visual, journal) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   // 0. The dynamic values: every actor calculates them again and carries them for this frame (finalizeDynamic).
@@ -2163,7 +2163,7 @@ function playStages(state, input, blueprint, visual, audit) {
     if (!isAvatar(actor)) wrapIntoWindow(actor, player, state.grid);
 
     // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
-    const metSomethingNew = collideWithObjects(state, actor, lastContacts, audit);
+    const metSomethingNew = collideWithObjects(state, actor, lastContacts, journal);
     if (worldStops(state)) return; // a contact killed the avatar: the world stops (the actors after it do not move)
     if (metSomethingNew) reactToNewContact(state, actor);
   }
@@ -2176,7 +2176,7 @@ function playStages(state, input, blueprint, visual, audit) {
   // a new contact in its own way. The collision reads the cells from the actors, and writes them again for everyone it
   // pushes, so at the end of the step they are still right.
   // The death is tested after each whole contact (both sides hurt each other first); when it is true collideActors stops.
-  collideActors(state, lastContacts, audit);
+  collideActors(state, lastContacts, journal);
   if (worldStops(state)) return; // the avatar died in a contact: nothing is born, no hitbox moves or hurts
 
   // 4b. Things are born (the user, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really
@@ -2189,7 +2189,7 @@ function playStages(state, input, blueprint, visual, audit) {
   swingMelees(state, player, visual, byTag);
 
   // 5. The hitboxes hurt, once each, and lose a frame. A hit that kills the avatar stops the walk (see resolveHitboxes).
-  resolveHitboxes(state, audit);
+  resolveHitboxes(state, journal);
 }
 
 assertValidDefinitions();
