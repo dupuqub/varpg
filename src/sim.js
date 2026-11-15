@@ -1005,15 +1005,16 @@ function crushObject(state, actor, object) {
 // and the same day, after I24: "the Branch has to break with anything"): an object of weight 0 breaks at the first contact with ANY
 // actor's body (the avatar, a Dummy, a Biter), whatever its health and with no minimum impact. Breaking it is not damage, so it does not
 // ask bodyHurts whether the body hurts objects: the Biter's body ignores `object` and still breaks it. Like crushing: no push, no bounce,
-// the mover keeps its speed and goes on. The audit lines are written only where bodyHurts says a side hurts the other (hits of 0 are
-// hits, issue 46): the object's slam on the actor (total 0), then the actor's hit on the object. A body that ignores objects writes no
-// hit (it has none to land on it), and the object breaks all the same. `impact` is the speed going into the object (0 when the actor
-// is not going in). Returns true if the object broke.
+// the mover keeps its speed and goes on. Everything that breaks it writes a line (the user, 2026-11-15, I28: "we have to know why
+// projectiles were lost"): the object's slam on the actor where bodyHurts says it hurts it (total 0), then the actor's hit on the
+// object; a body that ignores objects (the Biter's, the Dummy's) lands an empty packet through the same door, a hit of total 0 (issue 46),
+// no invented damage. `impact` is the speed going into the object (0 when the actor is not going in). Returns true if the object broke.
 function breakWeightless(state, audit, actor, object, impact) {
   if (object.weight !== 0) return false;
   const hit = { impact };
   if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
   if (bodyHurts(actor, object)) slamObject(state, audit, actor, hit, object);
+  else landHit(state, audit, nameOf(actor), "bodySlam", {}, object); // a body that does not hurt objects: a hit of 0, same door
   breakObject(state, object);
   return true;
 }

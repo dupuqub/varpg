@@ -5138,7 +5138,7 @@ test("225 the combat log only grows when the user goes back and resumes (issue 4
   assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
 });
 
-test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes no audit line (its body ignores `object`: breaking it is not damage), is not pushed or stopped and keeps its speed and its place", () => {
+test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes one audit line, a hit of total 0 from the Biter on the Branch (I28: everything that breaks a weightless thing writes a line; its body ignores `object`, so the hit is an empty packet), is not pushed or stopped and keeps its speed and its place", () => {
   const result = plain(run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
@@ -5151,13 +5151,15 @@ test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the us
     biter.move.velocity.x = 3; biter.move.velocity.y = 0;
     collideWithObjects(s, biter, [], lines);
     return {
-      broken: isObjectBroken(s, branch), health: objectHealth(s, branch), lines: lines.slice(), vx: biter.move.velocity.x,
+      name: objectKey(branch), broken: isObjectBroken(s, branch), health: objectHealth(s, branch), lines: lines.slice(), vx: biter.move.velocity.x,
       moved: [biter.position.x - place.x, biter.position.y - place.y], biterHealth: biter.health.now, biterMax: biter.health.max,
     };
   `, BRANCHY));
   assert.strictEqual(result.broken, true, "the Biter breaks it");
   assert.strictEqual(result.health, 0);
-  assert.deepStrictEqual(result.lines, [], "no hit, no line: breaking it is not damage");
+  assert.strictEqual(result.lines.length, 1, "one line: the Biter's hit of 0 on the Branch");
+  const line = JSON.parse(result.lines[0]);
+  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.total], ["hit", "biter_0", "bodySlam", "branch " + result.name, 0]);
   assert.strictEqual(result.vx, 3, "the Biter keeps its speed and goes through");
   assert.deepStrictEqual(result.moved, [0, 0], "and is not pushed out");
   assert.strictEqual(result.biterHealth, result.biterMax, "the Biter loses nothing");
@@ -5331,7 +5333,7 @@ test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too
   assert.deepStrictEqual(stopped.shot, { broken: true, lines: [0], bullets: [] }, "with pierce 0 the bullet ends on it, as on any hit");
 });
 
-test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place; a Rock does not break under any of them", () => {
+test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place, and (I28) the break leaves a line naming that actor and the Branch; a Rock does not break under any of them", () => {
   const DUMMIED = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 1 }"), { branches: true });
   const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
   assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
@@ -5351,15 +5353,39 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
           actor.position.x = object.position.x - (actor.radius + object.radius) + 1; actor.position.y = object.position.y;
           actor.move.velocity.x = ${speed}; actor.move.velocity.y = 0;
           const place = { x: actor.position.x, y: actor.position.y };
-          collideWithObjects(s, actor, [], null);
-          return { broken: isObjectBroken(s, object), vx: actor.move.velocity.x, moved: [actor.position.x - place.x, actor.position.y - place.y] };
+          const lines = createAudit();
+          collideWithObjects(s, actor, [], lines);
+          return { broken: isObjectBroken(s, object), vx: actor.move.velocity.x, moved: [actor.position.x - place.x, actor.position.y - place.y], lines: lines.map((text) => JSON.parse(text)).map((e) => [e.source, e.target]) };
         };
-        return { branch: touch(branch), rock: touch(rock).broken };
+        return { branch: touch(branch), rock: touch(rock).broken, name: objectKey(branch) };
       `, DUMMIED));
       assert.strictEqual(result.branch.broken, true, kind + " at speed " + speed + " breaks the Branch");
       assert.strictEqual(result.branch.vx, speed, kind + " keeps its velocity");
       assert.deepStrictEqual(result.branch.moved, [0, 0], kind + " is not pushed out of it");
       assert.strictEqual(result.rock, false, kind + " does not break a Rock");
+      assert.ok(result.branch.lines.some(([source, target]) => source === ids[kind] && target === "branch " + result.name), kind + " at speed " + speed + " leaves a line naming it and the Branch");
     }
   }
+});
+
+test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 47, I28; the user, 2026-11-15: \"we have to know why projectiles were lost\"): a bullet of pierce 0 and real damage that ends on an isolated Branch of seed 1 writes one audit line, source the owner, attack the weapon, target `branch <place>`, and the bullet is gone from the list", () => {
+  const result = plain(run(`
+    ${ARMED}
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = branch.position.x + 5000; biter.position.y = branch.position.y;
+    avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y;
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
+    s.hitboxes[0].position.x = branch.position.x - 20; s.hitboxes[0].position.y = branch.position.y;
+    const lines = createAudit();
+    resolveHitboxes(s, lines);
+    return { name: objectKey(branch), broken: isObjectBroken(s, branch), bullets: s.hitboxes.length, lines: lines.map((text) => JSON.parse(text)) };
+  `, BRANCHY));
+  assert.strictEqual(result.broken, true);
+  assert.strictEqual(result.bullets, 0, "the bullet ended on it");
+  assert.strictEqual(result.lines.length, 1, "one line says where it ended");
+  assert.deepStrictEqual([result.lines[0].event, result.lines[0].source, result.lines[0].attack, result.lines[0].target], ["hit", "avatar_1", "repeater-arm", "branch " + result.name]);
+  assert.ok(result.lines[0].total > 0, "real damage, not a hit of 0");
 });
