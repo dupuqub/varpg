@@ -95,7 +95,7 @@ From issue 48, R3.5 for the code: move the tests that call `damageOf` to `resolv
 
 Do issue 29's "To do". The damage does not change, only the record: the whole-state tests must not move; the combat audit tests may (name them). Closes issue 29.
 
-### [ ] I12. One rule for "a target with no health takes no hit" (model: opus; issue 32)
+### [x] I12. One rule for "a target with no health takes no hit" (model: opus; issue 32)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 

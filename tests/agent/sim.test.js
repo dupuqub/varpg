@@ -4676,3 +4676,27 @@ test("204 an overkill on a Rock writes in the combat audit only the health the R
   assert.deepStrictEqual(r.small, { shield: 0, health: 4 });
 });
 
+// ---- One rule: a target with no health takes no hit (issue 32) ----
+test("205 a target with no health takes no hit, by one rule asked in landHit (canTakeHit): landHit twice on the same Rock with an overkill lands once (one audit line, broken once; the second says landed false and broken false), and landHit on a Biter at 0 health writes no line and takes nothing; a Biter with health is hit", () => {
+  const result = run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const audit = createAudit();
+    const rock = { type: "rock", layer: "small", square: { x: 0, y: 1 }, health: { now: 10, max: 10 }, resistance: {} };
+    const first = landHit(s, audit, "source", "poke", { blunt: 30 }, rock);
+    const second = landHit(s, audit, "source", "poke", { blunt: 30 }, rock);
+    const biter = s.actors[1];
+    const alive = landHit(s, audit, "source", "poke", { blunt: 1 }, biter).landed;
+    biter.health.now = 0;
+    const dead = landHit(s, audit, "source", "poke", { blunt: 1 }, biter);
+    return { first: [first.landed, first.broken], second: [second.landed, second.broken], alive, dead: [dead.landed, dead.taken], health: biter.health.now, lines: audit.length };
+  `, QUIET);
+  const r = plain(result);
+  assert.deepStrictEqual(r.first, [true, true]);
+  assert.deepStrictEqual(r.second, [false, false], "a broken Rock takes no second hit");
+  assert.strictEqual(r.alive, true);
+  assert.deepStrictEqual(r.dead, [false, null], "a Biter at 0 takes no hit");
+  assert.strictEqual(r.health, 0);
+  assert.strictEqual(r.lines, 2, "one line for the Rock and one for the Biter with health, none for the hits that did not land");
+});
+

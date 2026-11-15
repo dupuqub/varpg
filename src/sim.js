@@ -627,8 +627,11 @@ function nameOf(thing) {
 // resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
 // share of the packet that did not fit (per type) is resolved again against the body alone and goes to health. The record then
 // carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took.
-// Returns { resolved, taken, broken }; broken is true only for an object that reached 0 in this hit.
+// A target with no health takes no hit (canTakeHit, asked here and nowhere else): nothing is resolved, taken or recorded.
+// Returns { landed, resolved, taken, broken }; landed is false (and the rest null) when the target could not take the hit;
+// broken is true only for an object that reached 0 in this hit.
 function landHit(state, audit, sourceName, attackName, packet, target) {
+  if (!canTakeHit(state, target)) return { landed: false, resolved: null, taken: null, broken: false };
   const isObject = target.id === undefined;
   let resolved = resolveDamage(packet, target);
   let taken;
@@ -654,12 +657,18 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
     taken = applyDamage(target, resolved.total);
   }
   if (audit !== null) recordHit(audit, state, sourceName, attackName, nameOf(target), resolved, taken);
-  return { resolved, taken, broken };
+  return { landed: true, resolved, taken, broken };
+}
+
+// The user's rule (2026-11-13, written once since issue 32): a target with no health takes no hit, whoever hits and whatever
+// hits. An actor has no health at 0; an object at 0 is broken (it is gone). landHit asks it before anything else, so every
+// way of hurting (body slam, hitbox, and any that comes later) obeys it without writing it again.
+function canTakeHit(state, target) {
+  return target.id === undefined ? !isObjectBroken(state, target) : target.health.now > 0;
 }
 
 // A body slam of the attacker on an actor: the hit lands through landHit (resolved, applied and recorded in the audit).
 function slamActor(state, audit, attacker, hit, target) {
-  if (target.health.now <= 0) return; // the user's rule, as for a hitbox: an actor with no health takes no hit
   landHit(state, audit, nameOf(attacker), "bodySlam", finalAttack(attacker, hit), target);
 }
 
@@ -1771,13 +1780,13 @@ function resolveHitboxes(state, audit = null) {
     // Shroom as the body slam does: the damage is resolved against the object and taken off its health, and a broken one is gone).
     const reach = Math.max(hitbox.radius, hitbox.cone ? hitbox.cone.reach : 0);
     const { x, y } = hitbox.position;
-    const objects = objectsReaching(state.seed, x - reach, y - reach, x + reach, y + reach).filter((object) => !isObjectBroken(state, object));
+    const objects = objectsReaching(state.seed, x - reach, y - reach, x + reach, y + reach);
     for (const target of [...state.actors, ...objects]) {
-      const isObject = target.id === undefined;
       const name = nameOf(target);
-      if (!hitboxHurts(hitbox, target) || (!isObject && target.health.now <= 0) || hitbox.struck.includes(name)) continue;
+      if (!hitboxHurts(hitbox, target) || hitbox.struck.includes(name)) continue;
       if (!hitboxTouches(hitbox, target)) continue;
-      landHit(state, audit, hitbox.owner, hitbox.attack, hitbox.damage, target); // the hit of the hitbox lands like any other
+      // The hit lands like any other; a target that cannot take it (no health, canTakeHit) is not struck and spends no pierce.
+      if (!landHit(state, audit, hitbox.owner, hitbox.attack, hitbox.damage, target).landed) continue;
       hitbox.struck.push(name);
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here
