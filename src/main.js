@@ -50,7 +50,8 @@ let fpsFrames = 0;
 let fpsSince = null;
 // Pause and the history (the user, 2026-11-12). While paused the buttons walk through the saved snaps: viewIndex is the snap
 // that is shown (the last one while the game is live). Pressing play on a past frame discards everything after it (discardAfter)
-// and the run goes on from there with new inputs (the agent's default, to be confirmed by the user).
+// and the run goes on from there with new inputs. The user confirmed this on 2026-11-14 for as long as the history is a debugger
+// (issue 42); in the finished game a death will not be undone.
 let paused = false;
 let viewIndex = 0;
 let audit = null; // the combat audit (src/sim.js), a log of lines outside the state and the history: the rules write every hit into it and never read it; it only grows
@@ -111,6 +112,7 @@ function loop(timestamp) {
   accumulatedMs = Math.min(accumulatedMs - STEP_MS, STEP_MS);
 
   stepLive();
+  if (missionAborted()) pauseGame(); // the death: the frame below is drawn once, then the loop returns at "if (paused)"
   // The fps counter: frames drawn, counted over one second.
   if (fpsSince === null) fpsSince = timestamp;
   fpsFrames += 1;
@@ -124,10 +126,17 @@ function loop(timestamp) {
   updateControls();
 }
 
+// The shown state decides, the same for every chamber: the frames stop, and play and forward do nothing, while it says aborted.
+function missionAborted() {
+  return state.mission === "aborted";
+}
+
 // One step of the live game with the input of now, saved in the history. The shown snap is then the last one.
 function stepLive() {
   const input = readInput();
   step(state, input, run.blueprint, visual, audit);
+  // Written here because a new state was just calculated. After the death nothing calls stepLive on an aborted state, so this line is written once per death. A death undone by the history and died again writes it again, like any other line of the log.
+  if (missionAborted()) audit.push(combatAuditAbortedLine(state.frame));
   recordFrame(runHistory, state, input, visual);
   viewIndex = runHistory.snaps.length - 1;
 }
@@ -139,6 +148,7 @@ function pauseGame() {
 }
 
 function playGame() {
+  if (missionAborted()) return; // nothing to play after the death, and no resume line for a play that did not happen
   if (viewIndex < runHistory.snaps.length - 1) discardAfter(runHistory, viewIndex); // playing from a past frame
   audit.push(combatAuditResumeLine(state.frame)); // every play after a pause says where the simulation resumed from, so a frame that repeats in the log can be understood
   paused = false;
@@ -159,6 +169,7 @@ function stepBack() {
 
 // Forward goes to the next snap, and pauses. On the newest one there is none yet, so it plays one new step with the input of now.
 function stepForward() {
+  if (missionAborted() && viewIndex === runHistory.snaps.length - 1) return; // the frame of the death is the last one: nothing comes after it
   pauseGame();
   if (viewIndex < runHistory.snaps.length - 1) {
     viewIndex += 1;
@@ -181,10 +192,16 @@ function updateControls() {
   const screen = currentScreen();
   if (!screen) return;
   const part = (name) => screen.querySelector(`[data-control="${name}"]`);
+  const aborted = missionAborted();
+  const shownIsNewest = viewIndex === runHistory.snaps.length - 1;
   part("toggle").textContent = paused ? "\u25B6" : "||";
+  part("toggle").disabled = aborted;
   part("back").disabled = viewIndex === 0;
+  part("forward").disabled = aborted && shownIsNewest;
+  const alert = part("aborted"); // only Chamber 2 has one
+  if (alert) alert.hidden = !aborted;
   // FRAME is the frame of the game; HISTORY is the place of the shown snap among the saved ones (1 is the oldest).
-  part("status").textContent = (paused ? "PAUSED \u00B7 " : "") + "FRAME " + state.frame + " \u00B7 HISTORY " + (viewIndex + 1) + "/" + runHistory.snaps.length;
+  part("status").textContent = (aborted ? "ABORTED \u00B7 " : "") + (paused ? "PAUSED \u00B7 " : "") + "FRAME " + state.frame + " \u00B7 HISTORY " + (viewIndex + 1) + "/" + runHistory.snaps.length;
 }
 
 // Fullscreen (the user, 2026-11-12): a button in the top bar, hidden where the browser cannot do it (an iPhone, for one). On a
