@@ -24,7 +24,7 @@ The loop of `docs/base-plan.md`, with three checks the review asked for (issues 
 
 ## The parcels (Rules desk)
 
-### [ ] I1. Mark the base plan's parcels done (coordinator; issue 31)
+### [x] I1. Mark the base plan's parcels done (coordinator; issue 31)
 
 In `docs/base-plan.md` change `### [ ] P1.` to `### [x] P1.`, and the same for P2, P3, P4, P5, P6. No tests. Commit, comment on issue 31, close it.
 

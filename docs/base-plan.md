@@ -45,7 +45,7 @@ Do exactly this, one parcel at a time, in the order of the list. Never two helpe
 
 ## The parcels
 
-### [ ] P1. The avatar's death: the mission is aborted (model: sonnet)
+### [x] P1. The avatar's death: the mission is aborted (model: sonnet)
 
 **Files:** `src/sim.js`, `src/history.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
@@ -63,7 +63,7 @@ The user's word (2026-11-14): when the avatar has no health, an "abort mission" 
 
 **AGENTS.md:** in the list "Answered by the user (2026-11-14)", say the rule of the avatar's death is built and name the tests; take the mentions of `living` out; fix the lines that say the avatar's death is not decided ("Damage", "Destruction", "Open items").
 
-### [ ] P2. A body slam does not hurt what has no health (model: haiku)
+### [x] P2. A body slam does not hurt what has no health (model: haiku)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
@@ -73,7 +73,7 @@ The review's point 10 (`docs/review-2026-11-13.md`): hitboxes skip a target with
 
 **AGENTS.md:** one line in the section "Damage".
 
-### [ ] P3. The issue for the Screen desk (coordinator, after P1)
+### [x] P3. The issue for the Screen desk (coordinator, after P1)
 
 Open one issue and mark this parcel done (no tests, no helper):
 
@@ -81,7 +81,7 @@ Open one issue and mark this parcel done (no tests, no helper):
 gh api repos/dupuqub/varpg/issues -f title="Screen desk: the abort mission screen" -f "labels[]=desk:screen" -f body="From the Rules desk (the user's word, 2026-11-14). When state.mission is \"aborted\" (the avatar has no health; built in the base plan, parcel P1), show an ABORT MISSION alert with one button back to the menu, and stop calling step and recordFrame. For now it is only that screen, for Chamber 2. Lore: the pilot ejects and leaves the mecha. To know: a scripted run stops at that frame too, so COMBAT REPORT of Chamber 0 shows a shorter fight when the avatar dies."
 ```
 
-### [ ] P4. `repeat` in every attack record (model: sonnet)
+### [x] P4. `repeat` in every attack record (model: sonnet)
 
 **Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
@@ -96,7 +96,7 @@ Read "The design of step 4" below first. Follow the example of commit `63c325f` 
 
 **AGENTS.md:** the hitbox's list of fields in "Actor", and one line in "Shots and objects" or "Damage" pointing to this plan's design.
 
-### [ ] P5. `scale` in every attack record (model: sonnet)
+### [x] P5. `scale` in every attack record (model: sonnet)
 
 **Files:** the same as P4.
 
@@ -104,7 +104,7 @@ The same change as P4 with another key: `constants.bodySlam.attack` gets `scale:
 
 **Tests (new):** as P4, for `scale`.
 
-### [ ] P6. One function lands a hit (model: sonnet)
+### [x] P6. One function lands a hit (model: sonnet)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
