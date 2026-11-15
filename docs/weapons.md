@@ -75,6 +75,7 @@ Not done (waiting for the user): the Biter does not use the aim-correction rule 
 
 - The bullet **travels**; the other kind (hits the chosen target at once, more precise and a little weaker) is wanted too and not built.
 - **Pierce is the number of crossings** (0 = none), a variable of the projectile inherited from the weapon or the skill tree.
+- **How a hitbox hits is a key of its attack, `hits` (the user, 2026-11-14, issues 43 and 44; the name is the coordinator's proposal; data version 61, tests 213 to 219).** `"first"` (the repeater's bullets): only the first thing the bullet's path meets in a frame is hit, actors and objects alike, sorted by how far along its movement of that frame each is touched; ties keep the list order (the actors, then the objects). Things it cannot hit (ignored tags, its owner, the dead or broken, the already struck) are passed. With pierce 0 it ends there; with pierce above 0 it goes on and can hit the next thing in a later frame, never the same twice. `"all"` (the sword, and the bite): everything in its contact is hit, each once, Rocks and Shrooms included. A bullet stops on a rock or a Shroom and applies its damage there, unless its pierce is above 0 (see "Shots and objects" in `AGENTS.md`). This closes the question of which thing a shot hits when one frame touches several.
 
 Preparation for swords, spears and hammers (an experiment, not decisions): `docs/weapon-families.md`.
 
@@ -83,7 +84,6 @@ Preparation for swords, spears and hammers (an experiment, not decisions): `docs
 - **Damage as a range rolled per shot (old project) or a fixed value per weapon?** Asked, not answered; the repeater has a fixed value for now. A range needs a salt per shot and makes the record of a hit store the rolled value.
 - Can a slot be truly **empty**? The user said an empty arm "is really empty", then chose one item per slot with armor-only parts; the two are not settled together.
 - Two-handed weapons, a bonus for the same sword in both arms, and set bonuses were discussed and **left out on purpose** for now. They can come later as part variants or as mods with a condition.
-- Decided (the user, 2026-11-14): a bullet stops on a rock or a Shroom and applies its damage there, unless its pierce is above 0 (see "Shots and objects" in `AGENTS.md`).
 - A bullet must be slower than the smallest radius it should not skip (the data checks it at load). Fast bullets will need a swept test.
 - The avatar at zero health ends the mission (decided 2026-11-14, tests 190 to 193); the screen of that alert is the Screen desk's.
 - Order proposed earlier and still ahead (the record of a hit is done): a bench of weapons, then grenade, mine and the emission at the end of a life.

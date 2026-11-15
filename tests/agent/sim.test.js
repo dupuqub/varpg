@@ -2732,7 +2732,7 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
-    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"] }); // 100 px away: a miss
+    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"], hits: "all" }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
     return { rule: [hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, b), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
@@ -2855,7 +2855,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 60, hash: "4fe61d96b2431b71" };
+const DATA_FINGERPRINT = { version: 61, hash: "225a2cc7829dc5d2" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2966,7 +2966,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"], hits: "first" });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3388,7 +3388,7 @@ test("153 a bullet has no life in frames: it flies past the old range (520 px) a
   const result = run(`
     ${ARMED}
     const { s, bp } = armed();
-    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0, ignores: ["ally"] });
+    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0, ignores: ["ally"], hits: "first" });
     s.hitboxes = [bullet(s.actors[0].position.x)];
     const edge = s.grid.windowWidth * s.grid.cellSize / 2;
     s.actors[0].position.y = 0;
@@ -3661,7 +3661,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], hits: "all", exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -3671,7 +3671,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { cut: { flat: 30, perWeight: 0 } },", /not a type of damage/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
-  bad("      melee: {", "      weapon: { exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
+  bad("      melee: {", "      weapon: { hits: \"first\", exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
 test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
@@ -4826,4 +4826,112 @@ test("212 only a melee attack may use the weight (the user, issue 45): the data 
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 0, perWeight: 0.001 } }"), /damage puncture of the projectile of the weapon of the part repeater-arm uses the weight.*only a melee attack may/);
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0.5 } }"), /weapon of the part repeater-arm uses the weight/);
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0 } }"), /must be above 0/);
+});
+
+// ---- How a hitbox hits: only the first on its path, or all it touches (issues 43 and 44) ----
+// The scene of finding R3.1, played by resolveHitboxes alone (no other stage moves anything): the Rock of seed 1 at 99,456 (radius 28,
+// health 10) and a Biter of radius 20 standing just above it (centers 48 px apart or more, so the two bodies do not overlap). A bullet
+// of the repeater (radius 6, speed 8, puncture 10) flies right along y = 428, between them. With the Biter at x = 100 the bullet's path
+// first touches the Rock at x = 99 - sqrt(34² - 28²) = 79.71 and the Biter at x = 100 - sqrt(26² - 20²) = 83.39; with the Biter at
+// x = 95 it touches the Biter first, at 78.39. The bullet starts the frame at x0 and ends it at x0 + 8, touching neither at the start
+// and both at the end.
+const FIRST_SCENE = (biterX, x0, { pierce = 0, ignores = null, struck = null, frames = 1 } = {}) => `
+  ${ARMED}
+  const { s } = armed(0);
+  const [avatar, biter] = s.actors;
+  biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
+  const audit = createAudit();
+  spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+  const bullet = s.hitboxes[0];
+  bullet.position.x = ${x0}; bullet.position.y = 428;
+  ${ignores ? "bullet.ignores = " + JSON.stringify(ignores) + ";" : ""}
+  ${struck ? "bullet.struck = " + JSON.stringify(struck) + ";" : ""}
+  const frames = [];
+  for (let i = 0; i < ${frames}; i++) {
+    resolveHitboxes(s, audit);
+    frames.push({ targets: audit.map((line) => JSON.parse(line).target), biter: biter.health.now, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ x: h.position.x, pierceLeft: h.pierceLeft, struck: [...h.struck] })) });
+  }
+  return { hits: bullet.hits, frames };
+`;
+
+test("213 a bullet hits only the first thing its path meets in the frame (the scene of finding R3.1): a pierce 0 bullet of the repeater (hits first) going right from x 78 to 86 along y 428 first touches the Rock of seed 1 at x 79.71 and a Biter standing just above the Rock at x 83.39, both in the same frame: the Rock takes the hit (one audit line, its 10 health gone), the Biter is untouched (30), and the bullet ends", () => {
+  const r = plain(run(FIRST_SCENE(100, 78)));
+  assert.strictEqual(r.hits, "first", "the bullet carries the key of its attack");
+  assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [] });
+});
+
+test("214 the mirror of test 213: with the Biter at x 95 the bullet going right from x 76 to 84 first touches the Biter (at x 78.39) and the Rock after it (at 79.71), both in the same frame: the Biter takes the hit (one audit line, 30 - 10 = 20 health: it resists no puncture), the Rock is untouched (10), and the bullet ends", () => {
+  const r = plain(run(FIRST_SCENE(95, 76)));
+  assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] });
+});
+
+test("215 a bullet with pierce 1 that touches two things in one frame hits only the first in that frame, and the second in the next frame because it still touches it: in the scene of test 213 with pierce 1, frame 1 hits the Rock only (the Biter still 30; the bullet goes on at x 86 with pierce 0 left and the Rock struck), frame 2 (x 94, still 20.9 px from the Biter's center, under 26) hits the Biter (20) and the bullet ends; a third frame changes nothing", () => {
+  const r = plain(run(FIRST_SCENE(100, 78, { pierce: 1, frames: 3 })));
+  assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [{ x: 86, pierceLeft: 0, struck: ["rock small:0,1"] }] });
+  assert.deepStrictEqual(r.frames[1], { targets: ["rock small:0,1", "biter_0"], biter: 20, rock: 0, bullets: [] });
+  assert.deepStrictEqual(r.frames[2], r.frames[1]);
+});
+
+test("216 what the bullet cannot hit never counts as first, and it passes it: in the scene of test 213 (the Rock first on the path), with the Rock already struck by this bullet, or with object in its ignored tags, the Biter behind it takes the hit (20) and the bullet ends, the Rock untouched (10); and a Biter at 0 health first on a path (at x 129, met at x 111) is passed for the living Biter met after it (at x 117.03, in the same frame from x 110 to 118): only the living one has an audit line", () => {
+  for (const options of [{ struck: ["rock " + ROCK.key] }, { ignores: ["self", "ally", "object"] }]) {
+    const r = plain(run(FIRST_SCENE(100, 78, options)));
+    assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] }, JSON.stringify(options));
+  }
+  const dead = plain(run(`
+    ${ARMED}
+    const { s } = armed(0, 1);
+    const [avatar, alive, corpse] = s.actors;
+    alive.radius = 12; alive.position.x = 132; alive.position.y = 10;
+    corpse.radius = 12; corpse.position.x = 129; corpse.position.y = 0; corpse.health.now = 0;
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
+    s.hitboxes[0].position.x = 110; s.hitboxes[0].position.y = 0;
+    resolveHitboxes(s, audit);
+    return { targets: audit.map((line) => JSON.parse(line).target), alive: alive.health.now, corpse: corpse.health.now, bullets: s.hitboxes.length };
+  `));
+  assert.deepStrictEqual(dead, { targets: ["biter_0"], alive: 20, corpse: 0, bullets: 0 });
+});
+
+test("217 a sword's cone hits all it touches (hits all): the cone of the sword-arm of the combat blueprint, born at the avatar at 39,456 pointing right (reach 90, 90 degrees), over two Biters (radius 10, at 60,440 and 60,472) and the Rock of seed 1 at 99,456, writes three audit lines, one for each (the Biters in list order, then the Rock), each hit once", () => {
+  const r = plain(run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    s.actors = [s.actors[0], s.actors.find((a) => a.id === "biter_0"), s.actors.find((a) => a.id === "biter_1")];
+    const [avatar, a, b] = s.actors;
+    avatar.position.x = 39; avatar.position.y = 456;
+    a.radius = 10; a.position.x = 60; a.position.y = 440;
+    b.radius = 10; b.position.x = 60; b.position.y = 472;
+    const attack = avatar.attacks["sword-arm"];
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "sword-arm", 1, 0, { radius: 0, frames: 1, speed: 0, pierce: null, cone: { reach: attack.reach, cosHalf: attack.cosHalf, sinHalf: attack.sinHalf } });
+    const hits = s.hitboxes[0].hits;
+    resolveHitboxes(s, audit);
+    resolveHitboxes(s, audit); // the cone is gone after its one frame: nothing more
+    return { hits, targets: audit.map((line) => JSON.parse(line).target) };
+  `));
+  assert.deepStrictEqual(r, { hits: "all", targets: ["biter_0", "biter_1", "rock small:0,1"] });
+});
+
+test("218 a hitbox that hits first and did not move in the frame met everything at the same moment, so the list order decides (the actors, then the objects): the bullet of the repeater with speed 0 placed at 80,428, touching both the Rock of seed 1 and a Biter of radius 20 at 85,408, hits the Biter and ends; with the Biter left out of its reach the Rock is hit", () => {
+  const still = (biterX) => plain(run(`
+    ${ARMED}
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 0, pierce: 0 });
+    s.hitboxes[0].position.x = 80; s.hitboxes[0].position.y = 428;
+    resolveHitboxes(s, audit);
+    return audit.map((line) => JSON.parse(line).target);
+  `));
+  assert.deepStrictEqual(still(85), ["biter_0"]);
+  assert.deepStrictEqual(still(500), ["rock small:0,1"]);
+});
+
+test("219 how a hitbox hits is checked on load: without its hits, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place, and a hits that is not first or all is refused too", () => {
+  const refused = (from, to, message) => assert.throws(() => loadGame((text) => patchOnce(text, from, to)), message);
+  refused('          hits: "all", // how its hitbox hits', "          // how its hitbox hits", /hits of the attack bite of the actor biter must be one of first, all/);
+  refused('        hits: "first", // how its bullets hit', "        // how its bullets hit", /hits of the weapon of the part repeater-arm must be one of first, all/);
+  refused('        hits: "all", // how its blow hits', "        // how its blow hits", /hits of the melee of the part sword-arm must be one of first, all/);
+  refused('        hits: "first", // how its bullets hit', '        hits: "some", // how its bullets hit', /hits of the weapon of the part repeater-arm must be one of first, all, and it is "some"/);
 });

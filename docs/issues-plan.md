@@ -135,7 +135,7 @@ The user (issue 28, the summary comment): when the avatar's death is tested the 
 
 The user (issue 45, the last comment): both keys are removed (data, `REPEATS`, `SCALES`, `checkRepeat`, `checkScale`, `ATTACK_KEYS`, `BODY_ATTACK_KEYS`, `HITBOX_ATTACK_KEYS`, `CHECK_ATTACK_KEY`, the copy in the hitbox; tests 195 to 198 are deleted with their README rows, test 206 and any other assertion that reads the keys is adapted and named in the report). New check in `assertValidDefinitions`: a `perWeight` above 0 is refused on an attack that is not melee. Melee here: the body slam, an attack of an actor's recipe (the bite), the `melee` of a part; not melee: the `weapon` of a part (its projectile). New test for the check (a patched weapon whose damage uses the weight is refused; today's data loads). Raise `DEFINITIONS_VERSION` and the fingerprint of test 129. Update point 7 of the action model and the two "Every attack record has..." points in `AGENTS.md`, and the table of step 4 in `docs/base-plan.md` (the size measured beside P4 and P5: 2778 bytes per snap, gone). The basic rule "an actor is never hurt twice by the same hitbox in the same frame" is already `struck`: write it in `AGENTS.md`, no code. Whole-state tests: the state loses two keys per attack, so say which known answers moved, if any. Closes issue 45; R4.5 of issue 48.
 
-### [ ] I19. A hitbox says how it hits: only the first on its path, or all it touches (model: opus; issues 43 and 44)
+### [x] I19. A hitbox says how it hits: only the first on its path, or all it touches (model: opus; issues 43 and 44)
 
 **Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/weapons.md`.
 
