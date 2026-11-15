@@ -5138,7 +5138,7 @@ test("225 the combat log only grows when the user goes back and resumes (issue 4
   assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
 });
 
-test("226 a Biter does not break a weightless Branch (issue 47; the user's rule of 2026-11-10 that an actor never breaks an object): a Biter moving into an isolated Branch of seed 1 at 3 px/frame leaves it whole (health 1, not in the broken list), writes no audit line, and is stood against it like against a Rock (pushed out to just touch, the part going in removed, the Branch has no bounce)", () => {
+test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes no audit line (its body ignores `object`: breaking it is not damage), is not pushed or stopped and keeps its speed and its place", () => {
   const result = plain(run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
@@ -5147,18 +5147,20 @@ test("226 a Biter does not break a weightless Branch (issue 47; the user's rule 
     s.actors = [s.actors[0], biter];
     const lines = createAudit();
     biter.position.x = branch.position.x - (biter.radius + branch.radius) + 1; biter.position.y = branch.position.y;
+    const place = { x: biter.position.x, y: biter.position.y };
     biter.move.velocity.x = 3; biter.move.velocity.y = 0;
     collideWithObjects(s, biter, [], lines);
     return {
       broken: isObjectBroken(s, branch), health: objectHealth(s, branch), lines: lines.slice(), vx: biter.move.velocity.x,
-      gap: branch.position.x - biter.position.x - (biter.radius + branch.radius),
+      moved: [biter.position.x - place.x, biter.position.y - place.y], biterHealth: biter.health.now, biterMax: biter.health.max,
     };
   `, BRANCHY));
-  assert.strictEqual(result.broken, false, "the Biter does not break it");
-  assert.strictEqual(result.health, 1);
-  assert.deepStrictEqual(result.lines, [], "no hit, no line");
-  assert.strictEqual(result.vx, 0, "the part going in is removed: the Biter is stopped against it");
-  assert.ok(Math.abs(result.gap) < 1e-9, "and it just touches the Branch");
+  assert.strictEqual(result.broken, true, "the Biter breaks it");
+  assert.strictEqual(result.health, 0);
+  assert.deepStrictEqual(result.lines, [], "no hit, no line: breaking it is not damage");
+  assert.strictEqual(result.vx, 3, "the Biter keeps its speed and goes through");
+  assert.deepStrictEqual(result.moved, [0, 0], "and is not pushed out");
+  assert.strictEqual(result.biterHealth, result.biterMax, "the Biter loses nothing");
 });
 
 test("227 breaking a weightless Branch still writes the audit lines (issue 47, hits of 0 are hits, issue 46): the avatar walking into an isolated Branch of seed 1 writes exactly two lines in this order, the Branch's slam on the avatar (bodySlam, total 0, the avatar loses nothing) and then the avatar's hit on the Branch (target the Branch, health taken at most its 1), the totals count both as hits, and the Branch is broken", () => {
@@ -5290,4 +5292,74 @@ test("231 amplified damage cannot take the shield or the health past their limit
   assert.strictEqual(result.kept.health, 0);
   near(result.held.shield.now, 20);
   assert.ok(result.held.shield.now <= result.held.shield.max && result.held.health.now === 100);
+});
+
+test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too (issue 47, I27): landHit with an empty packet on an isolated Branch of seed 1 breaks it (landed, broken, one audit line of total 0); a bullet of 0 breaks it and spends its pierce like on any hit (pierce 1 goes on with 0 left, pierce 0 ends on it); and the same empty packet on a Rock leaves it whole", () => {
+  const scene = (pierce) => plain(run(`
+    ${ARMED}
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const isolated = (kind) => objects.find((object) => object.type === kind && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const branch = isolated("branch");
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = branch.position.x + 5000; biter.position.y = branch.position.y;
+    avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y; // near, so the bullet stays in the window of the grid
+    const lines = createAudit();
+    const direct = landHit(s, lines, "source", "poke", {}, branch);
+    const directBroken = isObjectBroken(s, branch);
+    delete s.damagedObjects[objectKey(branch)]; // whole again: the bullet's turn
+    const rock = isolated("rock");
+    const rockHit = landHit(s, null, "source", "poke", {}, rock);
+    const rockBroken = isObjectBroken(s, rock);
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+    const hitbox = s.hitboxes[0];
+    hitbox.damage = { puncture: 0 };
+    hitbox.position.x = branch.position.x - 20; hitbox.position.y = branch.position.y;
+    const shotLines = createAudit();
+    resolveHitboxes(s, shotLines);
+    return {
+      direct: { landed: direct.landed, total: direct.resolved.total, broken: direct.broken, lines: lines.map((text) => JSON.parse(text).total), directBroken },
+      rock: { landed: rockHit.landed, broken: rockBroken },
+      shot: { broken: isObjectBroken(s, branch), lines: shotLines.map((text) => JSON.parse(text).total), bullets: s.hitboxes.map((h) => h.pierceLeft) },
+    };
+  `, BRANCHY));
+  const pierced = scene(1);
+  assert.deepStrictEqual(pierced.direct, { landed: true, total: 0, broken: true, lines: [0], directBroken: true });
+  assert.deepStrictEqual(pierced.rock, { landed: true, broken: false }, "a Rock keeps its health under a hit of 0");
+  assert.deepStrictEqual(pierced.shot, { broken: true, lines: [0], bullets: [0] }, "broken by a bullet of 0, which spends 1 pierce and goes on");
+  const stopped = scene(0);
+  assert.deepStrictEqual(stopped.shot, { broken: true, lines: [0], bullets: [] }, "with pierce 0 the bullet ends on it, as on any hit");
+});
+
+test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place; a Rock does not break under any of them", () => {
+  const DUMMIED = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 1 }"), { branches: true });
+  const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
+  assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
+  const ids = { avatar: "avatar_1", dummy: "dummy_0", biter: "biter_0" };
+  for (const kind of kinds) {
+    for (const speed of [3, 0]) {
+      const result = plain(run(`
+        const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+        const isolated = (type) => objects.find((object) => object.type === type && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+        const branch = isolated("branch");
+        const rock = isolated("rock");
+        const s = createChamber2State(1, 1);
+        const actor = [...s.actors, ...createChamber1State().actors].find((a) => a.id === "${ids[kind]}");
+        if (!actor) throw new Error("no actor ${ids[kind]} in the scenes");
+        s.actors = [s.actors[0], actor].filter((a, i, all) => all.indexOf(a) === i); // the avatar must be in the state (worldStops)
+        const touch = (object) => {
+          actor.position.x = object.position.x - (actor.radius + object.radius) + 1; actor.position.y = object.position.y;
+          actor.move.velocity.x = ${speed}; actor.move.velocity.y = 0;
+          const place = { x: actor.position.x, y: actor.position.y };
+          collideWithObjects(s, actor, [], null);
+          return { broken: isObjectBroken(s, object), vx: actor.move.velocity.x, moved: [actor.position.x - place.x, actor.position.y - place.y] };
+        };
+        return { branch: touch(branch), rock: touch(rock).broken };
+      `, DUMMIED));
+      assert.strictEqual(result.branch.broken, true, kind + " at speed " + speed + " breaks the Branch");
+      assert.strictEqual(result.branch.vx, speed, kind + " keeps its velocity");
+      assert.deepStrictEqual(result.branch.moved, [0, 0], kind + " is not pushed out of it");
+      assert.strictEqual(result.rock, false, kind + " does not break a Rock");
+    }
+  }
 });

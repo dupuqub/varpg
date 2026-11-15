@@ -209,7 +209,7 @@ const DEFINITIONS = {
     // size: guess, smaller than a Rock (whose smallest radius is 16): from 6 to 10.
     // weightPerRadius 0: the user's decision (weightless), so its body slam is 0.
     // healthRange: 1 only because every object has the box { now, max }: no rule reads it for weight 0 (the user, 2026-11-15, issue 47:
-    //   "things with no weight break immediately; health is not a parameter for what weighs 0"). The avatar breaks it at the first contact.
+    //   "things with no weight break immediately; health is not a parameter for what weighs 0"). Any actor's body (the Biter's too) and any hit that lands breaks it (the user, 2026-11-15, I27: "the Branch has to break with anything"; it is a placeholder for the things meant to be broken).
     branch: {
       tags: ["object"],
       bodyIgnores: ["enemy", "object"],

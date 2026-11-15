@@ -179,7 +179,7 @@ The user (2026-11-15): "negative resistance amplifies damage". Today `assertVali
 
 One short message in Brazilian Portuguese with what was built and the readings taken without asking.
 
-### [ ] I27. A weightless thing breaks with anything (model: sonnet; corrects the reading of I24)
+### [x] I27. A weightless thing breaks with anything (model: sonnet; corrects the reading of I24)
 
 **Files:** `src/sim.js`, `src/data.js` (comments only), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
