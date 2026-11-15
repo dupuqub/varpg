@@ -6,6 +6,8 @@ The issues were read at commit `00dcce4` (after the review of 2026-11-14, `docs/
 
 ## The coordinator's loop
 
+**Reading an issue is its body and its comments** (issue 53: the user answers in comments, and the body never shows them): `gh api repos/dupuqub/varpg/issues/N --jq '.title, .body'` and then `gh api repos/dupuqub/varpg/issues/N/comments --jq '.[].body'`. The last comment that says "Answer of the user" or "Summary of the user's answers" wins over the body and over earlier comments.
+
 The loop of `docs/base-plan.md`, with three checks the review asked for (issues 35, 39, 40). One parcel at a time, in the order of the list. Never two helpers at once.
 
 1. `git pull --rebase`, then `node --test 2>&1 | grep -E "^not ok|^# (pass|fail)"`. It must say `# fail 0`. Write down the `# pass` number. If it fails, stop and call the user.
@@ -117,17 +119,44 @@ Do issue 51's recipe. The hard part: a weight per kind changes which kind every 
 
 One message in Brazilian Portuguese: the parcels done, the issues closed, and that the parcels below wait for his answers. The Review desk reviews afterwards (the user calls it).
 
+### [x] I16. Reading an issue is its body and its comments (coordinator; issue 53, point 1)
+
+The line above in the loop, the same in `docs/base-plan.md` and in `docs/desks.md` ("How desks talk"). Docs only.
+
+### [ ] I17. The avatar's death stops the world (model: opus; issue 28)
+
+**Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `docs/step-order.md`, `AGENTS.md`.
+
+The user (issue 28, the summary comment): when the avatar's death is tested the world stops: nothing of the avatar takes effect after it, the rest of that step runs for nobody, the mission is aborted, no more frames run. Inside the one contact that kills, both sides still hurt each other, so the death is tested after that whole contact, never in the middle of it. Build: the death test after every place a hurt lands on the avatar (a contact with an object in stage 2, a contact with an actor in stage 4, a hitbox in stage 5), the early end of the step, `docs/step-order.md` rewritten to match (the line "whoever died in this step does not strike" included). The helper decides, and says in the report, what the early end still does (the frame counter, `removeDestroyed`, the visual state, `state.contacts`), keeping this: a death by a bite at the end of a step gives the same state as today wherever that is possible, and tests 190 to 193 still say the truth (change their titles if they do not). New test: the scene of finding R2.1 (the avatar at almost no health with an empty shield dashing into two Biters that overlap it: the second Biter is not hurt, no weapon fires, no sword swings, the audit ends on the contact that killed). Closes issue 28; comment on issue 30 and close it.
+
+### [ ] I18. `repeat` and `scale` go away; only a melee attack may use the weight (model: sonnet; issue 45)
+
+**Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/base-plan.md`.
+
+The user (issue 45, the last comment): both keys are removed (data, `REPEATS`, `SCALES`, `checkRepeat`, `checkScale`, `ATTACK_KEYS`, `BODY_ATTACK_KEYS`, `HITBOX_ATTACK_KEYS`, `CHECK_ATTACK_KEY`, the copy in the hitbox; tests 195 to 198 are deleted with their README rows, test 206 and any other assertion that reads the keys is adapted and named in the report). New check in `assertValidDefinitions`: a `perWeight` above 0 is refused on an attack that is not melee. Melee here: the body slam, an attack of an actor's recipe (the bite), the `melee` of a part; not melee: the `weapon` of a part (its projectile). New test for the check (a patched weapon whose damage uses the weight is refused; today's data loads). Raise `DEFINITIONS_VERSION` and the fingerprint of test 129. Update point 7 of the action model and the two "Every attack record has..." points in `AGENTS.md`, and the table of step 4 in `docs/base-plan.md` (the size measured beside P4 and P5: 2778 bytes per snap, gone). The basic rule "an actor is never hurt twice by the same hitbox in the same frame" is already `struck`: write it in `AGENTS.md`, no code. Whole-state tests: the state loses two keys per attack, so say which known answers moved, if any. Closes issue 45; R4.5 of issue 48.
+
+### [ ] I19. A hitbox says how it hits: only the first on its path, or all it touches (model: opus; issues 43 and 44)
+
+**Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/weapons.md`.
+
+The user (issues 43 and 44, the last comments): a hitbox carries a TAG that says how it works. "Hits all touched" (the sword, and the bite keeps hitting what it hits today): everything in its contact is hit, Rocks and Shrooms included. "Hits only the first" (bullets): only the first thing its path meets in that frame, actors and objects alike, sorted by how far along its movement each is touched; ties keep the list order (actors in list order, then objects in the order of `objectsReaching`). Things that cannot be hit (ignored tags, the owner, the dead, the already struck) never count as first. With pierce above 0 the bullet hits the next thing in a later frame, never the same twice. **The name is the coordinator's proposal, for the user to overrule:** a key of the attack, `hits: "first" | "all"`, in `ATTACK_KEYS` and `HITBOX_ATTACK_KEYS`, checked on load like `exit`. How "how far along its movement" is found is the helper's choice (the simplest exact one: the time of first touch of the moving circle against each candidate's circle within the frame); say it in the report. Tests: the scene of R3.1 (a pierce 0 bullet meets a Rock a few pixels before a Biter in the same frame: the Rock is hit, the Biter untouched) and its mirror; a cone over two Biters and a Rock writes three audit lines; a bullet with pierce 1 touching two things in one frame hits one per frame. Raise `DEFINITIONS_VERSION`. Say which whole-state tests moved (a bullet that used to hit two things in one frame now hits one). Closes issues 43 and 44.
+
+### [ ] I20. A hit of 0 is still a hit (model: sonnet; issue 46)
+
+**Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `src/sim.js` (comments only).
+
+The user (issue 46): a hit that carries no damage is a hit: it writes its audit line (total 0), marks `struck`, spends a pierce and stops a bullet; it does not restart the shield's wait (it is not damage). No rule changes. Write it in "Damage" in `AGENTS.md` (replacing "an attack that hurts nobody writes none") and in the comment of `finalAttack` (issue 48). New test: the three scenes of finding R5.1. Closes issue 46; comment on issue 48 and close it if nothing of it is left.
+
+### [ ] I21. Tell the user (coordinator)
+
+Close issue 53. One message in Brazilian Portuguese: what was built, the name proposed for the TAG, what moved.
+
 ## Waiting for the user (do not start)
 
 One question at a time, the one that unblocks most first. The model is the one that builds the answer.
 
 | Issue | Question | Unblocks | Model after the answer |
 |---|---|---|---|
-| 28 | The avatar killed by a body slam: does it still act in the rest of that step? | The rest of issue 30 (I4) | opus (the order of a step) |
-| 45 | `repeat` and `scale`: obey them, take them out, or keep them as labels? | Step 4 of issue 13; R4.5 of issue 48 | (a) opus, (b) sonnet, (c) haiku |
-| 46 | Is a hit with no damage still a hit? | The `finalAttack` comment of issue 48 | sonnet |
-| 43 | A shot touching several things in one frame: which takes the hit? | — | (a) opus, (b) haiku, (c) sonnet |
-| 44 | Does the sword's blow hurt Rocks and Shrooms? | — | haiku (a test, or one tag in the data) |
 | 47 | Does a weightless thing always break at the first collision? | Best answered after playing I14 | (a) haiku (docs), (b) sonnet |
 | 42 | After the death, can the history go back past it? | S2 (Screen desk) | Screen desk, sonnet |
 
