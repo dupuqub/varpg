@@ -15,7 +15,7 @@ The issues were read, body and comments, at commit `70bc267`, and every recipe w
 
 ## What is different from the Rules desk's loop
 
-- **The Screen desk has no Node tests** (its work needs the page). In their place there is `tests/screen/check.js`, one check per parcel, that prints `CHECK PASSED` or `CHECK FAILED`. T1 and T2 run in Node; T3 drives a real Chrome. All three were seen failing on the code of `70bc267`, so each can fail.
+- **The Screen desk has no Node tests** (its work needs the page). In their place there is `tests/screen/check.js`, one check per parcel, that prints `CHECK PASSED` or `CHECK FAILED`. T1 and T2 run in Node; T3 and T4 drive a real Chrome. All four were seen failing on the code of `70bc267`, so each can fail.
 - **The work goes in one pull request**, not to `main`: the branch `screen/work-order-2026-11-15`, one commit per parcel. The user merges it at the end.
 - **A check is not the user's eyes.** It says the page behaves as the recipe says; whether it looks and feels right is his to say, after the merge.
 
@@ -44,7 +44,7 @@ If the merge has a conflict, stop and call the user.
 6. Comment on each issue of the parcel in one line: the parcel, the commit, the "Fails without the change" line, and "closes when pull request <number> is merged" (`gh api repos/dupuqub/varpg/issues/<n>/comments -f body="..."`). Do not close the issue.
 7. Tell the user in one or two lines, in Brazilian Portuguese, and go to the next parcel.
 
-**Stop and call the user** when: the tests fail before a parcel; a parcel failed on opus; a helper says it needs a decision or that the recipe does not match the code; a file of the Rules desk would have to change (`src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`); the T2 check says the fight has no hit that broke the shield; a push is refused twice; the next parcel is under "Waiting for the user".
+**Stop and call the user** when: the tests fail before a parcel; a parcel failed on opus; a helper says it needs a decision or that the recipe does not match the code; a file of the Rules desk would have to change (`src/sim.js`, `src/data.js`, `src/history.js`, `tests/agent/`); the T2 check says the fight has no hit that broke the shield; a push is refused twice; T4 is the next parcel and issue 58 is still open.
 
 ## What to tell every helper
 
@@ -107,15 +107,19 @@ One rule, the same for every chamber, with no chamber named in the code: **the s
 
 **Check:** `NODE_PATH=/tmp/screencheck/node_modules node tests/screen/check.js T3`. It opens the game in Chrome, kills the avatar, and tries every item above, the cross-check of the history included.
 
+### [ ] T4. The combat log says when the mission is aborted (model: haiku; issues 49 and 58)
+
+**Do not start before issue 58 is closed** (`gh api repos/dupuqub/varpg/issues/58 --jq .state` says `closed`): the Rules desk writes the function of the line, `combatAuditAbortedLine(frame)`, in `src/sim.js`. If it is still open when this parcel is the next one, stop and tell the user. Then `git merge origin/main` before starting. After T3.
+
+**Files:** `src/main.js`.
+
+The user (2026-11-15): the log gets a line when the mission ends, like `start` and `resume`: "it will be useful to debug some moments". In `stepLive`, right after the call of `step`: if the mission is aborted (`missionAborted()`, from T3), push the line once: `audit.push(combatAuditAbortedLine(state.frame));`, with a comment that says why it is here (a new state was just calculated, and after T3 nothing calls `stepLive` on a state that is already aborted, so the line is written once per death; a death undone by the history and died again writes it again, like any line of the log). Do not write the word `audit` inside `stepBack` or `stepForward` (test 175).
+
+**Check:** `NODE_PATH=/tmp/screencheck/node_modules node tests/screen/check.js T4`.
+
 ### [ ] E1. Close the issues (coordinator; after the user says the pull request is merged)
 
-Close 52, 26, 41, 25, 49 and 42, each with a one-line comment naming the merged pull request (`gh api -X PATCH repos/dupuqub/varpg/issues/<n> -f state=closed`). Then run the T3 check once more on `main` if parcel F1 of `docs/solid-base-plan.md` has landed since, and tell the user its last line.
-
-## Waiting for the user (do not start)
-
-| Parcel | Question | Model after the answer |
-|---|---|---|
-| T4 | Issue 49: should the combat log get a line when the mission ends, `{ frame, event: "aborted" }`, like `start` and `resume`? Today the log shows a death only as the last hit on the avatar. If yes: the Rules desk writes the line's function in `src/sim.js` (an issue with `desk:rules`), then the screen pushes it once, where it pauses on the death. | haiku for the screen's part |
+Close 52, 26, 41, 25, 49 and 42 (49 only if T4 is marked `[x]`), each with a one-line comment naming the merged pull request (`gh api -X PATCH repos/dupuqub/varpg/issues/<n> -f state=closed`). Then run the T3 check once more on `main` if parcel F1 of `docs/solid-base-plan.md` has landed since, and tell the user its last line.
 
 ## For the user to see after the merge
 

@@ -3,12 +3,13 @@
 //   node tests/screen/check.js T1      every object type has a color (no browser)
 //   node tests/screen/check.js T2      the text of the COMBAT REPORT (no browser)
 //   node tests/screen/check.js T3      the death on the screen (a real browser: Chrome, driven by puppeteer-core)
+//   node tests/screen/check.js T4      the line of the combat log that says the mission was aborted (a real browser too)
 //
 // It prints one line per thing checked ("ok" or "NOT OK") and ends with CHECK PASSED or CHECK FAILED (exit code 1).
 // These are not tests of the rules (those are tests/agent/) and `node --test` does not run this file.
-// T3 needs: npm install --prefix /tmp/screencheck puppeteer-core
+// T3 and T4 need: npm install --prefix /tmp/screencheck puppeteer-core
 //           NODE_PATH=/tmp/screencheck/node_modules node tests/screen/check.js T3
-// The T3 check kills the avatar by writing its health from outside the game. Only a check may do that: the screen never writes the state.
+// These two checks kill the avatar by writing its health from outside the game. Only a check may do that: the screen never writes the state.
 
 const fs = require("fs");
 const path = require("path");
@@ -79,9 +80,8 @@ function checkT2() {
   }
 }
 
-// T3: after the avatar's death the frames stop, the buttons stay, back and forward still walk the history, there is no resume
-// line on an aborted state, and play from an earlier frame goes on (the history is a debugger for now: the user, issue 42).
-async function checkT3() {
+// Opens the game in Chrome and enters Chamber 2. kill() leaves the avatar with no health, so the next step aborts the mission.
+async function openGame() {
   const puppeteer = require("puppeteer-core");
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new", args: ["--no-sandbox"] });
   const page = await browser.newPage();
@@ -89,6 +89,17 @@ async function checkT3() {
   page.on("pageerror", (error) => errors.push(String(error)));
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const kill = () => page.evaluate(() => { state.actors.find((actor) => actor.id === AVATAR_ID).health.now = 0; });
+  await page.goto("file://" + path.join(ROOT, "index.html"));
+  await page.click('[data-goto="screen-chambers"]');
+  await page.click('[data-goto="screen-chamber-2"]');
+  await wait(700);
+  return { browser, page, errors, wait, kill };
+}
+
+// T3: after the avatar's death the frames stop, the buttons stay, back and forward still walk the history, there is no resume
+// line on an aborted state, and play from an earlier frame goes on (the history is a debugger for now: the user, issue 42).
+async function checkT3() {
+  const { browser, page, errors, wait, kill } = await openGame();
   // What the screen shows now, read from the page.
   const look = (id) => page.evaluate((id) => {
     const part = (name) => document.querySelector(`#${id} [data-control="${name}"]`);
@@ -100,11 +111,7 @@ async function checkT3() {
     };
   }, id);
 
-  await page.goto("file://" + path.join(ROOT, "index.html"));
-  await page.click('[data-goto="screen-chambers"]');
-  await page.click('[data-goto="screen-chamber-2"]');
   const two = "screen-chamber-2";
-  await wait(700);
   expect((await look(two)).alert === "hidden", "Chamber 2, alive: the alert exists and is hidden");
   await kill();
   await wait(400);
@@ -174,10 +181,47 @@ async function checkT3() {
   await browser.close();
 }
 
-const CHECKS = { T1: checkT1, T2: checkT2, T3: checkT3 };
+// T4: the combat log gets one line when the mission is aborted (the user, 2026-11-15: "it will be useful to debug some moments"),
+// with the frame of the death, once per death: a death undone by the history and died again writes it again.
+async function checkT4() {
+  const { browser, page, errors, wait, kill } = await openGame();
+  const log = () => page.evaluate(() => ({ frame: state.frame, mission: state.mission, entries: audit.map((line) => JSON.parse(line)) }));
+  const aborted = (entries) => entries.filter((entry) => entry.event === "aborted");
+
+  await kill();
+  await wait(400);
+  const dead = await log();
+  const last = dead.entries[dead.entries.length - 1];
+  expect(dead.mission === "aborted", "the avatar with no health aborts the mission");
+  expect(last.event === "aborted" && last.frame === dead.frame, "the last line of the log is { frame, event: \"aborted\" } with the frame of the death");
+  expect(Object.keys(last).sort().join(",") === "event,frame", "that line has only the frame and the event");
+  await wait(400);
+  await page.keyboard.press("p");
+  await page.keyboard.press(".");
+  expect(aborted((await log()).entries).length === 1, "it is written once, however long the frozen state is shown");
+
+  const back = '#screen-chamber-2 [data-control="back"]';
+  await page.click(back);
+  await page.click('#screen-chamber-2 [data-control="forward"]');
+  expect(aborted((await log()).entries).length === 1, "walking back and forward through the saved frames writes nothing");
+
+  await page.click(back);
+  await page.click(back);
+  await page.click('#screen-chamber-2 [data-control="toggle"]');
+  await wait(300);
+  await kill();
+  await wait(400);
+  const again = await log();
+  expect(aborted(again.entries).length === 2 && again.entries[again.entries.length - 1].event === "aborted", "a death undone and died again writes the line again");
+
+  expect(errors.length === 0, "no error on the page" + (errors.length ? ": " + errors[0] : ""));
+  await browser.close();
+}
+
+const CHECKS = { T1: checkT1, T2: checkT2, T3: checkT3, T4: checkT4 };
 const which = process.argv[2];
 if (!CHECKS[which]) {
-  console.log("usage: node tests/screen/check.js T1|T2|T3");
+  console.log("usage: node tests/screen/check.js T1|T2|T3|T4");
   process.exit(2);
 }
 Promise.resolve()
