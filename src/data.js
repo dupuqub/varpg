@@ -280,6 +280,8 @@ const DEFINITIONS = {
     //     health") grows in a straight line with the points: every 100 points add the life it has without any. guess: the
     //     scale, to be tuned by playing with real items.
     //   There is no minimum damage (the user, 2026-11-14): the curve is what keeps anyone from being immune.
+    //   Resistance may be negative (the user, 2026-11-15: "negative resistance amplifies damage"): -50 points double the hit, -75 make it x4.
+    //     Points at or below minus the scale are refused (the curve would divide by zero); toward it the growth has no limit (the agent's reading).
     damage: { resistanceScale: 100 },
 
     // The ring of the shield (the user's idea, 2026-11-12): the avatar's body for collision and for being hit is a circle that goes

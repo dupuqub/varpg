@@ -2580,7 +2580,7 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   const legs = "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 }";
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5, dashspeed: 1 }")), /The part legs has the spec dashspeed/);
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { fire: 10 }, speed: 3.5 }")), /resistance of the part legs is to fire/);
-  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -1 }, speed: 3.5 }")), /resistance of the part legs to blunt/);
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -100 }, speed: 3.5 }")), /resistance of the part legs to blunt/); // -1 is allowed since issue 34 (negative resistance amplifies): the limit is minus the scale
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: -30, resistance: { blunt: 10 }, speed: 3.5 }")), /spec health of the part legs/);
   const bite = "damage: { puncture: { flat: 3, perWeight: 0.002 } }";
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 3, perWeight: 0.002 } }")), /attack bite of the actor biter has fire/);
@@ -5197,4 +5197,97 @@ test("227 breaking a weightless Branch still writes the audit lines (issue 47, h
   `, BRANCHY));
   assert.strictEqual(touching.broken, true);
   assert.deepStrictEqual(touching.lines, [["branch " + touching.name, "avatar_1", 0], ["avatar_1", "branch " + touching.name, touching.lines[1][2]]], "the same two lines with no speed at all");
+});
+
+// ---- A negative resistance amplifies the damage (issue 34, the user, 2026-11-15) ----
+const NEGATIVE_BLUNT = (points) => (text) => text.replace("resistance: { blunt: 20, puncture: 10 }, speed: 0.5", "resistance: { blunt: " + points + ", puncture: 10 }, speed: 0.5");
+
+test("228 a negative resistance amplifies the damage (the user, 2026-11-15; the curve is unchanged): with the scale 100, -50 blunt points are a reduction of -1 and a blunt 10 hit resolves to 20, -75 points a reduction of -3 and 40; an avatar whose parts sum to -50 (Torso -60, Legs 10) has -50 in its resistance and loses 20 of a blunt 10 through landHit; the shield's points below 0 amplify too while it stands", () => {
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+  const result = plain(run(`
+    const at = (points) => resolveDamage({ blunt: 10 }, { resistance: { blunt: points } });
+    const shielded = resolveDamage({ blunt: 10 }, { resistance: { blunt: 10 }, shield: { now: 5, max: 5, resistance: { blunt: -60 } } });
+    return { fifty: at(-50), seventyFive: at(-75), shielded };
+  `));
+  near(result.fifty.parts[0].reduction, -1);
+  near(result.fifty.total, 20);
+  near(result.seventyFive.parts[0].reduction, -3);
+  near(result.seventyFive.total, 40);
+  near(result.shielded.parts[0].points, -50);
+  near(result.shielded.total, 20);
+
+  const negative = loadGame(NEGATIVE_BLUNT(-60));
+  const hit = plain(run(`
+    const avatar = createAvatar(createRun(1).blueprint);
+    const before = avatar.health.now;
+    const landed = landHit(createChamber1State(), null, "source", "poke", { blunt: 10 }, avatar);
+    return { points: avatar.resistance.blunt, total: landed.resolved.total, lost: before - avatar.health.now };
+  `, negative));
+  assert.strictEqual(hit.points, -50);
+  near(hit.total, 20);
+  near(hit.lost, 20);
+});
+
+test("229 the three refusals of a negative resistance that would break the curve (issue 34): a part whose resistance is at or below minus the scale (-100 blunt on the Torso), a part whose shieldResistance is (-100 on the Generator), and a blueprint whose summed resistance of a type is (two Torsos of -60 blunt with the Legs make -110), with the shield's points counted too (a second Generator takes -80 to -110); the messages name the part, the type and the points; just above the limit (-99) loads", () => {
+  const torso = loadError(NEGATIVE_BLUNT(-100));
+  assert.match(torso ?? "", /resistance of the part torso to blunt must be above minus the resistance scale \(-100\), and it is -100/);
+  assert.throws(() => loadGame((text) => text.replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: -100"), { shield: true }), /shieldResistance of the part generator to blunt must be above minus the resistance scale \(-100\), and it is -100/);
+  assert.doesNotThrow(() => loadGame(NEGATIVE_BLUNT(-99)));
+
+  const sums = loadGame(NEGATIVE_BLUNT(-60));
+  const attempt = `const attempt = (blueprint) => { try { assertValidBlueprint(blueprint); return "accepted"; } catch (error) { return error.message; } };`;
+  const body = run(`${attempt} const full = createRun(1).blueprint; return { starter: attempt(full), twoTorsos: attempt({ parts: [...full.parts, "torso"] }) };`, sums);
+  assert.strictEqual(body.starter, "accepted", "-60 + 10 is -50 points: allowed");
+  assert.match(body.twoTorsos, /resistance to blunt \(the parts\) sums to -110 points, which is at or below minus the resistance scale \(-100\)/);
+
+  // The shield's points count too: Torso -60 and Legs 10 (-50) with a Generator of -30 load (the starter blueprint is -80), and a second Generator makes -110.
+  const shielded = loadGame((text) => NEGATIVE_BLUNT(-60)(text).replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: -30"), { shield: true });
+  const withShield = run(`${attempt} const full = createRun(1).blueprint; return { one: attempt(full), two: attempt({ parts: [...full.parts, "generator"] }) };`, shielded);
+  assert.strictEqual(withShield.one, "accepted");
+  assert.match(withShield.two, /resistance to blunt \(the parts with the shield\) sums to -110 points/);
+});
+
+test("230 resolveDamage fails loudly when the points plus the scale are at or below 0, naming the type and the points (so a future buff cannot reach NaN or a negative damage unseen): -100 points and -130 points on blunt, a shield that brings the sum to -100, and the same type with an empty amount is not asked; -99 resolves to a hit of 1000", () => {
+  const result = plain(run(`
+    const ask = (packet, target, withShield) => { try { return resolveDamage(packet, target, withShield).total; } catch (error) { return error.message; } };
+    return {
+      exact: ask({ blunt: 10 }, { resistance: { blunt: -100 } }),
+      past: ask({ blunt: 10 }, { resistance: { puncture: 0, blunt: -130 } }),
+      shield: ask({ blunt: 10 }, { resistance: { blunt: -40 }, shield: { now: 1, resistance: { blunt: -60 } } }),
+      noShield: ask({ blunt: 10 }, { resistance: { blunt: -40 }, shield: { now: 1, resistance: { blunt: -60 } } }, false),
+      other: ask({ puncture: 10 }, { resistance: { blunt: -130 } }),
+      near: ask({ blunt: 10 }, { resistance: { blunt: -99 } }),
+    };
+  `));
+  assert.match(result.exact, /resistance to blunt is -100 points/);
+  assert.match(result.past, /resistance to blunt is -130 points/);
+  assert.match(result.shield, /resistance to blunt is -100 points/);
+  assert.ok(Math.abs(result.noShield - 10 * 100 / 60) < 1e-9, "without the shield the same target is -40 points");
+  assert.strictEqual(result.other, 10, "a type that is not in the packet is not asked");
+  assert.ok(Math.abs(result.near - 1000) < 1e-9);
+});
+
+test("231 amplified damage cannot take the shield or the health past their limits (issue 34): a shield with 10 left and -50 points takes a blunt 10 as 20, gives its 10, and the share that did not fit (half) is resolved again against the body alone (5); a hit of 1000 amplified on a body of 3 health leaves 0, never negative, and the shield never goes below 0 or above its maximum", () => {
+  const result = plain(run(`
+    const make = (shieldNow, health) => ({ id: "target", health: { now: health, max: 100 }, shield: { now: shieldNow, max: 40, quiet: 7, resistance: { blunt: -50 } }, resistance: { blunt: 0 } });
+    const s = createChamber1State();
+    const breaking = make(10, 100);
+    const first = landHit(s, null, "source", "poke", { blunt: 10 }, breaking);
+    const overkill = make(10, 3);
+    landHit(s, null, "source", "poke", { blunt: 1000 }, overkill);
+    const held = make(40, 100);
+    const kept = landHit(s, null, "source", "poke", { blunt: 10 }, held);
+    return { first: first.taken, breaking, overkill, kept: kept.taken, held };
+  `));
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+  near(result.first.shield, 10);
+  near(result.first.health, 5);
+  assert.strictEqual(result.breaking.shield.now, 0);
+  near(result.breaking.health.now, 95);
+  assert.strictEqual(result.overkill.health.now, 0);
+  assert.strictEqual(result.overkill.shield.now, 0);
+  near(result.kept.shield, 20);
+  assert.strictEqual(result.kept.health, 0);
+  near(result.held.shield.now, 20);
+  assert.ok(result.held.shield.now <= result.held.shield.max && result.held.health.now === 100);
 });

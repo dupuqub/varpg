@@ -166,7 +166,7 @@ function writeShield(actor, blueprint) {
   shield.delayFrames = fromParts(actor, blueprint, "shieldDelayFrames");
   shield.regenPerFrame = fromParts(actor, blueprint, "shieldRegenPerFrame");
   for (const type of DEFINITIONS.damageTypes) {
-    shield.resistance[type] = isAvatar(actor) ? partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0) : 0;
+    shield.resistance[type] = isAvatar(actor) ? sumShieldResistance(blueprint, type) : 0;
   }
 }
 
@@ -204,6 +204,11 @@ function sumResistance(blueprint, type) {
   return partsOf(blueprint).reduce((sum, part) => sum + (part.specs.resistance?.[type] || 0), 0);
 }
 
+// The sum of the shield's resistance of the parts to one type of damage (a part without it adds 0).
+function sumShieldResistance(blueprint, type) {
+  return partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0);
+}
+
 // What the parts add to a value, for the avatar. Objects get nothing from the blueprint.
 function fromParts(actor, blueprint, name) {
   return isAvatar(actor) ? sumSpec(blueprint, name) : 0;
@@ -211,11 +216,24 @@ function fromParts(actor, blueprint, name) {
 
 // Fails loudly if the blueprint is not allowed: an unknown part, or more weight than the
 // blueprint can carry (the capacity of the Torso). A hard limit, not a speed penalty.
+// It also refuses a summed resistance (issue 34, the user: "negative resistance amplifies damage") at or below minus the scale: the
+// curve points / (points + resistanceScale) would divide by zero or flip. Two sums are checked, because the shield comes and goes: the
+// body's alone (what is left once the shield is gone) and the body's plus the shield's (while the shield stands).
 function assertValidBlueprint(blueprint) {
   const weight = totalWeight(blueprint);
   const capacity = sumSpec(blueprint, "capacity");
   if (weight > capacity) {
     throw new Error("The blueprint weighs " + weight + " kg and can carry only " + capacity + " kg");
+  }
+  const scale = DEFINITIONS.constants.damage.resistanceScale;
+  for (const type of DEFINITIONS.damageTypes) {
+    const body = sumResistance(blueprint, type);
+    const withShield = body + sumShieldResistance(blueprint, type);
+    for (const [points, what] of [[body, "the parts"], [withShield, "the parts with the shield"]]) {
+      if (points <= -scale) {
+        throw new Error("The blueprint's resistance to " + type + " (" + what + ") sums to " + points + " points, which is at or below minus the resistance scale (" + -scale + "): the damage would grow without end");
+      }
+    }
   }
 }
 
@@ -336,8 +354,11 @@ function assertValidDefinitions() {
       if (name === "resistance" || name === "shieldResistance") {
         for (const [type, points] of Object.entries(value)) {
           if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The " + name + " of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
-          // Finite too (issue 34): Infinity points make the curve points / (points + resistanceScale) give NaN, which the state must never hold.
-          if (!(Number.isFinite(points) && points >= 0)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be a finite number, 0 or more, and it is " + points);
+          // Finite (issue 34): Infinity points make the curve points / (points + resistanceScale) give NaN, which the state must never hold.
+          // Below 0 is allowed (the user, 2026-11-15: "negative resistance amplifies damage"), but points at or below minus the scale
+          // divide by zero or flip the curve, so a part cannot have them.
+          if (!Number.isFinite(points)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be a finite number, and it is " + points);
+          if (points <= -DEFINITIONS.constants.damage.resistanceScale) throw new Error("The " + name + " of the part " + id + " to " + type + " must be above minus the resistance scale (" + -DEFINITIONS.constants.damage.resistanceScale + "), and it is " + points);
         }
       } else if (name === "shieldDelayFrames" && !(Number.isInteger(value) && value >= 1)) {
         throw new Error("The spec shieldDelayFrames of the part " + id + " must be a whole number of frames, 1 or more, and it is " + value);
@@ -619,6 +640,10 @@ function finalAttack(attacker, hit) {
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
 // by adding more). The total is the sum of the parts. There is no minimum damage (the user, 2026-11-14): the curve alone is
 // what keeps a target from being immune, since it never takes everything off. An empty packet costs nothing.
+// Negative points are a negative reduction and the hit grows (the user, 2026-11-15: "negative resistance amplifies damage"): with the
+// scale 100, -50 points is a reduction of -1 (x2) and -75 is -3 (x4). The growth has no limit as the points go toward minus the scale
+// (the agent's reading of the formula). Points at or below minus the scale cannot exist (refused when the data loads and in
+// assertValidBlueprint), and if one ever reaches this function it throws, so a future buff cannot make NaN or a negative damage unseen.
 // withShield false leaves the shield's resistance out (the part of a hit that goes past a broken shield, see landHit).
 // Returns { parts: [{ type, amount, points, fromShield, reduction, after }], total }.
 function resolveDamage(packet, target, withShield = true) {
@@ -630,6 +655,7 @@ function resolveDamage(packet, target, withShield = true) {
     if (!(amount > 0)) continue;
     const fromShield = withShield && shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
     const points = (target.resistance?.[type] ?? 0) + fromShield;
+    if (points + scale <= 0) throw new Error("The resistance to " + type + " is " + points + " points, at or below minus the resistance scale (" + -scale + "): the curve cannot be calculated");
     const reduction = points / (points + scale);
     const after = amount * (1 - reduction);
     parts.push({ type, amount, points, fromShield, reduction, after });
