@@ -123,7 +123,7 @@ One message in Brazilian Portuguese: the parcels done, the issues closed, and th
 
 The line above in the loop, the same in `docs/base-plan.md` and in `docs/desks.md` ("How desks talk"). Docs only.
 
-### [ ] I17. The avatar's death stops the world (model: opus; issue 28)
+### [x] I17. The avatar's death stops the world (model: opus; issue 28)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `docs/step-order.md`, `AGENTS.md`.
 

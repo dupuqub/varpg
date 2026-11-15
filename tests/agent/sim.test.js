@@ -4790,3 +4790,117 @@ test("208 the scene of issue 47, with today's rule (a Branch breaks only when a 
   assert.strictEqual(fast.vx, 3, "a broken thing gives no push: the avatar keeps its speed");
 });
 
+
+// ---- The avatar's death stops the world (issue 28) ----
+test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the audit has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0"), s.actors.find((actor) => actor.id === "biter_1")];
+    const [avatar, first, second] = s.actors;
+    for (const b of [first, second]) { b.ai.phase = "freeze"; b.ai.frames = 1000000; b.health.now = 30; b.health.max = 30; }
+    avatar.position.x = 0; avatar.position.y = 0;
+    avatar.health.now = 0.01;
+    avatar.shield.now = 0;
+    for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; }
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    const body = avatar.bodyRadius;
+    first.position.x = body + first.radius + 4; first.position.y = -6;
+    second.position.x = body + second.radius + 4; second.position.y = 6;
+    const magazines = avatar.weapons.map((weapon) => weapon.magazine);
+    const audit = createAudit();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    const after = JSON.stringify(s), lines = audit.length;
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    return {
+      mission: s.mission, frame: s.frame, health: avatar.health.now,
+      first: first.health.now, second: second.health.now,
+      hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
+      swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
+      audit: audit.slice(0, lines).map((line) => JSON.parse(line)),
+      same: JSON.stringify(s) === after, linesAfter: audit.length, lines,
+    };
+  `, QUIET);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0, "the first contact kills the avatar");
+  assert.ok(Math.abs(r.first - (30 - 15.103063533266607)) < 1e-9, "inside the contact that kills, the avatar's slam still lands on the first Biter (30 - 15.10 = 14.90)");
+  assert.strictEqual(r.second, 30, "the second Biter is not hurt by the dead avatar's body");
+  assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born after the death");
+  assert.deepStrictEqual(r.magazinesAfter, r.magazines, "no round is spent");
+  assert.deepStrictEqual(r.swords, ["windup 1"], "the sword did not swing");
+  assert.strictEqual(r.lines, 2, JSON.stringify(r.audit));
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["avatar_1 > biter_0", "biter_0 > avatar_1"], "the audit ends on the contact that killed, both sides of it");
+  assert.strictEqual(r.audit[1].health, 0.01, "the last line is the hit that took the avatar's last 0.01");
+  assert.strictEqual(r.mission, "aborted");
+  assert.strictEqual(r.frame, 1);
+  assert.strictEqual(r.same, true, "the next step changes nothing");
+  assert.strictEqual(r.linesAfter, 2, "the next step writes no line");
+});
+
+test("210 the avatar's death in a contact with an object stops the world too: the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into the rock of seed 1 at 99,456 while a Biter chases it from 200 px away; the rock's slam (4.31 after resistance) kills it and its own slam (15.5) still breaks the rock of 10 in the same contact; then the Biter does not move (same place, speed 0), no shot is fired and no sword swings, the audit has only the two lines of that contact, and the mission is aborted", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const [avatar, biter] = s.actors;
+    avatar.health.now = 0.01; avatar.shield.now = 0;
+    for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; }
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    avatar.position.x = ${ROCK.x} - ${ROCK.radius} - avatar.bodyRadius - 2; avatar.position.y = ${ROCK.y};
+    biter.position.x = avatar.position.x; biter.position.y = avatar.position.y - 200; biter.ai.phase = "chase";
+    const before = JSON.stringify({ position: biter.position, velocity: biter.move.velocity });
+    const magazines = avatar.weapons.map((weapon) => weapon.magazine);
+    const audit = createAudit();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    return {
+      health: avatar.health.now, rock: s.damagedObjects["${ROCK.key}"], mission: s.mission,
+      biterStill: JSON.stringify({ position: biter.position, velocity: biter.move.velocity }) === before,
+      hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
+      swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
+      audit: audit.map((line) => JSON.parse(line)),
+    };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0);
+  assert.strictEqual(r.rock, 0, "inside the contact that kills, the avatar's slam still lands and breaks the rock");
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["rock small:0,1 > avatar_1", "avatar_1 > rock small:0,1"]);
+  assert.ok(Math.abs(r.audit[0].total - 4.3076923076923075) < 1e-9 && r.audit[0].health === 0.01, "the rock's slam: 5.6 less 23% = 4.31, of which only the last 0.01 was health");
+  assert.strictEqual(r.audit[1].total, 15.5);
+  assert.strictEqual(r.biterStill, true, "the Biter after the avatar in the list does not move");
+  assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born");
+  assert.deepStrictEqual(r.magazinesAfter, r.magazines);
+  assert.deepStrictEqual(r.swords, ["windup 1"]);
+  assert.strictEqual(r.mission, "aborted");
+});
+
+test("211 the avatar's death by a hitbox stops the world inside stage 5: the avatar of the combat blueprint at 0.01 health (the test game has no shield), its sword one frame from the blow, and a Biter 2 px from it whose bite strikes at once (windup 0); the bite is born first and kills it (6 of damage, 0.01 of health), the sword's cone is born after it in the same step and does not hurt the Biter (still 30), the audit has only the bite's line, the bite that killed is gone from the hitboxes as before, the cone is left as it was born (one frame left, nothing struck), and the mission is aborted", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const [avatar, biter] = s.actors;
+    avatar.position.x = 0; avatar.position.y = 0;
+    avatar.health.now = 0.01;
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    biter.position.x = avatar.bodyRadius + biter.radius + 2; biter.position.y = 0;
+    biter.ai.phase = "chase"; biter.attacks.bite.windupFrames = 0; biter.health.now = 30; biter.health.max = 30;
+    const audit = createAudit();
+    step(s, { move: { x: 0, y: 0 } }, bp, null, audit);
+    return {
+      health: avatar.health.now, biter: biter.health.now, mission: s.mission,
+      hitboxes: s.hitboxes.map((hitbox) => ({ attack: hitbox.attack, framesLeft: hitbox.framesLeft, struck: hitbox.struck })),
+      audit: audit.map((line) => JSON.parse(line)),
+    };
+  `, QUIET);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0);
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter_0 > avatar_1 bite"]);
+  assert.strictEqual(r.audit[0].health, 0.01);
+  assert.strictEqual(r.biter, 30, "the sword's cone, born after the bite, hurts nobody");
+  assert.ok(!r.hitboxes.some((hitbox) => hitbox.attack === "bite"), "the bite that killed ended its turn and is gone, as before");
+  assert.deepStrictEqual(r.hitboxes.filter((hitbox) => hitbox.attack === "sword-arm"), [{ attack: "sword-arm", framesLeft: 1, struck: [] }], "the cone is left as it was born");
+  assert.strictEqual(r.mission, "aborted");
+});

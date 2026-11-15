@@ -1056,6 +1056,7 @@ function objectsNear(state, actor) {
 function collideWithObjects(state, actor, lastContacts, audit = null) {
   let metSomethingNew = false;
   for (const object of objectsNear(state, actor)) {
+    if (worldStops(state)) break; // the contact before this one killed the avatar: the world stops (no more contacts)
     const contact = contactBetween(actor, object);
     if (contact === null) continue;
     if (crushObject(state, actor, object)) continue;
@@ -1360,6 +1361,7 @@ function collideActors(state, lastContacts, audit = null) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
+      if (worldStops(state)) return; // this whole contact killed the avatar: the world stops (no more contacts)
     }
 
     let j = nextInCells(inCell, dummy.cells, i);
@@ -1368,6 +1370,7 @@ function collideActors(state, lastContacts, audit = null) {
         refreshCells(i);
         refreshCells(j);
       }
+      if (worldStops(state)) return; // asked after every contact, so a hurt that reaches the avatar later stops here too
       j = nextInCells(inCell, dummy.cells, j);
     }
   }
@@ -1815,7 +1818,9 @@ function hitboxHurts(hitbox, target) {
 // Every living hitbox moves by its velocity, hurts what it touches (each thing once: struck), and loses a frame; the ones
 // with no frames left, or that crossed all they could, are gone. The rule is hitboxHurts (the tags a hitbox ignores). Things with no health left
 // are not hit (a corpse does not spend a pierce). A bullet is slower than the radii it must not skip over (see the
-// validation of weapons), so it cannot jump a target between two frames.
+// validation of weapons), so it cannot jump a target between two frames. When a hit kills the avatar the world stops
+// (worldStops): that hitbox hits nothing else and loses its frame, the ones after it in the list are left as they were,
+// and the spent ones are still cleared at the end (bookkeeping, not an action: a bite that killed is gone, as before).
 function resolveHitboxes(state, audit = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID); // the window of a bullet is centered on it
   for (const hitbox of state.hitboxes) {
@@ -1838,8 +1843,10 @@ function resolveHitboxes(state, audit = null) {
         break;
       }
       if (hitbox.pierceLeft !== null) hitbox.pierceLeft -= 1;
+      if (worldStops(state)) break; // this hit killed the avatar: the world stops (this hitbox hits nothing else)
     }
-    if (hitbox.framesLeft !== null && hitbox.framesLeft > 0) hitbox.framesLeft -= 1;
+    if (hitbox.framesLeft !== null && hitbox.framesLeft > 0) hitbox.framesLeft -= 1; // the hitbox that killed still ends its turn
+    if (worldStops(state)) break; // the world stopped: the hitboxes after this one do not move, hurt or lose a frame
   }
   // A hitbox with frames ends when they are spent (or when its pierce is); one with no frames (a bullet, null) lives until
   // its center leaves the window of the grid around the avatar, the same area the actors wrap in.
@@ -1859,6 +1866,16 @@ function resolveHitboxes(state, audit = null) {
 // their order. The avatar is not removed: its end is the end of the mission (step, phase 8).
 function destroyActor(state, actor) {
   state.actors.splice(state.actors.indexOf(actor), 1);
+}
+
+// The user's rule (2026-11-14, issue 28): "when the avatar's death is tested, the world stops": nothing of the avatar takes
+// effect after it, the rest of that step runs for nobody, the mission is aborted and no more frames run. Inside the one contact
+// that kills, both sides still hurt each other, so this is asked after a whole contact, never in the middle of it: after each
+// contact with an object (stage 2), after each contact between actors (stage 4), after each hit of a hitbox (stage 5), and at
+// the end of the step, which then aborts the mission (stage 8). The step ends early when it is true (see step).
+function worldStops(state) {
+  const avatar = state.actors.find((actor) => actor.id === AVATAR_ID);
+  return avatar.health.now <= 0;
 }
 
 // Destroys every actor, but the avatar, that has no health left. Called once, at the end of the step, in list order, so
@@ -1969,6 +1986,32 @@ function cellIndex(coordinate, cellSize) {
 function step(state, input, blueprint, visual = null, audit = null) {
   if (state.mission === "aborted") return; // the pilot ejected: the state, the visual and the audit stay as they were
   if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
+
+  // Stages 0 to 5: what happens in the frame. They return early when the avatar's death is tested (worldStops): the rest
+  // of them runs for nobody. The end of the step below always runs, so a death anywhere ends the step as a death in stage 5 does.
+  playStages(state, input, blueprint, visual, audit);
+
+  // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor). It runs after an early stop
+  // too: it is the bookkeeping of the hurts that happened, not an action (a Biter killed in the contact that killed the avatar
+  // is gone, as one killed in stage 5 always was).
+  removeDestroyed(state);
+
+  // 7. The shield counts the quiet frames and regenerates once the wait is over (regenerateShield). It runs after an early stop
+  // too, so a death by a bite gives the state it always gave. The hurt that killed set the count to 0, so this counts one quiet
+  // frame; it gives nothing back (no Generator: nothing to give; with one, the wait is at least one frame), except with a wait
+  // of exactly one frame, which no part has today.
+  for (const actor of state.actors) if (actor.shield) regenerateShield(actor);
+
+  state.frame += 1;
+
+  // 8. The avatar with no health ends the mission (the user, 2026-11-14: the pilot ejects; worldStops). The frame that ended
+  // it is the last one counted, and the next call of step does nothing.
+  if (worldStops(state)) state.mission = "aborted";
+}
+
+// Stages 0 to 5 of a step (see step and docs/step-order.md). Returns early, after stage 2 or 4, when the avatar's death was
+// tested there (worldStops); a death in stage 5 stops inside resolveHitboxes, which is the last of them anyway.
+function playStages(state, input, blueprint, visual, audit) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
 
   // 0. The dynamic values: every actor calculates them again and carries them for this frame (finalizeDynamic).
@@ -1985,7 +2028,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
     if (actor.ai) think(state, actor, byTag);
   }
 
-  // 2. Movement: every actor that has "move" walks, in list order.
+  // 2. Movement: every actor that has "move" walks, in list order. The avatar's death is tested after each contact with an object.
   // The velocity does not jump to the wanted value: it speeds up toward it
   // while the actor wants to move, and slows down toward zero when it does not.
   // Above the top speed (after a dash) it slows down by the fixed overspeedDecay instead.
@@ -2027,6 +2070,7 @@ function step(state, input, blueprint, visual = null, audit = null) {
 
     // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
     const metSomethingNew = collideWithObjects(state, actor, lastContacts, audit);
+    if (worldStops(state)) return; // a contact killed the avatar: the world stops (the actors after it do not move)
     if (metSomethingNew) reactToNewContact(state, actor);
   }
 
@@ -2037,7 +2081,9 @@ function step(state, input, blueprint, visual = null, audit = null) {
   // 4. The actors collide with each other (the ones that move with the avatar, and among themselves) and each one reacts to
   // a new contact in its own way. The collision reads the cells from the actors, and writes them again for everyone it
   // pushes, so at the end of the step they are still right.
+  // The death is tested after each whole contact (both sides hurt each other first); when it is true collideActors stops.
   collideActors(state, lastContacts, audit);
+  if (worldStops(state)) return; // the avatar died in a contact: nothing is born, no hitbox moves or hurts
 
   // 4b. Things are born (the user, 2026-11-13: the actor moves and only then the hitbox is born, so it is where the bodies really
   // are): the strikes the minds decided in 1b (emitStrikes), the shots of the weapons of the avatar, which count down, reload
@@ -2048,19 +2094,8 @@ function step(state, input, blueprint, visual = null, audit = null) {
   fireWeapons(state, player, byTag);
   swingMelees(state, player, visual, byTag);
 
-  // 5. The hitboxes hurt, once each, and lose a frame.
+  // 5. The hitboxes hurt, once each, and lose a frame. A hit that kills the avatar stops the walk (see resolveHitboxes).
   resolveHitboxes(state, audit);
-
-  // 6. Whoever has no health left leaves the scene, in one place, at the end (see destroyActor).
-  removeDestroyed(state);
-
-  // 7. The shield counts the quiet frames and regenerates once the wait is over (regenerateShield).
-  for (const actor of state.actors) if (actor.shield) regenerateShield(actor);
-
-  state.frame += 1;
-
-  // 8. The avatar with no health ends the mission (the user, 2026-11-14: the pilot ejects). The next call of step does nothing.
-  if (player.health.now <= 0) state.mission = "aborted";
 }
 
 assertValidDefinitions();
