@@ -5389,3 +5389,55 @@ test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 
   assert.deepStrictEqual([result.lines[0].event, result.lines[0].source, result.lines[0].attack, result.lines[0].target], ["hit", "avatar_1", "repeater-arm", "branch " + result.name]);
   assert.ok(result.lines[0].total > 0, "real damage, not a hit of 0");
 });
+
+test("235 the draws of an actor born from a spawn event (issue 60) come from the seed and the pair (event, nth) alone: the same seed and pair give the same radius, health and birth place (also when asked again after other pairs), the radius and health are inside the ranges of the type, the place is off the screen and inside the window, and the pair changes the draws (nth alone, event alone, and the seed)", () => {
+  const result = plain(run(`
+    const grid = DEFINITIONS.constants.grid;
+    const draw = (seed, event, nth) => drawBirth(seed, "biter", event, nth, grid);
+    const first = draw(7, 3, 2);
+    for (let event = 0; event < 5; event++) for (let nth = 0; nth < 5; nth++) draw(7, event, nth);
+    const again = draw(7, 3, 2);
+    const key = (d) => JSON.stringify(d);
+    const byNth = new Set(), byEvent = new Set();
+    for (let i = 0; i < 20; i++) { byNth.add(key(draw(7, 3, i))); byEvent.add(key(draw(7, i, 2))); }
+    const spots = [];
+    for (let event = 0; event < 20; event++) for (let nth = 0; nth < 20; nth++) spots.push({ draw: draw(7, event, nth), id: spawnedActorId("biter", event, nth) });
+    return { first, again, differentSeed: key(draw(8, 3, 2)) !== key(first), byNth: byNth.size, byEvent: byEvent.size, spots, size: DEFINITIONS.actors.biter.size, healthRange: DEFINITIONS.actors.biter.healthRange, grid };
+  `));
+  assert.deepStrictEqual(result.again, result.first, "the same seed and pair must give the same draws");
+  assert.strictEqual(result.differentSeed, true);
+  assert.ok(result.byNth > 1, "nth must change the draws");
+  assert.ok(result.byEvent > 1, "the event must change the draws");
+  const halfWidth = (result.grid.windowWidth * result.grid.cellSize) / 2, halfHeight = (result.grid.windowHeight * result.grid.cellSize) / 2;
+  for (const { draw } of result.spots) {
+    assert.ok(draw.radius >= result.size.min && draw.radius <= result.size.max, "radius out of its range");
+    assert.ok(draw.health >= result.healthRange.min && draw.health <= result.healthRange.max, "health out of its range");
+    const offScreen = Math.abs(draw.offset.x) >= result.grid.screenWidth / 2 + draw.radius || Math.abs(draw.offset.y) >= result.grid.screenHeight / 2 + draw.radius;
+    assert.ok(offScreen, "born on the screen: " + JSON.stringify(draw));
+    assert.ok(Math.abs(draw.offset.x) <= halfWidth && Math.abs(draw.offset.y) <= halfHeight, "born outside the window");
+  }
+});
+
+test("236 the id of an actor born from a spawn event (issue 60) is made from the pair (event, nth) alone, so two different pairs never share an id and the same pair always gives the same one (never a counter, so an id of a removed actor cannot come back): 400 pairs give 400 ids, (1,12) and (11,2) differ, (1,2) and (2,1) differ, and none equals the id of a starting actor (biter_0)", () => {
+  const result = plain(run(`
+    const ids = [];
+    for (let event = 0; event < 20; event++) for (let nth = 0; nth < 20; nth++) ids.push(spawnedActorId("biter", event, nth));
+    return { ids, again: spawnedActorId("biter", 3, 2), first: ids[3 * 20 + 2], a: spawnedActorId("biter", 1, 12), b: spawnedActorId("biter", 11, 2), c: spawnedActorId("biter", 1, 2), d: spawnedActorId("biter", 2, 1), dummy: spawnedActorId("dummy", 3, 2) };
+  `));
+  assert.strictEqual(new Set(result.ids).size, 400);
+  assert.strictEqual(result.again, result.first);
+  assert.notStrictEqual(result.a, result.b);
+  assert.notStrictEqual(result.c, result.d);
+  assert.notStrictEqual(result.dummy, result.first, "the type is part of the id");
+  assert.ok(result.ids.every((id) => !/^biter_\d+$/.test(id)), "an id must not look like the id of a starting actor");
+});
+
+test("237 the totals of the journal read the kind from the id of a spawned actor (issue 60): hits from \"biter 3,2\" and \"biter 4,0\" with the attack bite add up under the one key biter:bite, as the starting \"biter_5\" does, and the keys are not split per event (\"biter_3_2\" would have read as the kind biter_3)", () => {
+  const result = plain(run(`
+    const ids = [spawnedActorId("biter", 3, 2), spawnedActorId("biter", 4, 0), "biter_5"];
+    const lines = ids.map((id) => combatJournalHitLine(10, id, "bite", "avatar_1", { parts: [], total: 4 }, { shield: 0, health: 4 }));
+    return { keys: Object.keys(combatJournalTotals(lines)), hits: combatJournalTotals(lines)["biter:bite"].hits };
+  `));
+  assert.deepStrictEqual(result.keys, ["biter:bite"]);
+  assert.strictEqual(result.hits, 3);
+});

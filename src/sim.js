@@ -1202,7 +1202,9 @@ function wrapIntoWindow(actor, player, grid) {
 // equal to its area, then a point in it. If it lands on something, the push of the collision separates them in the
 // next steps (like an actor that wraps onto another). The numbers come from the seed, so a run is reproducible.
 // Returns the offset from the avatar, in whole pixels. Fails loudly if the ring has no room (it cannot, see test 101).
-function birthOffset(seed, index, radius, grid) {
+// An actor is named by the pair (event, nth): the number of the spawn event in the map's array and the place of the actor among those that
+// event makes (issue 60). The starting crowds are event `index`, nth 0, which is what they always rolled.
+function birthOffset(seed, event, nth, radius, grid) {
   const halfWidth = (grid.windowWidth * grid.cellSize) / 2;
   const halfHeight = (grid.windowHeight * grid.cellSize) / 2;
   const innerX = grid.screenWidth / 2 + radius; // the first offset at which the body is off the screen
@@ -1214,8 +1216,8 @@ function birthOffset(seed, index, radius, grid) {
   const total = 2 * sideArea + 2 * capArea;
   if (total === 0) throw new Error("No room off the screen and inside the window for an actor of radius " + radius);
 
-  let pick = hashInts(seed, index, 0, SALTS.birthPick) % total;
-  const along = hashInts(seed, index, 0, SALTS.birthAlong);
+  let pick = hashInts(seed, event, nth, SALTS.birthPick) % total;
+  const along = hashInts(seed, event, nth, SALTS.birthAlong);
   if (pick < sideArea) return { x: -halfWidth + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // left
   pick -= sideArea;
   if (pick < sideArea) return { x: innerX + (pick % sideWidth), y: -halfHeight + (along % Math.floor(2 * halfHeight)) }; // right
@@ -1223,6 +1225,24 @@ function birthOffset(seed, index, radius, grid) {
   if (pick < capArea) return { x: -innerX + (pick % Math.floor(2 * innerX)), y: -halfHeight + (along % capHeight) }; // above
   pick -= capArea;
   return { x: -innerX + (pick % Math.floor(2 * innerX)), y: innerY + (along % capHeight) }; // below
+}
+
+// The draws of an actor born from a spawn event (issue 60; nothing calls it for spawn events yet): radius, health and the birth place, all
+// from the seed and the pair (event, nth), one draw each, no retry (the user: if it lands on something, the collision pushes it out).
+// The same seed and pair always give the same three; the radius is drawn first because the birth ring depends on it.
+function drawBirth(seed, type, event, nth, grid) {
+  const recipe = DEFINITIONS.actors[type];
+  const radius = rollInRange(seed, event, nth, SALTS.crowdRadius, recipe.size.min, recipe.size.max);
+  const health = rollInRange(seed, event, nth, SALTS.crowdHealth, recipe.healthRange.min, recipe.healthRange.max);
+  return { radius, health, offset: birthOffset(seed, event, nth, radius, grid) };
+}
+
+// The id of an actor born from a spawn event (issue 60): the type and the pair, "biter 3,2" for event 3, nth 2, the same shape
+// as the place-names of objects ("rock 12,4"). It is made from the pair alone, never from a counter or from the length of the list, so it is
+// unique for the pair and an id that was removed never comes back. The space is on purpose (the agent's choice): combatJournalTotals strips
+// ONE trailing `_<number>` and then everything from the first space, so "biter 3,2" is still the kind "biter" ("biter_3_2" would be "biter_3").
+function spawnedActorId(type, event, nth) {
+  return type + " " + event + "," + nth;
 }
 
 // Makes the actors of one crowd of a new state, by the seed: `count` actors of one type, numbered from 0. For each one
@@ -1235,10 +1255,8 @@ function createCrowd(state, type, count, rollsFor) {
   const made = [];
 
   for (let index = 0; index < count; index++) {
-    const radius = rollInRange(state.seed, index, 0, SALTS.crowdRadius, recipe.size.min, recipe.size.max);
-    const offset = birthOffset(state.seed, index, radius, state.grid);
+    const { radius, health, offset } = drawBirth(state.seed, type, index, 0, state.grid);
     const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
-    const health = rollInRange(state.seed, index, 0, SALTS.crowdHealth, recipe.healthRange.min, recipe.healthRange.max);
     const actor = finalizeObject(type, { position, radius, health: { now: health, max: health }, ...rollsFor(index) }, undefined, type + "_" + index);
     finalizeStatic(actor);
     finalizeDynamic(actor);

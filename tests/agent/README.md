@@ -357,3 +357,6 @@ While writing the first 25 the agent changed the acceleration from 0.25 to 0.3 o
 ## Adding a test
 
 Add a block `test("NN what it checks", () => { ... })` to `sim.test.js`. Inside, `run(code)` executes code inside the game, and `plain(value)` turns a result into a normal object for `deepStrictEqual`. Keep the numbering, and add a row to the table above.
+| 235 | The draws of a spawned actor come from the seed and the pair (event, nth) alone (`drawBirth`, issue 60): the same seed and pair, asked again after 25 other pairs, give the same radius, health and birth place; radius and health stay in the ranges of the Biter; the place is off the screen and inside the window for 400 pairs; changing nth, the event or the seed changes the draws. |
+| 236 | The id of a spawned actor is made from the pair alone (`spawnedActorId`, shape `<type> <event>,<nth>`, for example `biter 3,2`): 400 pairs give 400 ids, the same pair the same id, (1,12) differs from (11,2) and (1,2) from (2,1), the type is part of it, and it never looks like a starting id (`biter_0`). A counter would let a removed actor's id come back; the pair cannot. |
+| 237 | `combatJournalTotals` reads the kind from the new id: hits from `biter 3,2`, `biter 4,0` and `biter_5` with the attack bite all land under the single key `biter:bite` (3 hits). `biter_3_2` would have read as `biter_3`. |
