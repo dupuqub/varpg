@@ -974,6 +974,22 @@ function crushObject(state, actor, object) {
   return true;
 }
 
+// Weight 0 (the user, 2026-11-15, issue 47: "things with no weight break immediately; health is not a parameter for what
+// weighs 0"): an object of weight 0 breaks at the first contact with a body that hurts objects (bodyHurts: the avatar, or an actor
+// that crushes), whatever its health and with no minimum impact. Like crushing: no push, no bounce, the mover keeps its speed
+// and goes on. The contact still writes its audit lines (hits of 0 are hits, issue 46): the object's slam on the actor (total 0,
+// when bodyHurts says the object hurts it) and then the actor's hit on the object; the object breaks whatever that hit took.
+// A body that ignores objects (the Biter) does not break it: it stands against it like against a Rock. `impact` is the speed
+// going into the object (0 when the actor is not going in). Returns true if the object broke.
+function breakWeightless(state, audit, actor, object, impact) {
+  if (object.weight !== 0 || !bodyHurts(actor, object)) return false;
+  const hit = { impact };
+  if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
+  slamObject(state, audit, actor, hit, object);
+  breakObject(state, object);
+  return true;
+}
+
 // ---- Collision with objects ----
 
 // Does a circle touch a cone (a slice of a disc: the strike of a sword)? Exact, with + - * / and Math.sqrt only.
@@ -1035,7 +1051,8 @@ function objectsNear(state, actor) {
 // Dummies; the user's rule, 2026-11-11: a Shroom bounces everyone, it only does not hurt everyone).
 // For each object the actor overlaps (circle against circle):
 // 1. The "normal" is the direction from the object to the actor (a unit vector).
-// 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens.
+// 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens. The same for an object of
+//    weight 0 and a body that hurts objects (breakWeightless): it breaks at once, with no minimum impact.
 // 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
 //    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
 //    side hurts the other (bodyHurts: the tags its body ignores) with its own weight
@@ -1059,16 +1076,15 @@ function collideWithObjects(state, actor, lastContacts, audit = null) {
     if (contact === null) continue;
     if (crushObject(state, actor, object)) continue;
     const { normalX, normalY, overlap } = contact;
+    const velocity = actor.move.velocity;
+    const goingIn = velocity.x * normalX + velocity.y * normalY; // negative when the actor is going toward the object
+    if (breakWeightless(state, audit, actor, object, Math.max(0, -goingIn))) continue;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
     const key = actor.id + "|" + object.type + " " + objectKey(object);
     const isNewContact = !lastContacts.includes(key);
     state.contacts.push(key);
-
-    // Negative when the actor is going toward the object.
-    const velocity = actor.move.velocity;
-    const goingIn = velocity.x * normalX + velocity.y * normalY;
 
     // A collision needs an impact of at least collision.minImpact; below it nothing triggers.
     const collides = goingIn < 0 && -goingIn >= DEFINITIONS.constants.collision.minImpact;

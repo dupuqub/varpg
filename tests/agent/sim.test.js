@@ -4679,28 +4679,31 @@ test("207 the seed places weightless Branches: over the squares with an object f
   assert.ok(inChambers[0] > 0 && inChambers[1] > 0, "Branches in both chambers: " + inChambers);
 });
 
-test("208 the scene of issue 47, with today's rule (a Branch breaks only when a hit is at least its health): the avatar coasting into an isolated Branch of seed 1 at the minimum impact (1 px/frame) hurts it by less than 1, so the Branch keeps a little health and the avatar is stopped against it; at the top speed (3 px/frame, walking) the hit breaks it and the avatar keeps its speed and goes on", () => {
-  const scene = (speed, walking) => run(`
+test("208 the scene of issue 47, with the user's rule (2026-11-15: things with no weight break immediately, health is not a parameter for what weighs 0): the avatar coasting into an isolated Branch of seed 1 at the minimum impact (1 px/frame), walking at the top speed (3 px/frame), and starting already in touch with no speed, breaks it every time (its health goes to 0); the avatar is not pushed or bounced and keeps the speed it had", () => {
+  const scene = (speed, walking, inTouch) => run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber1State();
     const p = s.actors[0];
     // Coasting (no input): the velocity falls by the deceleration (0.125) before the move, so ${speed} + 0.125 lands on ${speed}.
-    const start = ${walking ? speed : `${speed} + 0.125`};
-    p.position.x = branch.position.x - (p.radius + branch.radius) - start + 0.5; p.position.y = branch.position.y;
+    const start = ${inTouch ? 0 : walking ? speed : `${speed} + 0.125`};
+    p.position.x = branch.position.x - (p.radius + branch.radius) ${inTouch ? "+ 2" : "- start + 0.5"}; p.position.y = branch.position.y;
     p.move.velocity.x = start; p.move.velocity.y = 0;
+    const x0 = p.position.x;
     step(s, { move: { x: ${walking ? 1 : 0}, y: 0 } });
-    return { health: s.damagedObjects[objectKey(branch)], vx: p.move.velocity.x, touching: Math.abs(branch.position.x - p.position.x - (p.radius + branch.radius)) < 1e-9 };
+    return { health: s.damagedObjects[objectKey(branch)], vx: p.move.velocity.x, x0, x: p.position.x };
   `, BRANCHY);
-  const slow = plain(scene(1, false));
-  assert.ok(slow.health > 0 && slow.health < 1, "the slow hit leaves the Branch with a little health: " + slow.health);
-  assert.strictEqual(slow.vx, 0, "the avatar is stopped");
-  assert.strictEqual(slow.touching, true, "and it just touches the Branch");
-  const fast = plain(scene(3, true));
-  assert.strictEqual(fast.health, 0, "at the top speed the Branch breaks");
+  const slow = plain(scene(1, false, false));
+  assert.strictEqual(slow.health, 0, "the slow contact breaks it");
+  assert.strictEqual(slow.vx, 1, "no push: the avatar keeps its speed and goes on");
+  const fast = plain(scene(3, true, false));
+  assert.strictEqual(fast.health, 0, "at the top speed it breaks");
   assert.strictEqual(fast.vx, 3, "a broken thing gives no push: the avatar keeps its speed");
+  const touching = plain(scene(0, false, true));
+  assert.strictEqual(touching.health, 0, "the avatar starting in touch, with no speed, breaks it");
+  assert.strictEqual(touching.vx, 0);
+  assert.strictEqual(touching.x, touching.x0, "and is not pushed out");
 });
-
 
 // ---- The avatar's death stops the world (issue 28) ----
 test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the audit has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
@@ -5133,4 +5136,65 @@ test("225 the combat log only grows when the user goes back and resumes (issue 4
   assert.ok(result.events.slice(1, aborted).every((event) => event === "hit"), "between start and aborted there are only hits");
   assert.ok(result.snapFrame < result.abortedFrame, "it resumed from a frame before the death");
   assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
+});
+
+test("226 a Biter does not break a weightless Branch (issue 47; the user's rule of 2026-11-10 that an actor never breaks an object): a Biter moving into an isolated Branch of seed 1 at 3 px/frame leaves it whole (health 1, not in the broken list), writes no audit line, and is stood against it like against a Rock (pushed out to just touch, the part going in removed, the Branch has no bounce)", () => {
+  const result = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber2State(1, 1);
+    const biter = s.actors.find((actor) => actor.id === "biter_0");
+    s.actors = [s.actors[0], biter];
+    const lines = createAudit();
+    biter.position.x = branch.position.x - (biter.radius + branch.radius) + 1; biter.position.y = branch.position.y;
+    biter.move.velocity.x = 3; biter.move.velocity.y = 0;
+    collideWithObjects(s, biter, [], lines);
+    return {
+      broken: isObjectBroken(s, branch), health: objectHealth(s, branch), lines: lines.slice(), vx: biter.move.velocity.x,
+      gap: branch.position.x - biter.position.x - (biter.radius + branch.radius),
+    };
+  `, BRANCHY));
+  assert.strictEqual(result.broken, false, "the Biter does not break it");
+  assert.strictEqual(result.health, 1);
+  assert.deepStrictEqual(result.lines, [], "no hit, no line");
+  assert.strictEqual(result.vx, 0, "the part going in is removed: the Biter is stopped against it");
+  assert.ok(Math.abs(result.gap) < 1e-9, "and it just touches the Branch");
+});
+
+test("227 breaking a weightless Branch still writes the audit lines (issue 47, hits of 0 are hits, issue 46): the avatar walking into an isolated Branch of seed 1 writes exactly two lines in this order, the Branch's slam on the avatar (bodySlam, total 0, the avatar loses nothing) and then the avatar's hit on the Branch (target the Branch, health taken at most its 1), the totals count both as hits, and the Branch is broken", () => {
+  const result = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    const before = p.health.now;
+    p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
+    p.move.velocity.x = 3; p.move.velocity.y = 0;
+    step(s, { move: { x: 1, y: 0 } }, undefined, null, lines);
+    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit"), totals: combatAuditTotals(lines), lost: before - p.health.now, broken: isObjectBroken(s, branch) };
+  `, BRANCHY));
+  const name = "branch " + result.name;
+  assert.strictEqual(result.lines.length, 2, "two lines");
+  assert.deepStrictEqual(result.lines.map((entry) => [entry.source, entry.attack, entry.target]), [[name, "bodySlam", "avatar_1"], ["avatar_1", "bodySlam", name]]);
+  assert.strictEqual(result.lines[0].total, 0, "the Branch's slam is 0");
+  assert.ok(result.lines[1].health <= 1, "the avatar's hit takes at most the Branch's 1 health");
+  assert.strictEqual(result.lost, 0, "the avatar loses nothing");
+  assert.strictEqual(result.totals[name.replace(/ .*/, "") + ":bodySlam"].hits, 1, "the Branch's slam counts as a hit");
+  assert.strictEqual(result.totals["avatar:bodySlam"].hits, 1, "and so does the avatar's");
+  assert.strictEqual(result.broken, true);
+
+  // The avatar starting in touch, with no speed (the first contact is the first step): the lines are written too.
+  const touching = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    p.position.x = branch.position.x - (p.radius + branch.radius) + 2; p.position.y = branch.position.y;
+    step(s, { move: { x: 0, y: 0 } }, undefined, null, lines);
+    return { lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit").map((entry) => [entry.source, entry.target, entry.total]), name: objectKey(branch), broken: isObjectBroken(s, branch) };
+  `, BRANCHY));
+  assert.strictEqual(touching.broken, true);
+  assert.deepStrictEqual(touching.lines, [["branch " + touching.name, "avatar_1", 0], ["avatar_1", "branch " + touching.name, touching.lines[1][2]]], "the same two lines with no speed at all");
 });

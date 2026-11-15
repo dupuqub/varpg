@@ -208,8 +208,8 @@ const DEFINITIONS = {
     // it running"): a thing of weight 0, which hurts nobody and breaks easily (see "Weight 0" in AGENTS.md).
     // size: guess, smaller than a Rock (whose smallest radius is 16): from 6 to 10.
     // weightPerRadius 0: the user's decision (weightless), so its body slam is 0.
-    // healthRange: guess, the smallest health there is: 1. Until issue 47 is answered, it breaks only when a hit is at least 1, so a slow
-    //   walk into it can leave it with a little health and stop the avatar, and a fast walk or a dash breaks it (the user wants to see it).
+    // healthRange: 1 only because every object has the box { now, max }: no rule reads it for weight 0 (the user, 2026-11-15, issue 47:
+    //   "things with no weight break immediately; health is not a parameter for what weighs 0"). The avatar breaks it at the first contact.
     branch: {
       tags: ["object"],
       bodyIgnores: ["enemy", "object"],
