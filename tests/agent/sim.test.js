@@ -781,8 +781,8 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
     return { count: objects.length, first: objects[0], last: objects[objects.length - 1], types: objects.map((object) => object.type) };
   `);
   assert.strictEqual(result.count, 10);
-  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, repeat: "contact", scale: "impact", ignores: ["enemy", "object"] } }, tags: ["object"] });
-  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, repeat: "contact", scale: "impact", ignores: ["enemy", "object"] } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.first), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.last), { type: "rock", layer: "small", position: { x: 99, y: 456 }, square: { x: 0, y: 1 }, radius: 28, health: { now: 10, max: 10 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
   assert.deepStrictEqual(plain(result.types), ["shroom", "rock", "rock", "shroom", "shroom", "rock", "shroom", "shroom", "rock", "rock"]);
 });
 
@@ -1464,9 +1464,9 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
   `);
   assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy", "biter"]);
   assert.match(result.unknown, /Unknown type: nope/);
-  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, repeat: "contact", scale: "impact", ignores: ["enemy", "object"] } }, tags: ["object"] });
+  assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
-  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, repeat: "contact", scale: "impact", ignores: ["enemy", "object"] } }, tags: ["object"] }); // the seed's objects come out of the same function
+  assert.deepStrictEqual(JSON.parse(result.fromSeed), { type: "shroom", layer: "small", position: { x: 136, y: -375 }, square: { x: 0, y: -2 }, radius: 16, health: { now: 17, max: 17 }, weight: 1600, bounce: 0.2, attacks: { bodySlam: { base: { blunt: 1600 * 0.001 }, now: { blunt: 1600 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] }); // the seed's objects come out of the same function
 });
 
 test("76 the bounce of the Shroom grows in a straight line from 0.2 at radius 16 to 1 at radius 32; the rock has none", () => {
@@ -2627,7 +2627,7 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
   assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 1 }]); // what is not damage is copied as it is
   assert.ok(Math.abs(result.now.puncture - (3 + 0.002 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
   assert.ok(Math.abs(result.base.puncture - (3 + 0.002 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
-  assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 }, repeat: "contact", scale: "impact", ignores: ["ally"] } }); // the avatar has only the body slam: 5000 kg x 0.001
+  assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 }, ignores: ["ally"] } }); // the avatar has only the body slam: 5000 kg x 0.001
 });
 
 test("120 a Biter walks straight at the avatar: its wanted direction is the unit vector toward it, its velocity speeds up by 0.125 per frame to its top speed of 2.5, and the distance only shrinks", () => {
@@ -2855,7 +2855,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 59, hash: "88a8e8a7322c88e6" };
+const DATA_FINGERPRINT = { version: 60, hash: "4fe61d96b2431b71" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2966,7 +2966,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", repeat: "life", scale: "none", ignores: ["self", "ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"] });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3661,7 +3661,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], exit: "center", repeat: "life", scale: "none", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -3671,7 +3671,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { cut: { flat: 30, perWeight: 0 } },", /not a type of damage/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
-  bad("      melee: {", "      weapon: { exit: \"center\", repeat: \"life\", scale: \"none\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
+  bad("      melee: {", "      weapon: { exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
 test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
@@ -4275,7 +4275,7 @@ test("186 the place of exit is a key of the attack, not a rule about the avatar:
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
   bad('exit: "front",', 'exit: "behind",', /exit of the attack bite of the actor biter/);
   bad('exit: "front",', '// no exit', /exit of the attack bite of the actor biter/);
-  bad('        exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar\n        repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox\'s life\n        scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', '        repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox\'s life\n        scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', /exit of the weapon of the part repeater-arm/);
+  bad('        exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', '        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', /exit of the weapon of the part repeater-arm/);
 });
 
 test("187 the gap that the reach is compared with is counted from the exit of the attack, in one function: from the center the owner's radius does not come off, from the front it does; a Biter at exactly its reach from the avatar starts its windup, and with the exit of its bite changed to center the same position is out of reach by one body (no windup)", () => {
@@ -4483,94 +4483,6 @@ test("194 a body slam does not hurt an actor with no health, as a hitbox does: t
   assert.strictEqual(result.alive.length, 1, JSON.stringify(result.alive));
 });
 
-// ---- repeat in every attack (base plan P4, step 4) ----
-test("195 the key repeat of every attack is checked on load: a missing or unknown value is refused with a message that names the attack (the bite, the weapon, the melee), and until another case is built the body slam must be contact and every other attack life", () => {
-  const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  const biteRepeat = 'repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox\'s life\n          scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n          target:';
-  const biteRepeatTo = (value) => biteRepeat.replace('repeat: "life", //', value + ", //");
-  assert.doesNotThrow(() => loadGame());
-  bad(biteRepeat, biteRepeatTo('repeat: "forever"'), /repeat of the attack bite of the actor biter must be one of life, contact, and it is "forever"/);
-  bad(biteRepeat, biteRepeatTo("// none"), /repeat of the attack bite of the actor biter must be one of life, contact, and it is undefined/);
-  bad(biteRepeat, biteRepeatTo('repeat: "contact"'), /repeat of the attack bite of the actor biter must be life until another case is built, and it is contact/);
-  const weaponRepeat = '        repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox\'s life\n        scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames';
-  bad(weaponRepeat, weaponRepeat.replace('"life", //', '"forever", //'), /repeat of the weapon of the part repeater-arm must be one of life, contact, and it is "forever"/);
-  bad(weaponRepeat, weaponRepeat.replace('repeat: "life", //', "// none"), /repeat of the weapon of the part repeater-arm .* undefined/);
-  bad(weaponRepeat, weaponRepeat.replace('"life", //', '"contact", //'), /repeat of the weapon of the part repeater-arm must be life/);
-  const meleeRepeat = 'repeat: "life", // when it may hurt the same target again (docs/base-plan.md, "The design of step 4"): "life", each target once in the hitbox\'s life\n        scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n        target: { pick: "closest", tag: "enemy" },\n        reach: 90';
-  bad(meleeRepeat, meleeRepeat.replace('"life", //', '"forever", //'), /repeat of the melee of the part sword-arm must be one of life, contact, and it is "forever"/);
-  bad(meleeRepeat, meleeRepeat.replace('repeat: "life", //', "// none"), /repeat of the melee of the part sword-arm .* undefined/);
-  bad(meleeRepeat, meleeRepeat.replace('"life", //', '"contact", //'), /repeat of the melee of the part sword-arm must be life/);
-  // the body slam: it must be contact (another value is refused, and so is a missing one)
-  bad('{ damage: { blunt: { flat: 0, perWeight: 0.001 } }, repeat: "contact", scale: "impact" }', '{ damage: { blunt: { flat: 0, perWeight: 0.001 } }, repeat: "life", scale: "impact" }', /repeat of the attack bodySlam .* must be contact until another case is built, and it is life/);
-  bad('{ damage: { blunt: { flat: 0, perWeight: 0.001 } }, repeat: "contact", scale: "impact" }', '{ damage: { blunt: { flat: 0, perWeight: 0.001 } }, scale: "impact" }', /repeat of the attack bodySlam .* and it is undefined/);
-});
-test("196 every attack record carries its repeat, and so does a hitbox: the body slam of the avatar, of a Biter and of a Rock is contact; the bite, the repeater and the sword are life; a hitbox born from the bite, from a bullet and from a sword copies life from its attack (and one born from an attack changed to contact copies contact)", () => {
-  const result = run(`
-    ${ALONE_BITERS}
-    const s = aloneBiters(0, 1);
-    const biter = s.actors[1];
-    const armed = createAvatar(createRun(1, DEFINITIONS.combatBlueprint).blueprint);
-    const rock = finalizeObject("rock", { radius: 28 });
-    const born = (owner, name) => {
-      s.hitboxes = [];
-      spawnHitbox(s, owner, name, 1, 0, { radius: 5, frames: 1, speed: 0, pierce: null });
-      return s.hitboxes[0].repeat;
-    };
-    const hitboxes = { bite: born(biter, "bite"), bullet: born(armed, "repeater-arm"), sword: born(armed, "sword-arm") };
-    const repeats = (thing) => Object.fromEntries(Object.entries(thing.attacks).map(([name, attack]) => [name, attack.repeat]));
-    const records = { avatar: repeats(armed), biter: repeats(biter), rock: repeats(rock) };
-    biter.attacks.bite.repeat = "contact";
-    return { ...records, hitboxes, changed: born(biter, "bite") };
-  `);
-  const r = plain(result);
-  assert.deepStrictEqual(r.avatar, { bodySlam: "contact", "repeater-arm": "life", "sword-arm": "life" });
-  assert.deepStrictEqual(r.biter, { bodySlam: "contact", bite: "life" });
-  assert.deepStrictEqual(r.rock, { bodySlam: "contact" });
-  assert.deepStrictEqual(r.hitboxes, { bite: "life", bullet: "life", sword: "life" });
-  assert.strictEqual(r.changed, "contact");
-});
-
-// ---- scale in every attack (base plan P5, step 4) ----
-test("197 the key scale of every attack is checked on load: a missing or unknown value is refused with a message that names the attack (the bite, the weapon, the melee, the body slam), and until another case is built the body slam must be impact and every other attack none", () => {
-  const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  const scaleLine = (indent) => indent + 'scale: "none", // how its damage grows at the hit (docs/base-plan.md, "The design of step 4"): "none", the packet as it is\n';
-  const biteScale = scaleLine("          ");
-  const weaponScale = scaleLine("        ") + "        target: { pick: \"closest\", tag: \"enemy\" },\n        intervalFrames";
-  const meleeScale = scaleLine("        ") + "        target: { pick: \"closest\", tag: \"enemy\" },\n        reach: 90";
-  assert.doesNotThrow(() => loadGame());
-  bad(biteScale, biteScale.replace('"none", //', '"squared", //'), /scale of the attack bite of the actor biter must be one of none, impact, and it is "squared"/);
-  bad(biteScale, biteScale.replace('scale: "none", //', "// none"), /scale of the attack bite of the actor biter must be one of none, impact, and it is undefined/);
-  bad(biteScale, biteScale.replace('"none", //', '"impact", //'), /scale of the attack bite of the actor biter must be none until another case is built, and it is impact/);
-  bad(weaponScale, weaponScale.replace('"none", //', '"squared", //'), /scale of the weapon of the part repeater-arm must be one of none, impact, and it is "squared"/);
-  bad(weaponScale, weaponScale.replace('scale: "none", //', "// none"), /scale of the weapon of the part repeater-arm .* undefined/);
-  bad(weaponScale, weaponScale.replace('"none", //', '"impact", //'), /scale of the weapon of the part repeater-arm must be none/);
-  bad(meleeScale, meleeScale.replace('"none", //', '"squared", //'), /scale of the melee of the part sword-arm must be one of none, impact, and it is "squared"/);
-  bad(meleeScale, meleeScale.replace('scale: "none", //', "// none"), /scale of the melee of the part sword-arm .* undefined/);
-  bad(meleeScale, meleeScale.replace('"none", //', '"impact", //'), /scale of the melee of the part sword-arm must be none/);
-  // the body slam: it must be impact (another value is refused, and so is a missing one)
-  const slam = 'repeat: "contact", scale: "impact" }, referenceImpact';
-  bad(slam, 'repeat: "contact", scale: "none" }, referenceImpact', /scale of the attack bodySlam .* must be impact until another case is built, and it is none/);
-  bad(slam, 'repeat: "contact" }, referenceImpact', /scale of the attack bodySlam .* and it is undefined/);
-  bad(slam, 'repeat: "contact", scale: "squared" }, referenceImpact', /scale of the attack bodySlam .* must be one of none, impact, and it is "squared"/);
-});
-test("198 every attack record carries its scale: the body slam of the avatar, of a Biter and of a Rock is impact; the bite, the repeater and the sword are none; a hitbox does not carry it (its damage is frozen at its birth)", () => {
-  const result = run(`
-    ${ALONE_BITERS}
-    const s = aloneBiters(0, 1);
-    const biter = s.actors[1];
-    const armed = createAvatar(createRun(1, DEFINITIONS.combatBlueprint).blueprint);
-    const rock = finalizeObject("rock", { radius: 28 });
-    spawnHitbox(s, biter, "bite", 1, 0, { radius: 5, frames: 1, speed: 0, pierce: null });
-    const scales = (thing) => Object.fromEntries(Object.entries(thing.attacks).map(([name, attack]) => [name, attack.scale]));
-    return { avatar: scales(armed), biter: scales(biter), rock: scales(rock), hitboxHasScale: "scale" in s.hitboxes[0] };
-  `);
-  const r = plain(result);
-  assert.deepStrictEqual(r.avatar, { bodySlam: "impact", "repeater-arm": "none", "sword-arm": "none" });
-  assert.deepStrictEqual(r.biter, { bodySlam: "impact", bite: "none" });
-  assert.deepStrictEqual(r.rock, { bodySlam: "impact" });
-  assert.strictEqual(r.hitboxHasScale, false);
-});
-
 // ---- one function lands a hit (base plan P6) ----
 test("199 landHit on an actor: the shield takes its 3 first and the health the other 2 (blunt 5 against no resistance), one audit line says shield 3 and health 2 with the source and the attack, and the actor is not marked broken", () => {
   const result = run(`
@@ -4711,15 +4623,14 @@ test("205 a target with no health takes no hit, by one rule asked in landHit (ca
 });
 
 // ---- One function builds an attack record (issue 33) ----
-test("206 the keys every attack shares are checked by one function in the four places an attack recipe lives: without its scale, the body slam of the constants, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place; and a record built from a recipe carries copies of the shared keys (changing the record's target and ignores leaves the recipe as it was)", () => {
-  const SCALE = '          scale: "none", // how its damage grows at the hit';
-  const PART_SCALE = '\n        scale: "none", // how its damage grows at the hit'; // the newline keeps it from matching inside the bite's line
-  const nth = (text, from, n) => { let at = -1; for (let i = 0; i <= n; i++) at = text.indexOf(from, at + 1); assert.notStrictEqual(at, -1, "the patch must apply"); return text.slice(0, at) + text.slice(at).replace(from, "\n        // no scale"); };
+test("206 the keys every attack shares are checked by one function in three of the places an attack recipe lives (the body slam of the constants has none of the shared keys, so it is not one of them): without its exit, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place; and a record built from a recipe carries copies of the shared keys (changing the record's target and ignores leaves the recipe as it was)", () => {
+  const EXIT = '          exit: "front", // where its hitbox is born';
+  const PART_EXIT = '\n        exit: "center", // where its hitbox is born'; // the newline keeps it from matching inside the bite's line
+  const nth = (text, from, n) => { let at = -1; for (let i = 0; i <= n; i++) at = text.indexOf(from, at + 1); assert.notStrictEqual(at, -1, "the patch must apply"); return text.slice(0, at) + text.slice(at).replace(from, "\n        // no exit"); };
   const refused = (patch, message) => assert.throws(() => loadGame((text) => { const patched = patch(text); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  refused((text) => text.replace(', repeat: "contact", scale: "impact" }', ', repeat: "contact" }'), /scale of the attack bodySlam of the constants/);
-  refused((text) => text.replace(SCALE, "          // no scale"), /scale of the attack bite of the actor biter/);
-  refused((text) => nth(text, PART_SCALE, 0), /scale of the weapon of the part repeater-arm/);
-  refused((text) => nth(text, PART_SCALE, 1), /scale of the melee of the part sword-arm/);
+  refused((text) => text.replace(EXIT, "          // no exit"), /exit of the attack bite of the actor biter/);
+  refused((text) => nth(text, PART_EXIT, 0), /exit of the weapon of the part repeater-arm/);
+  refused((text) => nth(text, PART_EXIT, 1), /exit of the melee of the part sword-arm/);
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const s = createChamber2State(1, 1, run.blueprint);
@@ -4790,3 +4701,129 @@ test("208 the scene of issue 47, with today's rule (a Branch breaks only when a 
   assert.strictEqual(fast.vx, 3, "a broken thing gives no push: the avatar keeps its speed");
 });
 
+
+// ---- The avatar's death stops the world (issue 28) ----
+test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the audit has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0"), s.actors.find((actor) => actor.id === "biter_1")];
+    const [avatar, first, second] = s.actors;
+    for (const b of [first, second]) { b.ai.phase = "freeze"; b.ai.frames = 1000000; b.health.now = 30; b.health.max = 30; }
+    avatar.position.x = 0; avatar.position.y = 0;
+    avatar.health.now = 0.01;
+    avatar.shield.now = 0;
+    for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; }
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    const body = avatar.bodyRadius;
+    first.position.x = body + first.radius + 4; first.position.y = -6;
+    second.position.x = body + second.radius + 4; second.position.y = 6;
+    const magazines = avatar.weapons.map((weapon) => weapon.magazine);
+    const audit = createAudit();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    const after = JSON.stringify(s), lines = audit.length;
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    return {
+      mission: s.mission, frame: s.frame, health: avatar.health.now,
+      first: first.health.now, second: second.health.now,
+      hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
+      swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
+      audit: audit.slice(0, lines).map((line) => JSON.parse(line)),
+      same: JSON.stringify(s) === after, linesAfter: audit.length, lines,
+    };
+  `, QUIET);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0, "the first contact kills the avatar");
+  assert.ok(Math.abs(r.first - (30 - 15.103063533266607)) < 1e-9, "inside the contact that kills, the avatar's slam still lands on the first Biter (30 - 15.10 = 14.90)");
+  assert.strictEqual(r.second, 30, "the second Biter is not hurt by the dead avatar's body");
+  assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born after the death");
+  assert.deepStrictEqual(r.magazinesAfter, r.magazines, "no round is spent");
+  assert.deepStrictEqual(r.swords, ["windup 1"], "the sword did not swing");
+  assert.strictEqual(r.lines, 2, JSON.stringify(r.audit));
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["avatar_1 > biter_0", "biter_0 > avatar_1"], "the audit ends on the contact that killed, both sides of it");
+  assert.strictEqual(r.audit[1].health, 0.01, "the last line is the hit that took the avatar's last 0.01");
+  assert.strictEqual(r.mission, "aborted");
+  assert.strictEqual(r.frame, 1);
+  assert.strictEqual(r.same, true, "the next step changes nothing");
+  assert.strictEqual(r.linesAfter, 2, "the next step writes no line");
+});
+
+test("210 the avatar's death in a contact with an object stops the world too: the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into the rock of seed 1 at 99,456 while a Biter chases it from 200 px away; the rock's slam (4.31 after resistance) kills it and its own slam (15.5) still breaks the rock of 10 in the same contact; then the Biter does not move (same place, speed 0), no shot is fired and no sword swings, the audit has only the two lines of that contact, and the mission is aborted", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const [avatar, biter] = s.actors;
+    avatar.health.now = 0.01; avatar.shield.now = 0;
+    for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; }
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    avatar.position.x = ${ROCK.x} - ${ROCK.radius} - avatar.bodyRadius - 2; avatar.position.y = ${ROCK.y};
+    biter.position.x = avatar.position.x; biter.position.y = avatar.position.y - 200; biter.ai.phase = "chase";
+    const before = JSON.stringify({ position: biter.position, velocity: biter.move.velocity });
+    const magazines = avatar.weapons.map((weapon) => weapon.magazine);
+    const audit = createAudit();
+    step(s, { move: { x: 1, y: 0 }, dash: true }, bp, null, audit);
+    return {
+      health: avatar.health.now, rock: s.damagedObjects["${ROCK.key}"], mission: s.mission,
+      biterStill: JSON.stringify({ position: biter.position, velocity: biter.move.velocity }) === before,
+      hitboxes: s.hitboxes.length, magazines, magazinesAfter: avatar.weapons.map((weapon) => weapon.magazine),
+      swords: avatar.melees.map((sword) => sword.phase + " " + sword.frames),
+      audit: audit.map((line) => JSON.parse(line)),
+    };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0);
+  assert.strictEqual(r.rock, 0, "inside the contact that kills, the avatar's slam still lands and breaks the rock");
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target), ["rock small:0,1 > avatar_1", "avatar_1 > rock small:0,1"]);
+  assert.ok(Math.abs(r.audit[0].total - 4.3076923076923075) < 1e-9 && r.audit[0].health === 0.01, "the rock's slam: 5.6 less 23% = 4.31, of which only the last 0.01 was health");
+  assert.strictEqual(r.audit[1].total, 15.5);
+  assert.strictEqual(r.biterStill, true, "the Biter after the avatar in the list does not move");
+  assert.strictEqual(r.hitboxes, 0, "no shot and no blow is born");
+  assert.deepStrictEqual(r.magazinesAfter, r.magazines);
+  assert.deepStrictEqual(r.swords, ["windup 1"]);
+  assert.strictEqual(r.mission, "aborted");
+});
+
+test("211 the avatar's death by a hitbox stops the world inside stage 5: the avatar of the combat blueprint at 0.01 health (the test game has no shield), its sword one frame from the blow, and a Biter 2 px from it whose bite strikes at once (windup 0); the bite is born first and kills it (6 of damage, 0.01 of health), the sword's cone is born after it in the same step and does not hurt the Biter (still 30), the audit has only the bite's line, the bite that killed is gone from the hitboxes as before, the cone is left as it was born (one frame left, nothing struck), and the mission is aborted", () => {
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const bp = run.blueprint;
+    const s = createChamber2State(1, 1, bp);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const [avatar, biter] = s.actors;
+    avatar.position.x = 0; avatar.position.y = 0;
+    avatar.health.now = 0.01;
+    for (const sword of avatar.melees) { sword.phase = "windup"; sword.frames = 1; sword.dirX = 1; sword.dirY = 0; }
+    biter.position.x = avatar.bodyRadius + biter.radius + 2; biter.position.y = 0;
+    biter.ai.phase = "chase"; biter.attacks.bite.windupFrames = 0; biter.health.now = 30; biter.health.max = 30;
+    const audit = createAudit();
+    step(s, { move: { x: 0, y: 0 } }, bp, null, audit);
+    return {
+      health: avatar.health.now, biter: biter.health.now, mission: s.mission,
+      hitboxes: s.hitboxes.map((hitbox) => ({ attack: hitbox.attack, framesLeft: hitbox.framesLeft, struck: hitbox.struck })),
+      audit: audit.map((line) => JSON.parse(line)),
+    };
+  `, QUIET);
+  const r = plain(result);
+  assert.strictEqual(r.health, 0);
+  assert.deepStrictEqual(r.audit.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter_0 > avatar_1 bite"]);
+  assert.strictEqual(r.audit[0].health, 0.01);
+  assert.strictEqual(r.biter, 30, "the sword's cone, born after the bite, hurts nobody");
+  assert.ok(!r.hitboxes.some((hitbox) => hitbox.attack === "bite"), "the bite that killed ended its turn and is gone, as before");
+  assert.deepStrictEqual(r.hitboxes.filter((hitbox) => hitbox.attack === "sword-arm"), [{ attack: "sword-arm", framesLeft: 1, struck: [] }], "the cone is left as it was born");
+  assert.strictEqual(r.mission, "aborted");
+});
+
+// ---- only a melee attack may use the weight (issue 45) ----
+test("212 only a melee attack may use the weight (the user, issue 45): the data as it is loads, with the body slam (0.001 per kg), the bite (0.002) and the sword (0) written { flat, perWeight }; the sword with a perWeight of 0.001 loads too; the weapon of the repeater-arm with its damage written { flat: 0, perWeight: 0.001 } is refused on load with a message that names the part, and with a perWeight of 0 in the same form it is refused too, but by the old rule that its damage is a plain number above 0", () => {
+  const patched = (from, to) => () => loadGame((text) => { const out = text.replace(from, to); assert.notStrictEqual(out, text, "the patch must apply"); return out; });
+  assert.doesNotThrow(() => loadGame());
+  const numbers = run(`return { slam: DEFINITIONS.constants.bodySlam.attack.damage.blunt.perWeight, bite: DEFINITIONS.actors.biter.attacks.bite.damage.puncture.perWeight, sword: DEFINITIONS.parts["sword-arm"].melee.damage.slash.perWeight };`);
+  assert.deepStrictEqual(plain(numbers), { slam: 0.001, bite: 0.002, sword: 0 });
+  assert.doesNotThrow(patched("damage: { slash: { flat: 30, perWeight: 0 } }", "damage: { slash: { flat: 30, perWeight: 0.001 } }"));
+  assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 0, perWeight: 0.001 } }"), /damage puncture of the projectile of the weapon of the part repeater-arm uses the weight.*only a melee attack may/);
+  assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0.5 } }"), /weapon of the part repeater-arm uses the weight/);
+  assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0 } }"), /must be above 0/);
+});
