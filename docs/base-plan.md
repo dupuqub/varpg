@@ -14,9 +14,11 @@ Do exactly this, one parcel at a time, in the order of the list. Never two helpe
    - `node --test 2>&1 | grep -E "^not ok|^# (pass|fail)"` says `# fail 0`, and `# pass` grew by the number of new tests.
    - `git status --short` shows only files in the parcel's **Files** line.
    - The helper's report has a "broke it once" proof: what it changed, which new test failed, and that it put the code back.
+   - **Old tests changed (issue 40):** `git diff -U0 tests/agent/sim.test.js | grep '^@@.*test("'` and `git diff tests/agent/sim.test.js | grep '^[-+]test("'` list the old tests whose body or title changed. Each must be named in the helper's report with its reason.
+   - **Break-once, mechanically (issue 39):** if the parcel changed anything under `src/`, run `git stash push -- src`, then `node --test 2>&1 | grep -E "^not ok|^# (pass|fail)"`, then `git stash pop`. The new tests must fail on the old `src/`. A new test that passes there must be named in the helper's report with its reason (a structural parcel can have such tests); if it is not named, it is a failed check. Run the suite once more after `git stash pop`: `# fail 0`.
 4. If a check fails: call a helper one model up (haiku, then sonnet, then opus, then fable) with the same text plus the error. If that also fails: `git stash -u` (nothing is lost), stop and call the user.
-5. If all checks pass: mark the parcel `[x]` in this file, `git add -A`, commit with the message `Rules desk: base plan, <the parcel's title> (test <numbers>)` ending with the attribution lines your session was given, then `git pull --rebase`, the tests once more, `git push origin HEAD:main`.
-6. Comment on issue 13 in one line: the parcel, the commit, the tests (`gh api repos/dupuqub/varpg/issues/13/comments -f body="..."`).
+5. If all checks pass: mark the parcel `[x]` in this file, `git add -A`, commit with the message `Rules desk: base plan, <the parcel's title> (test <numbers>)` a body that has one line `Fails without the change: tests <n> (<what was broken>)` (for a parcel with no `src/` change write `No src change.`) and one line per old test changed with its reason, ending with the attribution lines your session was given, then `git pull --rebase`, the tests once more, `git push origin HEAD:main`.
+6. Comment on issue 13 in one line: the parcel, the commit, the tests, the "Fails without the change" line (issue 35) (`gh api repos/dupuqub/varpg/issues/13/comments -f body="..."`).
 7. Tell the user in one or two lines, in Brazilian Portuguese, and go to the next parcel.
 
 ## When to stop and call the user

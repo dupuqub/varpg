@@ -18,14 +18,14 @@ A big change is cut into **parcels**: small pieces, each one closed on its own (
 ## The rules that make it work
 
 1. **A parcel has a recipe written before it starts**: the files it may touch, what changes, the tests it adds, the note it leaves. A helper that gets a vague task produces a vague result.
-2. **Tests decide, not the helper.** The coordinator runs `node --test` before and after each parcel. It must end with `fail 0`, and the number of passing tests must grow by the number of new tests.
-3. **Break it once.** A new test must be seen failing with the new rule broken, and passing again when it is put back. Without this, a test can be green for the wrong reason.
+2. **Tests decide, not the helper.** The coordinator runs `node --test` before and after each parcel. It must end with `fail 0`, and the number of passing tests must grow by the number of new tests. The coordinator also lists the old tests whose body or title changed (`git diff` on `tests/agent/sim.test.js`), and each must be named in the helper's report with its reason. This is a mechanical check any model can run (issue 40).
+3. **Break it once.** A new test must be seen failing with the new rule broken, and passing again when it is put back. Without this, a test can be green for the wrong reason. The coordinator now does it mechanically: `git stash push -- src`, run the suite, `git stash pop`; the new tests must fail on the old `src/`, and the commit says so in a line `Fails without the change: tests <n> (<what was broken>)` (also in the issue comment). Any model can run this check (issue 39). Judging a new test that passes on the old code (a structural parcel can have such tests) stays with a stronger model.
 4. **One parcel at a time.** Helpers share the working tree, so nothing runs in parallel.
 5. **Nothing is lost on failure.** A parcel that fails twice is stashed (`git stash -u`), and the coordinator stops and calls the user. The helper is never allowed to commit or push.
 6. **A helper that is interrupted leaves the tree dirty.** The coordinator checks `git status` and the diff before it does anything else. Here the one interruption (a server stop during parcel P6) left a half-made change; it was checked and the tests passed before the commit.
 7. **The coordinator checks the work it did not do.** It reads the diff, runs the suite, and confirms that only the files of the parcel changed.
 8. **Blocked parcels stay blocked.** A parcel that waits for the user's decision is written as blocked and is never built by a helper on its own.
-9. **Each parcel leaves a note.** The commit message says what the parcel is and which tests it adds; the issue for the desk that owns the work gets a one-line comment.
+9. **Each parcel leaves a note.** The commit message says what the parcel is and which tests it adds; the issue for the desk that owns the work gets a one-line comment. Both carry the line `Fails without the change: tests <n> (<what was broken>)`, or `No src change.` (issue 35). Writing the line is a mechanical check any model can run; judging a reason given for a new test that passes on the old code stays with a stronger model.
 
 ## The models
 
@@ -57,3 +57,19 @@ The weights are the coordinator's estimate, not a measurement. A parcel that a m
 - `docs/base-plan.md`: the plan of the base, its parcels, their recipes and their models, and the loop the coordinator follows.
 - `docs/desks.md`: which conversations (desks) exist, what each may change, and how they talk through GitHub issues.
 - `AGENTS.md`: the rules of the project, with a pointer to this file.
+
+## Measured afterwards, 2026-11-14
+
+The break-once was not done mechanically in the base plan (issue 35). Afterwards, in a copy at `00dcce4`, for each parcel commit C: `git checkout C && git checkout C~1 -- src && node --test`, which runs the tests of C against the `src/` of the commit before it. This shows that the new tests **can fail**. It does not show that the break-once was done at the time, and it is not a break of the specific rule: the whole `src/` went back.
+
+| Parcel | Commit | New tests that fail on the old `src/` | New tests that pass there | Old tests that also fail |
+|---|---|---|---|---|
+| P1 | `28f6420` | 190, 191, 193 | 192 | none |
+| P2 | `802b2d0` | 194 | none | none |
+| P4 | `2111d09` | 195, 196 | none | 39, 75, 119, 129, 133, 163, 186 |
+| P5 | `27fdf52` | 197, 198 | none | 39, 75, 119, 129, 133, 163, 186, 195 |
+| P6 | `69114da` | 199, 200 | none | 152 |
+
+- Test 192 (P1) passes on the old code: it tests the removal of the parameter `living` of `pickTarget` (its row says so), a structural change; the old default already gave the same answers. Opinion, not checked further: judging it stays with a stronger model.
+- The old tests that fail in P4 and P5 are consequences of putting the older `src/` back (the data, the version and fingerprint of test 129, the attack records); the reasons were not investigated one by one. Test 195 (from P4) fails in P5 for the same cause.
+- In P6, test 152 fails because the "Code layout" of `AGENTS.md` names `landHit`, which the older `src/` does not have (read from the test's title, not checked in the code).
