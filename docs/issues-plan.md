@@ -113,7 +113,7 @@ Do issue 33's "To do". Structure only: every whole-state test bit for bit the sa
 
 Do issue 51's recipe. The hard part: a weight per kind changes which kind every square gets, so Rocks the tests rely on (seed 1, `small:0,1` and the others in `tests/agent/README.md`, "Known answers") may become Shrooms or Branches. Prefer a pick that keeps every square that does not become a Branch exactly as today (for example: a separate roll with its own salt in `SALTS` decides the 10%, and the rest keeps today's roll), and say in the report which known answers moved and why. Raise `DEFINITIONS_VERSION` and the fingerprint of test 129. The drawing is the Screen desk's: the helper does not touch `src/render.js`; the coordinator opens the issue of parcel S3 after the commit. Comment on issue 51 and close it.
 
-### [ ] I15. Tell the user the plan is done (coordinator)
+### [x] I15. Tell the user the plan is done (coordinator)
 
 One message in Brazilian Portuguese: the parcels done, the issues closed, and that the parcels below wait for his answers. The Review desk reviews afterwards (the user calls it).
 
@@ -139,7 +139,7 @@ The coordinator of the Rules desk does not touch these files. The user opens a S
 |---|---|---|---|
 | S1 | 26, 41 | sonnet | The COMBAT REPORT drops "the minimum counted in" and prints both calculations of a hit with `overflow`. |
 | S2 | 25, 49 | sonnet | The ABORT MISSION screen in Chamber 2 (stop calling `step` and `recordFrame`), with no `resume` line on an aborted state. Whether the history can go back past the death waits for issue 42; build it so the buttons are hidden behind the abort screen, the simplest reading to change later. |
-| S3 | the issue opened after I14 | haiku | A color for `branch` in `OBJECT_COLORS` of `src/render.js`. |
+| S3 | issue 52 (opened after I14) | haiku | A color for `branch` in `OBJECT_COLORS` of `src/render.js`. |
 
 ## Not a parcel
 
