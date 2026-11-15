@@ -389,6 +389,8 @@ A hitbox hurts a Rock or a Shroom the way the body slam does (test 189): `resolv
 - `src/chamber-0.js`: the test bench of Chamber 0. The text builders do not touch the page; only the end of the file does.
 - `src/main.js`: screen navigation and the loop of the chambers that are played, 1 and 2 (it also records the history every frame, and has the pause, back and forward buttons).
 - `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` tests the rules, and `README.md` explains each test in plain words, with the worked numbers (a test checks that every test has its row). `benchmark-grid.js` and `benchmark-layers.js` measure the collision grid and the layers of the ground (they are not tests). Any other kind of test the user writes later should go in its own folder.
+- `tests/screen/check.js`: the checks of the Screen desk, one per parcel of its work order (`docs/screen-plan.md`); two run in Node and one drives a real Chrome. They are not tests of the rules and `node --test` does not run them.
+- `docs/screen-plan.md`: the Screen desk's work order (2026-11-15): its open issues cut into parcels, each with its model and its check, for a Haiku coordinator.
 - `docs/desks.md`: which conversations (desks) to open, what each may change and how they stay out of each other's way.
 - `docs/base-plan.md`: the plan for the base (2026-11-14): small parcels with a recipe and a model each, and the checklist a coordinator follows by calling helpers.
 - `docs/issues-plan.md`: every open issue of 2026-11-14 cut into parcels, each with its model (haiku, sonnet, opus), for a coordinator to follow; the questions waiting for the user and the Screen desk's parcels are listed apart.
