@@ -27,13 +27,22 @@ function readSource(name) {
 // avatar. The Generator keeps its weight, so nothing else changes. The tests of the shield (and test 129, which reads the real
 // file) use the real Generator.
 const GENERATOR_WITH_SHIELD = /generator: \{ name: "Generator", weight: 200, specs: \{[^\n]*\} \},/;
-function loadGame(patchData = null, { shield = false, patchSim = null } = {}) {
+// The games of the tests play without Branches unless they ask for them (branches: true), for the same reason: the tests written
+// before the Branches (issue 51) rely on the objects of seed 1 (the rock at 99,456 is one of the squares that became a Branch), and
+// a square that does not get a Branch is exactly as it was. The tests of the Branches use the real layer.
+const BRANCHES = /\n *rareKinds: \{ branch: \d+ \},[^\n]*/;
+function loadGame(patchData = null, { shield = false, patchSim = null, branches = false } = {}) {
   const context = vm.createContext({});
   for (const name of FILES) {
     let text = readSource(name);
     if (name === "data.js" && !shield) {
       const without = text.replace(GENERATOR_WITH_SHIELD, 'generator: { name: "Generator", weight: 200, specs: {} },');
       if (without === text) throw new Error("The Generator with a shield is no longer in src/data.js: the tests cannot play without it");
+      text = without;
+    }
+    if (name === "data.js" && !branches) {
+      const without = text.replace(BRANCHES, "");
+      if (without === text) throw new Error("The rare Branches are no longer written as rareKinds in src/data.js: the tests cannot play without them");
       text = without;
     }
     if (name === "data.js" && patchData !== null) {
@@ -1410,9 +1419,9 @@ test("72 a rock with weight 0 and health 1 is harmless and breaks at the first h
   assert.strictEqual(result.vx, 12); // broken: no stop, no bounce
 });
 
-test("73 the objects are the rock and the Shroom, each complete and with its own numbers: size 16 to 32, weight modifier 100, health 10 to 20", () => {
+test("73 the objects are the rock, the Shroom and the Branch, each complete and with its own numbers: the rock and the Shroom size 16 to 32, weight modifier 100, health 10 to 20; the Branch size 6 to 10, weight modifier 0, health 1", () => {
   const objects = plain(run("return DEFINITIONS.objects;"));
-  assert.deepStrictEqual(Object.keys(objects), ["rock", "shroom"]);
+  assert.deepStrictEqual(Object.keys(objects), ["rock", "shroom", "branch"]);
   for (const id of ["rock", "shroom"]) {
     const object = objects[id];
     assert.ok(object.name, id + " has a name");
@@ -1426,6 +1435,7 @@ test("73 the objects are the rock and the Shroom, each complete and with its own
   assert.deepStrictEqual(Object.keys(objects.rock), ["tags", "bodyIgnores", "name", "size", "weightPerRadius", "healthRange"]);
   assert.deepStrictEqual(Object.keys(objects.shroom), ["tags", "bodyIgnores", "name", "size", "weightPerRadius", "healthRange", "bounce"]); // only the Shroom bounces
   assert.deepStrictEqual(objects.shroom.bounce, { min: 0.2, max: 1 });
+  assert.deepStrictEqual(objects.branch, { tags: ["object"], bodyIgnores: ["enemy", "object"], name: "Branch", size: { min: 6, max: 10 }, weightPerRadius: 0, healthRange: { min: 1, max: 1 } });
 });
 
 test("74 a size that is not whole, or has a min above the max, stops the game when it loads (for the rock and for the Shroom, each on its own)", () => {
@@ -2845,7 +2855,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 58, hash: "e8987280885bea36" };
+const DATA_FINGERPRINT = { version: 59, hash: "88a8e8a7322c88e6" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -4727,5 +4737,56 @@ test("206 the keys every attack shares are checked by one function in the four p
     { keys: true, recipeTag: "enemy", recipeIgnores: false },
     { keys: true, recipeTag: "enemy", recipeIgnores: false },
   ]);
+});
+
+// ---- Weightless Branches (issue 51) ----
+// The game of the Branches: the real layer (rareKinds), no Dummies (as in the other tests), no shield.
+const BRANCHY = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }"), { branches: true });
+
+test("207 the seed places weightless Branches: over the squares with an object from -20000 to 20000 of seed 1, about 1 in 10 is a Branch (from 8% to 12%); every square that is not a Branch is exactly the object of the world without Branches (its own roll keeps the rest as it was); every Branch has weight 0 and health 1; Branches are within the window of the grid in Chamber 1 and in Chamber 2", () => {
+  const area = "objectsInArea(1, -20000, -20000, 20000, 20000)";
+  const withBranches = plain(run(`return ${area};`, BRANCHY));
+  const without = plain(run(`return ${area};`));
+  const byKey = new Map(without.map((object) => [object.layer + ":" + object.square.x + "," + object.square.y, object]));
+  const branches = withBranches.filter((object) => object.type === "branch");
+  const share = branches.length / withBranches.length;
+  assert.ok(share >= 0.08 && share <= 0.12, "the share of Branches is " + share);
+  for (const object of withBranches) {
+    if (object.type === "branch") continue;
+    assert.deepStrictEqual(object, byKey.get(object.layer + ":" + object.square.x + "," + object.square.y), "a square that is not a Branch stays as it was");
+  }
+  for (const branch of branches) {
+    assert.strictEqual(branch.weight, 0);
+    assert.deepStrictEqual(branch.health, { now: 1, max: 1 });
+  }
+  const inChambers = plain(run(`
+    return [createChamber1State(), createChamber2State(1, 1)].map((s) => {
+      const halfW = s.grid.windowWidth * s.grid.cellSize / 2, halfH = s.grid.windowHeight * s.grid.cellSize / 2;
+      return objectsReaching(s.seed, -halfW, -halfH, halfW, halfH).filter((object) => object.type === "branch").length;
+    });
+  `, BRANCHY));
+  assert.ok(inChambers[0] > 0 && inChambers[1] > 0, "Branches in both chambers: " + inChambers);
+});
+
+test("208 the scene of issue 47, with today's rule (a Branch breaks only when a hit is at least its health): the avatar coasting into an isolated Branch of seed 1 at the minimum impact (1 px/frame) hurts it by less than 1, so the Branch keeps a little health and the avatar is stopped against it; at the top speed (3 px/frame, walking) the hit breaks it and the avatar keeps its speed and goes on", () => {
+  const scene = (speed, walking) => run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const p = s.actors[0];
+    // Coasting (no input): the velocity falls by the deceleration (0.125) before the move, so ${speed} + 0.125 lands on ${speed}.
+    const start = ${walking ? speed : `${speed} + 0.125`};
+    p.position.x = branch.position.x - (p.radius + branch.radius) - start + 0.5; p.position.y = branch.position.y;
+    p.move.velocity.x = start; p.move.velocity.y = 0;
+    step(s, { move: { x: ${walking ? 1 : 0}, y: 0 } });
+    return { health: s.damagedObjects[objectKey(branch)], vx: p.move.velocity.x, touching: Math.abs(branch.position.x - p.position.x - (p.radius + branch.radius)) < 1e-9 };
+  `, BRANCHY);
+  const slow = plain(scene(1, false));
+  assert.ok(slow.health > 0 && slow.health < 1, "the slow hit leaves the Branch with a little health: " + slow.health);
+  assert.strictEqual(slow.vx, 0, "the avatar is stopped");
+  assert.strictEqual(slow.touching, true, "and it just touches the Branch");
+  const fast = plain(scene(3, true));
+  assert.strictEqual(fast.health, 0, "at the top speed the Branch breaks");
+  assert.strictEqual(fast.vx, 3, "a broken thing gives no push: the avatar keeps its speed");
 });
 

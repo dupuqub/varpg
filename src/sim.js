@@ -441,6 +441,13 @@ function assertValidDefinitions() {
     for (const kind of layer.kinds) {
       if (!DEFINITIONS.objects[kind]) throw new Error("The kinds of " + where + " has " + kind + ", which is not an object");
     }
+    let rareTotal = 0;
+    for (const [kind, percent] of Object.entries(layer.rareKinds ?? {})) {
+      if (!DEFINITIONS.objects[kind]) throw new Error("The rareKinds of " + where + " has " + kind + ", which is not an object");
+      if (!(Number.isInteger(percent) && percent >= 1)) throw new Error("The percent of " + kind + " in the rareKinds of " + where + " must be a whole number, 1 or more, and it is " + percent);
+      rareTotal += percent;
+    }
+    if (rareTotal > 100) throw new Error("The rareKinds of " + where + " add up to " + rareTotal + " percent, more than 100");
     if (!(layer.chancePercent >= 0 && layer.chancePercent <= 100)) {
       throw new Error("The chancePercent of " + where + " must go from 0 to 100, and it is " + layer.chancePercent);
     }
@@ -794,6 +801,7 @@ const SALTS = Object.freeze({
   objectKind: 4,
   objectHealth: 5,
   objectRadius: 6,
+  objectRare: 7,
   crowdRadius: 11,
   crowdHealth: 14,
   dummyAngle: 15,
@@ -825,7 +833,25 @@ function objectLayers() {
 // How far from the center of its square an object of the layer must stay, so objects of neighbor squares of the same
 // layer never overlap: the largest radius an object of the layer can have. Computed from the kinds of the layer, never stored.
 function objectMargin(layer) {
-  return Math.max(...layer.kinds.map((kind) => DEFINITIONS.objects[kind].size.max));
+  return Math.max(...layerKinds(layer).map((kind) => DEFINITIONS.objects[kind].size.max));
+}
+
+// Every kind a layer can place: its kinds and its rare kinds (rareKinds, each with its percent).
+function layerKinds(layer) {
+  return [...layer.kinds, ...Object.keys(layer.rareKinds ?? {})];
+}
+
+// The kind of the object of a square (the user, 2026-11-14, issue 51): first a roll of its own (SALTS.objectRare) from 0 to 99 says
+// whether it is one of the rare kinds, each taking its percent in the order written; otherwise one of kinds, with the same chance each,
+// by the roll it always had (SALTS.objectKind). So a square that does not get a rare kind keeps the kind it had before rare kinds existed.
+function kindInSquare(seed, layer, squareX, squareY, salt) {
+  const rare = hashInts(seed, squareX, squareY, salt(SALTS.objectRare)) % 100;
+  let from = 0;
+  for (const [kind, percent] of Object.entries(layer.rareKinds ?? {})) {
+    if (rare < from + percent) return kind;
+    from += percent;
+  }
+  return layer.kinds[hashInts(seed, squareX, squareY, salt(SALTS.objectKind)) % layer.kinds.length];
 }
 
 // Rolls a whole number from min to max (both included) from the seed, for one square and one "salt".
@@ -850,7 +876,7 @@ function objectInSquare(seed, layer, squareX, squareY) {
   const y = squareY * layer.cellSize + margin + (hashInts(seed, squareX, squareY, salt(SALTS.objectY)) % room);
   if (x * x + y * y < layer.safeRadius * layer.safeRadius) return null;
 
-  const type = layer.kinds[hashInts(seed, squareX, squareY, salt(SALTS.objectKind)) % layer.kinds.length];
+  const type = kindInSquare(seed, layer, squareX, squareY, salt);
   const definition = DEFINITIONS.objects[type];
   const health = rollInRange(seed, squareX, squareY, salt(SALTS.objectHealth), definition.healthRange.min, definition.healthRange.max);
   const radius = rollInRange(seed, squareX, squareY, salt(SALTS.objectRadius), definition.size.min, definition.size.max);

@@ -107,7 +107,7 @@ Do issue 32's "To do". The hard part: `resolveHitboxes` filters before it marks 
 
 Do issue 33's "To do". Structure only: every whole-state test bit for bit the same; keep the order of the keys in the records (the JSON of a snap must not change, or test 129's neighbours and the snap tests move). New test: a recipe that misses a shared key is refused in each of the four places by the one check. Closes issue 33. Do it before any answer to issue 45 is built.
 
-### [ ] I14. Weightless Branches, 10% of the objects (model: opus; issue 51)
+### [x] I14. Weightless Branches, 10% of the objects (model: opus; issue 51)
 
 **Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 
