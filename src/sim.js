@@ -613,11 +613,6 @@ function resolveDamage(packet, target, withShield = true) {
   return { parts, total: sum };
 }
 
-// The damage of a body slam on a target, as one number: the packet of the hit (finalAttack) resolved against the target.
-function damageOf(attacker, hit, target) {
-  return resolveDamage(finalAttack(attacker, hit), target).total;
-}
-
 // The name of a thing in the audit: the id of an actor, or the type and the place of an object.
 function nameOf(thing) {
   return thing.id !== undefined ? thing.id : thing.type + " " + objectKey(thing);
@@ -986,7 +981,7 @@ function objectsNear(state, actor) {
 // 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
 //    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
 //    side hurts the other (bodyHurts: the tags its body ignores) with its own weight
-//    (damageOf, the body slam): the actor takes the damage of the object, and the object takes the damage of the
+//    (the body slam: finalAttack, landed by landHit): the actor takes the damage of the object, and the object takes the damage of the
 //    actor. An object keeps its health in state.damagedObjects. An object that breaks has no collision: nothing is
 //    pushed, and the actor keeps its speed and goes on.
 // 4. The actor is moved along the normal until it just touches the object.
@@ -1172,7 +1167,7 @@ function pushShare(a, b) {
 // What happens when an actor that moves (not the avatar) touches another actor (the avatar or another that moves). If they overlap:
 // 1. If this is a NEW contact (the pair was not touching in the last frame), the speed at which they close in on each other (the impact: the part of the
 //    difference of their velocities along the line between the centers) is at least collision.minImpact, it is a hit:
-//    the same body slam as the avatar's (damageOf), and each side hurts the other with its own weight when bodyHurts says so
+//    the same body slam as the avatar's (finalAttack, landed by landHit), and each side hurts the other with its own weight when bodyHurts says so
 //    (the tags its body ignores: two enemies hurt nobody).
 // 2. The two are pushed apart along the line until they just touch, the push split by weight (pushShare): the
 //    heavier moves less. Nobody's velocity changes.

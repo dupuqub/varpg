@@ -83,7 +83,7 @@ Do issue 37's "To do". Break-once by hand (the mechanical check does not apply: 
 
 In `assertValidDefinitions`, refuse `resistance` and `shieldResistance` points that are not finite (`Number.isFinite`), with a message like the one for negative points. One new test with `loadError` (see test 181 for the pattern): a part with `Infinity` blunt resistance is refused. One line in `AGENTS.md`, "The kit of parts", beside the resistance. The parked question of the issue stays parked: comment on issue 34 that the check is done and the question waits; do not close it.
 
-### [ ] I10. `damageOf` goes away (model: sonnet; issue 48, part 4)
+### [x] I10. `damageOf` goes away (model: sonnet; issue 48, part 4)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 

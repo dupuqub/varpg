@@ -1061,8 +1061,8 @@ test("50 the attack of a hit is a packet of blunt damage: weight x 0.001 x impac
       noImpact: finalAttack(rock, { impact: 0 }),
       avatar: finalAttack(avatar, { impact: 12 }),
       lighterAvatar: finalAttack(lighterAvatar, { impact: 12 }),
-      smallDamage: damageOf(small, { impact: 12 }, avatar, full),
-      largeDamage: damageOf(large, { impact: 12 }, avatar, full),
+      smallDamage: resolveDamage(finalAttack(small, { impact: 12 }), avatar).total,
+      largeDamage: resolveDamage(finalAttack(large, { impact: 12 }), avatar).total,
     };
   `);
   assert.deepStrictEqual(plain(result.resistance), { blunt: 30, puncture: 10 });
@@ -1344,7 +1344,7 @@ test("67 the body slam comes from the weight alone: a thing with weightPerRadius
     const rock = finalizeObject("rock", { radius: 28 });
     const full = createRun(1).blueprint;
     const avatar = createAvatar(full);
-    return { attack: finalAttack(rock, { impact: 12 }), damage: damageOf(rock, { impact: 12 }, avatar, full) };
+    return { attack: finalAttack(rock, { impact: 12 }), damage: resolveDamage(finalAttack(rock, { impact: 12 }), avatar).total };
   `;
   assert.deepStrictEqual(plain(run(probe, weightless)), { attack: {}, damage: 0 }); // there is no attack
   const normal = run(probe);
@@ -1357,9 +1357,9 @@ test("68 there is no minimum damage: a weak hit (0.8) costs what the curve leave
     const small = finalizeObject("shroom", { radius: 16 }); // 1600 kg
     const large = finalizeObject("shroom", { radius: 32 }); // 3200 kg
     return {
-      weak: damageOf(small, { impact: 3 }, avatar, full), // attack 0.8, 0.62 after the resistance
-      strong: damageOf(large, { impact: 12 }, avatar, full), // attack 6.4, 4.92 after the resistance
-      noImpact: damageOf(large, { impact: 0 }, avatar, full),
+      weak: resolveDamage(finalAttack(small, { impact: 3 }), avatar).total, // attack 0.8, 0.62 after the resistance
+      strong: resolveDamage(finalAttack(large, { impact: 12 }), avatar).total, // attack 6.4, 4.92 after the resistance
+      noImpact: resolveDamage(finalAttack(large, { impact: 0 }), avatar).total,
     };
   `);
   assert.ok(Math.abs(result.weak - resisted(0.8, 30)) < 1e-9);
