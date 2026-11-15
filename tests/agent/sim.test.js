@@ -4397,28 +4397,34 @@ test("191 a step on an aborted state changes nothing: the JSON of the state is t
   assert.strictEqual(result.linesAfter, result.lines);
 });
 
-test("192 an actor with no health is never a target, whoever it is: with the avatar at zero health one think leaves a walking Biter with a zero direction (it stands still), and with the only Biter at zero health one fireWeapons of the avatar's repeater fires nothing; with both alive the Biter walks at the avatar and the repeater fires one shot", () => {
+test("192 an actor with no health is never a target, whoever it is: with the avatar at zero health one think leaves a walking Biter with a zero direction (it stands still), and with the only Biter at zero health one fireWeapons of the avatar's repeater fires nothing; with both alive the Biter walks at the avatar and the repeater fires one shot; each by the plain walk of pickTarget and by the index of tagIndex that every step uses", () => {
   const result = run(`
     const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
     const s = createChamber2State(1, 1, run.blueprint);
     s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
     const avatar = s.actors[0], biter = s.actors[1];
     biter.position.y = avatar.position.y;
-    const walk = () => { biter.position.x = avatar.position.x + 400; biter.move.direction.x = 1; biter.move.direction.y = 0; biter.ai.phase = "chase"; think(s, biter, null); return { x: biter.move.direction.x, y: biter.move.direction.y }; };
-    const fire = () => { biter.position.x = avatar.position.x + 100; s.hitboxes = []; for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; } fireWeapons(s, avatar, null); return s.hitboxes.length; };
-    avatar.health.now = 0;
-    const deadAvatar = walk();
-    avatar.health.now = 10; biter.health.now = 0;
-    const deadBiter = fire();
-    biter.health.now = 10;
-    const aliveWalk = walk();
-    const aliveFire = fire();
-    return { deadAvatar, deadBiter, aliveWalk, aliveFire };
+    const walk = (index) => { biter.position.x = avatar.position.x + 400; biter.move.direction.x = 1; biter.move.direction.y = 0; biter.ai.phase = "chase"; think(s, biter, index); return { x: biter.move.direction.x, y: biter.move.direction.y }; };
+    const fire = (index) => { biter.position.x = avatar.position.x + 100; s.hitboxes = []; for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; } fireWeapons(s, avatar, index); return s.hitboxes.length; };
+    const paths = { plain: null, indexed: tagIndex(s.actors) }; // the plain walk, and the index every step uses
+    const out = {};
+    for (const [name, index] of Object.entries(paths)) {
+      avatar.health.now = 0;
+      const deadAvatar = walk(index);
+      avatar.health.now = 10; biter.health.now = 0;
+      const deadBiter = fire(index);
+      biter.health.now = 10;
+      out[name] = { deadAvatar, deadBiter, aliveWalk: walk(index), aliveFire: fire(index) };
+    }
+    return out;
   `, QUIET);
-  assert.deepStrictEqual(plain(result.deadAvatar), { x: 0, y: 0 }, "the Biter stands still when its only target has no health");
-  assert.strictEqual(result.deadBiter, 0, "the repeater does not fire at a Biter with no health");
-  assert.ok(result.aliveWalk.x < 0, "with the avatar alive the Biter walks at it (the avatar is to its left)");
-  assert.strictEqual(result.aliveFire, 1, "with the Biter alive the repeater fires once");
+  for (const path of ["plain", "indexed"]) {
+    const r = plain(result[path]);
+    assert.deepStrictEqual(r.deadAvatar, { x: 0, y: 0 }, path + ": the Biter stands still when its only target has no health");
+    assert.strictEqual(r.deadBiter, 0, path + ": the repeater does not fire at a Biter with no health");
+    assert.ok(r.aliveWalk.x < 0, path + ": with the avatar alive the Biter walks at it (the avatar is to its left)");
+    assert.strictEqual(r.aliveFire, 1, path + ": with the Biter alive the repeater fires once");
+  }
 });
 
 test("193 recordFrame does not record a state that did not advance: recording the same frame again, or an aborted state that step no longer advances, leaves snaps, inputs and visuals as they were; a state that advanced is recorded", () => {

@@ -71,7 +71,7 @@ From issue 48, only: R2.5; R3.5 for the docs (objects have no resistance; "objec
 
 From issue 48, only R1.1 (test 200), R1.5 (test 189), R1.6 (test 192: prefer asserting the claims, one `think` and one `fireWeapons`, over narrowing the title), R2.3 (test 160). Change each title and its row in the same commit. No new tests; the four changed tests are the "old tests changed" of the check. Comment on issue 48.
 
-### [ ] I8. Test 192 covers the indexed path of `pickTarget` (model: sonnet; issue 37)
+### [x] I8. Test 192 covers the indexed path of `pickTarget` (model: sonnet; issue 37)
 
 **Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`.
 
