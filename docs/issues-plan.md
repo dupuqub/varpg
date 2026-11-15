@@ -37,7 +37,7 @@ In `docs/base-plan.md` change `### [ ] P1.` to `### [x] P1.`, and the same for P
 
 No new tests (docs only). Closes issues 35, 39, 40.
 
-### [ ] I3. What the method has proven, and who makes direct changes (model: haiku; issues 36, 38)
+### [x] I3. What the method has proven, and who makes direct changes (model: haiku; issues 36, 38)
 
 **Files:** `docs/method.md`.
 

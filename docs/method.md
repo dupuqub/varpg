@@ -43,12 +43,13 @@ The weights are the coordinator's estimate, not a measurement. A parcel that a m
 ## What is proven and what is not
 
 **Proven in the base plan (2026-11-14):**
-- Six parcels (P1 to P6) went in one at a time, each closed with its tests green and a break-once proof.
-- Sonnet helpers did P1, P4, P5 and P6. A Haiku helper did P2. One Screen issue (P3) was opened by the coordinator.
+- Five parcels with tests (P1, P2, P4, P5, P6) went in one at a time, each with its tests green. P3 was an issue for the Screen desk, not a parcel with code.
+- The commits show the model of the conversation that committed: P1 and P2 Haiku 5.5, P4, P5 and P6 Sonnet 5.5. All of them were in the session of the plan. Whether each helper was the same model is not recorded: the helpers' reports are not kept.
 - One helper was interrupted by the server stop, and the coordinator recovered from the half-made change.
+- **The user's word (2026-11-14):** Haiku has coordinated helpers many times in this project, so the Haiku coordinator is not new.
 
 **Not proven yet:**
-- A Haiku **coordinator** running the checklist on its own. The base plan was driven by the Haiku model for the checks, but the design work (the recipes) was written by a stronger model. The first real test of a Haiku coordinator on a parcel that needs judgement has not happened.
+- A Haiku **coordinator** running a whole list of parcels on its own, with the checks of step 3 written in the loop. The first run of the issues plan (`docs/issues-plan.md`) is the test of that.
 - The **Review** of the blocks. The rule was that a stronger helper reviews each block; in the base plan that review was left to the Review desk, which the user calls himself.
 - Measured cost and time per parcel. The durations in the helpers' reports were recorded but not compared.
 
@@ -73,3 +74,7 @@ The break-once was not done mechanically in the base plan (issue 35). Afterwards
 - Test 192 (P1) passes on the old code: it tests the removal of the parameter `living` of `pickTarget` (its row says so), a structural change; the old default already gave the same answers. Opinion, not checked further: judging it stays with a stronger model.
 - The old tests that fail in P4 and P5 are consequences of putting the older `src/` back (the data, the version and fingerprint of test 129, the attack records); the reasons were not investigated one by one. Test 195 (from P4) fails in P5 for the same cause.
 - In P6, test 152 fails because the "Code layout" of `AGENTS.md` names `landHit`, which the older `src/` does not have (read from the test's title, not checked in the code).
+
+## Which changes go through a parcel
+
+A parcel is the way for a change to the rules that a helper can build from a written recipe. Some changes are decided in conversation with the user and are made directly by a stronger model, without a helper: examples are `568d40d` ("closest" by the edge, test 201), `6bdcb12` (a hit that breaks the shield, test 202) and `ccab4ac` (no minimum damage). A direct change still writes its break-once in the commit message, as those three did ("Fails without the change"). Everything else goes through a parcel.
