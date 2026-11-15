@@ -1323,10 +1323,11 @@ function collideActors(state, lastContacts, audit = null) {
 // frames left of the windup or of the freeze. The numbers of the attack (how close it must be, how long it stays still
 // before and after, the hitbox) are in actor.attacks[ai.attack], copied from the recipe when the actor was made.
 // Chase: it wants to walk straight at the avatar. When the space between the two bodies is within the reach of the
-// attack, it holds still for windupFrames frames (the windup: the avatar can leave), then strikes: a hitbox is born
-// (spawnHitbox) and the actor stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its
-// deceleration), and then chases again. With windupFrames 0 it strikes at once.
-// Called by step for every actor that has `ai`, before anyone moves. It only changes the actor and the hitboxes.
+// attack, it holds still for windupFrames frames (the windup: the avatar can leave), then decides to strike: it sets ai.strike
+// and stays still for freezeFrames frames (its wanted direction is zero, so it slows down by its deceleration), and then chases
+// again. With windupFrames 0 it decides at once. The hitbox is NOT born here: emitStrikes (stage 4b, after everyone has moved)
+// reads ai.strike and births it through spawnHitbox. With windupFrames 0 it strikes at once.
+// Called by step for every actor that has `ai`, before anyone moves. It only changes the actor (its ai and its wanted direction).
 function think(state, actor, byTag) {
   const ai = actor.ai;
   const attack = actor.attacks[ai.attack];
@@ -1453,9 +1454,7 @@ function addWeaponAttacks(actor) {
 // range of "from" (their body reaches it: the distance to the center minus their radius), or null when there is none. The tag is
 // absolute, not relative to who acts. The only rule today is "closest" (the first in the list on a tie, so runs stay reproducible).
 // Whoever has no health is not a target (the avatar at zero health ends the mission, see step, so nobody chases it any more).
-// A range of 0 (no Head, no Radar) sees nothing.
-// "index": the index by tag of this step (tagIndex), or null for the plain walk over every actor. Both give the same answer: the index
-// only skips the actors without the tag, in the same list order, so a tie still goes to the first (the plain walk is the reference in the tests).
+// A range of 0 (no Head, no Radar) sees nothing. The distance is measured to the edge of the body (the user, 2026-11-14).
 // The actors that carry each tag, in list order, made again at the start of every step and never part of the state (issue 22: one Biter
 // walking every actor to find the avatar made the step 3 to 5 times slower with a crowd). Actors do not change tags or enter or leave
 // the list during a step (they leave at the end, removeDestroyed); if that changes one day the index is rewritten at that moment.
@@ -1470,6 +1469,8 @@ function tagIndex(actors) {
   return index;
 }
 
+// "index": the index by tag of this step (tagIndex), or null for the plain walk over every actor. Both give the same answer: the index
+// only skips the actors without the tag, in the same list order, so a tie still goes to the first (the plain walk is the reference in the tests).
 function pickTarget(state, from, target, range, index = null) {
   if (!(range > 0)) return null;
   let best = null;
@@ -1586,9 +1587,10 @@ function fireWeapons(state, player, byTag) {
 // grows. One line per damage calculation (one attack on one target), clear and minimal, as one JSON object per line, so a
 // person can read it and a script can parse it. Every line starts with the frame and the kind of event. The three kinds:
 //   hit     what came into effect in one damage calculation, with the ids of the two sides (an object is named by its type and
-//           place, see nameOf): { frame, event, source, attack, target, parts, total, shield, health }. parts
-//           is what resolveDamage said per type of damage; shield and health are what the target really lost of each. frame is
-//           the frame the screen shows when the hit is seen (the state after its step).
+//           place, see nameOf): { frame, event, source, attack, target, parts, total, shield, health }, plus overflow when the hit
+//           broke a live shield (the share of the packet that did not fit, its second calculation against the body, and the
+//           total of each: see landHit). parts is what resolveDamage said per type of damage; shield and health are what the
+//           target really lost of each. frame is the frame the screen shows when the hit is seen (the state after its step).
 //   resume  the simulation resumed from frame X after a pause (written by the screen, which is where play is pressed), so
 //           that a frame written twice, or an actor dying twice, can be understood: { frame, event }.
 //   start   a chamber begins: { frame, event, run, chamber }. Each chamber starts a new log (the user, 2026-11-13, issue 18), and this
