@@ -390,6 +390,7 @@ A hitbox hurts a Rock or a Shroom the way the body slam does (test 189): `resolv
 - `tests/agent/`: tests **written and defined by the agent**, not by the user. `sim.test.js` tests the rules, and `README.md` explains each test in plain words, with the worked numbers (a test checks that every test has its row). `benchmark-grid.js` and `benchmark-layers.js` measure the collision grid and the layers of the ground (they are not tests). Any other kind of test the user writes later should go in its own folder.
 - `docs/desks.md`: which conversations (desks) to open, what each may change and how they stay out of each other's way.
 - `docs/base-plan.md`: the plan for the base (2026-11-14): small parcels with a recipe and a model each, and the checklist a coordinator follows by calling helpers.
+- `docs/issues-plan.md`: every open issue of 2026-11-14 cut into parcels, each with its model (haiku, sonnet, opus), for a coordinator to follow; the questions waiting for the user and the Screen desk's parcels are listed apart.
 - `docs/`: reviews written by an agent at the user's request. `docs/review-2026-11-11.md` is the map of the relations in the code, the fragile ones included, the tensions in the structure, the costs measured and what the direction of the game asks of today's code. **Read it before adding a rule.** Delete from it what gets solved.
 - These are plain scripts, loaded in order by `index.html`, and they share globals. They will become modules when the simulation also needs to run in Node outside the tests.
 
