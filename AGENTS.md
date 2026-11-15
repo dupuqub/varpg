@@ -147,7 +147,7 @@ The user asked for the kit with **only what is used now**: weight, speed, health
 - Each part in `DEFINITIONS.parts` has a `weight` and `specs`. The avatar's final values are the **sum of the specs of the parts of its blueprint** (`sumSpec`):
   - top speed (`finalSpeed`) = sum of `speed` - total weight x `weightSpeedPenalty`, never below zero (the agent's floor, so the controls never reverse; whether there is a real minimum speed is open);
   - maximum health (`finalMaxHealth`) = sum of `health`;
-  - resistance to each type of damage (`finalResistance(actor, blueprint, type)`) = sum of the `resistance` spec of that type, in **points** (see "Damage"); the part specs are checked against a list of names when the file loads, so a typo stops the game;
+  - resistance to each type of damage (`finalResistance(actor, blueprint, type)`) = sum of the `resistance` spec of that type, in **points** (see "Damage"); the part specs are checked against a list of names when the file loads, so a typo stops the game; points of `resistance` and `shieldResistance` must be finite and 0 or more (issue 34, test 203: `Infinity` gave `NaN`; what points below 0 would do is parked for the user);
   - dash speed (`finalDashSpeed`) = sum of `dashSpeed`; without any part giving it there is no dash and the charge is kept;
   - maximum dash charges (`finalDashMaxCharges`) = sum of `dashCharges`; the state holds `dash.charges: { now, max }` (the user's structure), filled when the state is created, like the health; without any part giving it there is no charge and no dash;
   - frames to recharge a charge (`finalDashRechargeFrames`) = sum of `rechargeFrames` (the user's decision, 2026-11-10: at first every number of the dash comes from the Booster);

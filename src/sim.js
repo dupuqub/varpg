@@ -310,7 +310,8 @@ function assertValidDefinitions() {
       if (name === "resistance" || name === "shieldResistance") {
         for (const [type, points] of Object.entries(value)) {
           if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The " + name + " of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
-          if (!(points >= 0)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be 0 or more, and it is " + points);
+          // Finite too (issue 34): Infinity points make the curve points / (points + resistanceScale) give NaN, which the state must never hold.
+          if (!(Number.isFinite(points) && points >= 0)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be a finite number, 0 or more, and it is " + points);
         }
       } else if (name === "shieldDelayFrames" && !(Number.isInteger(value) && value >= 1)) {
         throw new Error("The spec shieldDelayFrames of the part " + id + " must be a whole number of frames, 1 or more, and it is " + value);

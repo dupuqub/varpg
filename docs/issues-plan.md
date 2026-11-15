@@ -77,7 +77,7 @@ From issue 48, only R1.1 (test 200), R1.5 (test 189), R1.6 (test 192: prefer ass
 
 Do issue 37's "To do". Break-once by hand (the mechanical check does not apply: no `src/` change): apply the mutation the issue gives, see the test fail, put it back; write it in the report. Closes issue 37.
 
-### [ ] I9. Resistance points must be finite (model: haiku; issue 34, the part "to do now")
+### [x] I9. Resistance points must be finite (model: haiku; issue 34, the part "to do now")
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 

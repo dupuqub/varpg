@@ -4650,3 +4650,11 @@ test("202 a hit that breaks the shield (the user, 2026-11-14): blunt 50 on a bod
   assert.strictEqual(r.holding.health.now, 100);
   assert.ok(!("overflow" in r.lines[1]));
 });
+
+// ---- Resistance points must be finite (issue 34) ----
+test("203 resistance points that are not finite are refused when the definitions load, with a message that names the part and the type: the Torso with Infinity blunt resistance, and the Generator with Infinity in its shield's resistance; the data as it is loads", () => {
+  const torso = loadError((text) => text.replace("resistance: { blunt: 20, puncture: 10 }, speed: 0.5", "resistance: { blunt: Infinity, puncture: 10 }, speed: 0.5"));
+  assert.match(torso ?? "", /resistance of the part torso to blunt must be a finite number/);
+  assert.throws(() => loadGame((text) => text.replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: Infinity"), { shield: true }), /shieldResistance of the part generator to blunt must be a finite number/);
+  assert.doesNotThrow(() => loadGame(null, { shield: true }));
+});
