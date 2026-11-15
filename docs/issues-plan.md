@@ -157,7 +157,7 @@ Close issue 53. One message in Brazilian Portuguese: what was built, the name pr
 
 The user (2026-11-15, issue 58): the combat log gets a line when the mission is aborted, like `start` and `resume`. Beside `combatAuditStartLine` and `combatAuditResumeLine`: `combatAuditAbortedLine(frame)` returns the JSON line `{ frame, event: "aborted" }`. The screen writes it (the Screen desk's parcel T4); the rules still never read the log. The comment that lists the kinds of line, a test with its row (the line's text, and `combatAuditTotals` skipping it), the caudit point of `AGENTS.md` and "Code layout". Closes issue 58.
 
-### [ ] I23. The history past the death is written down and tested (model: sonnet; issue 42)
+### [x] I23. The history past the death is written down and tested (model: sonnet; issue 42)
 
 **Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/step-order.md`.
 

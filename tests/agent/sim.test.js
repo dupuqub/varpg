@@ -5019,3 +5019,118 @@ test("221 the aborted line of the combat audit is { frame, event: \"aborted\" } 
   assert.strictEqual(r.text, '{"frame":37,"event":"aborted"}');
   assert.deepStrictEqual(r.withAborted, r.without, "the aborted line counts for nothing");
 });
+
+// The scene of tests 222 to 225 (issue 42): the avatar with 0.01 health (no shield in the test game) and one Biter 200 px away that
+// chases it and bites. It dies a few frames in, by the rules alone. The history is recorded as the screen does (createHistory,
+// recordFrame after each step), the audit is written as the screen writes it (a start line, the hit lines of step, an aborted line
+// right after the step in which the mission became aborted, a resume line when play goes on from a past frame).
+const DEATH_HISTORY = `
+  ${ALONE_BITERS}
+  const IDLE = { move: { x: 0, y: 0 } };
+  function deadHistory() {
+    const s = aloneBiters(0);
+    s.actors[0].health.now = 0.01;
+    s.actors[1].position.x = s.actors[0].position.x + 200; s.actors[1].position.y = s.actors[0].position.y;
+    const h = createHistory(s, createRun(1).blueprint);
+    const audit = createAudit();
+    audit.push(combatAuditStartLine(s.frame, 1, 2));
+    for (let i = 0; i < 300 && s.mission === "running"; i++) {
+      step(s, IDLE, undefined, null, audit);
+      recordFrame(h, s, IDLE);
+    }
+    audit.push(combatAuditAbortedLine(s.frame));
+    return { s, h, audit };
+  }
+`;
+
+test("222 after the avatar's death the state freezes and the history ends on the aborted snap (issue 42): a Biter 200 px away bites the avatar of 0.01 health to death; the last snap says aborted and is the state's own frame; 10 more steps (with a dash and a move) and recordFrame leave the state as JSON, the snaps, the inputs and the visuals exactly as they were, so the last snap is still the aborted one", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const state = JSON.stringify(s), history = JSON.stringify(h);
+    const last = h.snaps[h.snaps.length - 1];
+    for (let i = 0; i < 10; i++) { const input = { move: { x: 1, y: 0 }, dash: true }; step(s, input); recordFrame(h, s, input); }
+    return {
+      mission: s.mission, health: s.actors[0].health.now, snaps: h.snaps.length, lastFrame: last.frame, stateFrame: s.frame,
+      lastMission: last.mission, before: h.snaps[h.snaps.length - 2].mission,
+      stateSame: JSON.stringify(s) === state, historySame: JSON.stringify(h) === history,
+    };
+  `, QUIET);
+  assert.strictEqual(result.mission, "aborted");
+  assert.strictEqual(result.health, 0);
+  assert.strictEqual(result.lastMission, "aborted", "the last snap says aborted");
+  assert.strictEqual(result.before, "running", "the one before it is still running: the death is the last step");
+  assert.strictEqual(result.lastFrame, result.stateFrame, "the last snap is the frame of the state");
+  assert.ok(result.snaps > 2, "some frames passed before the death");
+  assert.strictEqual(result.stateSame, true, "the state does not change");
+  assert.strictEqual(result.historySame, true, "nothing new is recorded");
+});
+
+test("223 a snap from before the death comes back running and the game plays on from it (issue 42): stateFromSnap of the snap before the death gives mission running and 0.01 health; with the same inputs, step gives the very state of the aborted snap again (same frame, same last health, JSON equal); with another input (a dash to the right, away from the Biter) it gives a different state on the same frame; the saved aborted snap is not changed by any of this", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const past = h.snaps.length - 2;
+    const aborted = JSON.stringify(h.snaps[past + 1]);
+    const again = stateFromSnap(h, past);
+    const resumed = { mission: again.mission, health: again.actors[0].health.now, frame: again.frame };
+    step(again, copyOf(h.inputs[past + 1]));
+    const other = stateFromSnap(h, past);
+    step(other, { move: { x: 1, y: 0 }, dash: true });
+    return {
+      resumed, sameAsAborted: JSON.stringify(again) === aborted, againHealth: again.actors[0].health.now, againMission: again.mission,
+      otherDiffers: JSON.stringify(other) !== aborted, otherFrame: other.frame, abortedFrame: h.snaps[past + 1].frame, otherMission: other.mission,
+      savedIntact: JSON.stringify(h.snaps[past + 1]) === aborted,
+    };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.resumed), { mission: "running", health: 0.01, frame: result.abortedFrame - 1 });
+  assert.strictEqual(result.sameAsAborted, true, "the same inputs on the same frame give the same death");
+  assert.strictEqual(result.againHealth, 0);
+  assert.strictEqual(result.againMission, "aborted");
+  assert.strictEqual(result.otherDiffers, true, "another input gives another state");
+  assert.strictEqual(result.otherFrame, result.abortedFrame, "it is the same frame");
+  assert.strictEqual(result.savedIntact, true, "the saved snap is not changed");
+});
+
+test("224 crossCheck is clean over a history that ends in the aborted snap and over one that went back and played on (issue 42): the history of the death gives null; after going back two snaps, discardAfter and 20 steps with another input recorded from there, the history gives null again, its snaps are the kept ones plus the new frames, and the new snaps are not aborted when the avatar walked away", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const ended = crossCheck(h);
+    const kept = h.snaps.length - 3;
+    discardAfter(h, kept);
+    const live = stateFromSnap(h, kept);
+    const away = { move: { x: -1, y: 0 } };
+    for (let i = 0; i < 20; i++) { step(live, away); recordFrame(h, live, away); }
+    return { ended, played: crossCheck(h), snaps: h.snaps.length, kept, frames: h.snaps.map((snap) => snap.frame), missions: h.snaps.slice(kept + 1).map((snap) => snap.mission) };
+  `, QUIET);
+  assert.strictEqual(result.ended, null, "the history that ends in the aborted snap");
+  assert.strictEqual(result.played, null, "the history that went back and played on");
+  assert.strictEqual(result.snaps, result.kept + 1 + 20);
+  assert.deepStrictEqual(result.frames, result.frames.map((_, index) => result.frames[0] + index), "the frames count up by one, no gap and no repeat");
+  assert.ok(result.missions.every((mission) => mission === "running" || mission === "aborted"));
+});
+
+test("225 the combat log only grows when the user goes back and resumes (issue 42, with the lines of issue 58): a log of the death run ends in the aborted line; going back two snaps and playing on cuts the history (discardAfter) but takes nothing out of the log, and the resume line is pushed after the aborted one with the frame it resumed from, which is lower; the lines written before are the same text as before, and the log of that run reads: start, hits, aborted, resume", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h, audit } = deadHistory();
+    const before = audit.slice();
+    const kept = h.snaps.length - 3;
+    discardAfter(h, kept);
+    const live = stateFromSnap(h, kept);
+    audit.push(combatAuditResumeLine(live.frame));
+    for (let i = 0; i < 5; i++) { step(live, IDLE, undefined, null, audit); recordFrame(h, live, IDLE); }
+    const events = audit.map((text) => JSON.parse(text)).map((entry) => entry.event);
+    return { before, after: audit.slice(0, before.length), events, beforeLength: before.length, resumeFrame: live.frame, abortedFrame: s.frame, snapFrame: h.snaps[kept].frame, totals: combatAuditTotals(before) };
+  `, QUIET);
+  assert.deepStrictEqual(result.after, result.before, "the lines written before are kept, in the same order");
+  const start = result.events.indexOf("start"), aborted = result.events.indexOf("aborted"), resume = result.events.indexOf("resume");
+  assert.strictEqual(start, 0, "the log opens with the start line");
+  assert.strictEqual(result.events[result.beforeLength - 1], "aborted", "it ended on the aborted line");
+  assert.strictEqual(resume, result.beforeLength, "the resume line comes right after the aborted line");
+  assert.ok(aborted < resume);
+  assert.ok(result.events.slice(1, aborted).every((event) => event === "hit"), "between start and aborted there are only hits");
+  assert.ok(result.snapFrame < result.abortedFrame, "it resumed from a frame before the death");
+  assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
+});
