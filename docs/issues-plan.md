@@ -41,7 +41,7 @@ No new tests (docs only). Closes issues 35, 39, 40.
 
 **Files:** `docs/method.md`.
 
-Issue 36: move to "Not proven yet" the lines about which model each helper was and about the recovered interruption; write what the commits do show: the `Co-Authored-By` line of P1 and P2 is Haiku 5.5, of P4, P5 and P6 Sonnet 5.5, all in the session of the plan; write "five parcels with tests" (P3 was an issue); fix "The roles" where it says the coordinator was Haiku. Read the commits with `git log --format='%h %s%n%b' 28f6420 802b2d0 2111d09 27fdf52 69114da -5` to check before writing.
+Issue 36: move to "Not proven yet" the lines about which model each helper was and about the recovered interruption; write what the commits do show: the `Co-Authored-By` line of P1 and P2 is Haiku 5.5, of P4, P5 and P6 Sonnet 5.5, all in the session of the plan; write "five parcels with tests" (P3 was an issue); fix "The roles" where it says the coordinator was Haiku. **The user's word (2026-11-14):** Haiku has coordinated helpers many times in this project. Write that in "What is proven" as his statement, with the date; what the repository cannot show is only which model each single helper was, because the helpers' reports are not kept. Read the commits with `git log --format='%h %s%n%b' 28f6420 802b2d0 2111d09 27fdf52 69114da -5` to check before writing.
 
 Issue 38, one paragraph: a change of a formula the user decides in conversation (examples: `568d40d`, `6bdcb12`, `ccab4ac`) can be made directly by a stronger model, without a parcel; it still writes its break-once in the commit message, as those three did. Everything else goes through a parcel.
 
