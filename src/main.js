@@ -135,6 +135,8 @@ function missionAborted() {
 function stepLive() {
   const input = readInput();
   step(state, input, run.blueprint, visual, audit);
+  // Written here because a new state was just calculated. After the death nothing calls stepLive on an aborted state, so this line is written once per death. A death undone by the history and died again writes it again, like any other line of the log.
+  if (missionAborted()) audit.push(combatAuditAbortedLine(state.frame));
   recordFrame(runHistory, state, input, visual);
   viewIndex = runHistory.snaps.length - 1;
 }

@@ -107,7 +107,7 @@ One rule, the same for every chamber, with no chamber named in the code: **the s
 
 **Check:** `NODE_PATH=/tmp/screencheck/node_modules node tests/screen/check.js T3`. It opens the game in Chrome, kills the avatar, and tries every item above, the cross-check of the history included.
 
-### [ ] T4. The combat log says when the mission is aborted (model: haiku; issues 49 and 58)
+### [x] T4. The combat log says when the mission is aborted (model: haiku; issues 49 and 58)
 
 **Do not start before issue 58 is closed** (`gh api repos/dupuqub/varpg/issues/58 --jq .state` says `closed`): the Rules desk writes the function of the line, `combatAuditAbortedLine(frame)`, in `src/sim.js`. If it is still open when this parcel is the next one, stop and tell the user. Then `git merge origin/main` before starting. After T3.
 
