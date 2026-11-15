@@ -151,6 +151,12 @@ The user (issue 46): a hit that carries no damage is a hit: it writes its audit 
 
 Close issue 53. One message in Brazilian Portuguese: what was built, the name proposed for the TAG, what moved.
 
+### [ ] I22. A line of the combat log for the aborted mission (model: haiku; issue 58)
+
+**Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15, issue 58): the combat log gets a line when the mission is aborted, like `start` and `resume`. Beside `combatAuditStartLine` and `combatAuditResumeLine`: `combatAuditAbortedLine(frame)` returns the JSON line `{ frame, event: "aborted" }`. The screen writes it (the Screen desk's parcel T4); the rules still never read the log. The comment that lists the kinds of line, a test with its row (the line's text, and `combatAuditTotals` skipping it), the caudit point of `AGENTS.md` and "Code layout". Closes issue 58.
+
 ## Waiting for the user (do not start)
 
 One question at a time, the one that unblocks most first. The model is the one that builds the answer.
