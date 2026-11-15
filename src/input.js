@@ -49,9 +49,10 @@ function touchMove() {
   return { x: (dx / length) * strength, y: (dy / length) * strength };
 }
 
-// A touch that starts on the bar at the top (the pause, back and forward buttons) belongs to the page, not to the game.
+// A touch that starts on the bar at the top (the pause, back and forward buttons) or on the alert of the death belongs to the page,
+// not to the game.
 function touchIsForTheGame(touch) {
-  return inGameView() && !(touch.target instanceof Element && touch.target.closest(".overlay"));
+  return inGameView() && !(touch.target instanceof Element && touch.target.closest(".overlay, .alert"));
 }
 
 function touchElement(className) {

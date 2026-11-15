@@ -88,7 +88,7 @@ All of it is inside `combatReportText` and helpers beside it in `src/chamber-0.j
 
 **Check:** `node tests/screen/check.js T2`. It plays the same fight as the report and looks for these lines with the numbers of that fight.
 
-### [ ] T3. The death on the screen (model: sonnet; issues 25, 42 and 49)
+### [x] T3. The death on the screen (model: sonnet; issues 25, 42 and 49)
 
 **Files:** `src/main.js`, `src/input.js`, `index.html`, `style.css`, `AGENTS.md`.
 

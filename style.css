@@ -202,3 +202,23 @@ canvas {
   width: auto;
   padding: 6px 14px;
 }
+
+/* The death in Chamber 2: in the center, above the canvas, plain like the menus, on a dark background so the text reads. */
+.alert {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 48px;
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  letter-spacing: 0.2em;
+}
+
+.alert[hidden] {
+  display: none;
+}
