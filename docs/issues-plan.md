@@ -157,14 +157,34 @@ Close issue 53. One message in Brazilian Portuguese: what was built, the name pr
 
 The user (2026-11-15, issue 58): the combat log gets a line when the mission is aborted, like `start` and `resume`. Beside `combatAuditStartLine` and `combatAuditResumeLine`: `combatAuditAbortedLine(frame)` returns the JSON line `{ frame, event: "aborted" }`. The screen writes it (the Screen desk's parcel T4); the rules still never read the log. The comment that lists the kinds of line, a test with its row (the line's text, and `combatAuditTotals` skipping it), the caudit point of `AGENTS.md` and "Code layout". Closes issue 58.
 
+### [ ] I23. The history past the death is written down and tested (model: sonnet; issue 42)
+
+**Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/step-order.md`.
+
+The user (issue 42, the comments of 2026-11-14, and again 2026-11-15): after the avatar's death the buttons stay and the state freezes (only the frames stop). Back and forward still walk the saved snaps. Pressing play on a frame from before the death goes on from there: the death is undone, the mission is `running` again. It is a debugger for now; in the finished game the death will not be undoable by going back in time (later). The combat log shows that an abort happened (the `aborted` line, issue 58) and then that the user went back and resumed (the `resume` line): the log only grows. No code change is expected: write it in `AGENTS.md` ("Destruction" and "Frame debug") and `docs/step-order.md`, and test it with `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`: (1) after the death, `step` changes nothing and the history's last snap says `aborted`; (2) a snap from before the death comes back as `running` and `step` plays on from it (the avatar's last health taken again on the same frame if the same inputs are played, a different state if other inputs); (3) `crossCheck` over a history that ends in the aborted snap, and over one that went back and played on, returns `null`; (4) a log built with the lines `aborted` and `resume` is kept whole (nothing is removed when the history is cut). If a test shows the code does something else, stop and report. Closes issue 42.
+
+### [ ] I24. A weightless thing breaks at the first contact (model: sonnet; issue 47)
+
+**Files:** `src/sim.js`, `src/data.js` (comments only, unless the helper finds a reason), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15): "things with no weight break immediately; health is not a parameter for what weighs 0". Build: a contact between a thing of weight 0 and a body that hurts objects (`bodyHurts`: today the avatar, and an actor that `crushes`) breaks it at once, whatever its health and with no minimum impact, like crushing: no push, no bounce, the mover keeps its speed and goes on. A Biter does not break it (its body ignores `object`, the user's rule of 2026-11-10: an actor never breaks an object) and stands against it as against a Rock; the coordinator's reading, written in `AGENTS.md` as the agent's. The contact still writes its audit lines (the weightless thing's slam of total 0 on the avatar, and the avatar's hit on it; hits of 0 are hits, issue 46). One small named function with the user's sentence above it; the health of the Branch (1) stays in the data only because every object has the box `{ now, max }`, and no rule reads it for weight 0. Test 208 is rewritten for the new rule (a slow contact, a fast one, and the avatar starting in touch: all break it), new test for the Biter not breaking it, and the audit lines. Raise `DEFINITIONS_VERSION` only if `src/data.js` changes in more than comments. Write in `AGENTS.md` ("Weight 0", the Branch paragraph, "Collision with still things") and remove the sentence that says a slow walk can stop the avatar. Closes issue 47.
+
+### [ ] I25. A negative resistance amplifies the damage (model: sonnet; issue 34, the parked part)
+
+**Files:** `src/sim.js`, `src/data.js` (only if a comment needs it), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15): "negative resistance amplifies damage". Today `assertValidDefinitions` refuses points below 0. Allow them: the curve is unchanged, `reduction = points / (points + resistanceScale)`, so negative points give a negative reduction and the hit grows (example with the scale 100: -50 points is a reduction of -1, damage x2; -75 gives x4; the amplification grows without limit as the points go toward minus the scale; that is the agent's reading of the formula, not the user's choice, say so in `AGENTS.md`). The guard: points plus the scale must stay above 0, or the curve divides by zero or flips. What must not exist cannot be made: refuse on load a part whose resistance (or shield resistance) is at or below minus the scale, refuse in `assertValidBlueprint` a blueprint whose summed resistance of a type (with the shield's, when a Generator is in it) is at or below minus the scale, and make `resolveDamage` fail loudly (a thrown Error naming the type and the points) if it ever sees points plus the scale at or below 0, so a future buff cannot reach `NaN` or a negative damage unseen. Tests: a part with -50 blunt points makes a blunt 10 hit resolve to 20; -75 to 40; the three refusals; today's data unchanged (every whole-state test bit for bit). Update `AGENTS.md` ("Damage", the resistance line of "The kit of parts") and the comments of `resolveDamage`. Comment on issue 34 and close it.
+
+### [ ] I26. Tell the user (coordinator)
+
+One short message in Brazilian Portuguese with what was built and the readings taken without asking.
+
 ## Waiting for the user (do not start)
 
 One question at a time, the one that unblocks most first. The model is the one that builds the answer.
 
 | Issue | Question | Unblocks | Model after the answer |
 |---|---|---|---|
-| 47 | Does a weightless thing always break at the first collision? | Best answered after playing I14 | (a) haiku (docs), (b) sonnet |
-| 42 | After the death, can the history go back past it? | S2 (Screen desk) | Screen desk, sonnet |
 
 ## The Screen desk's parcels (for a Screen desk conversation, not this coordinator)
 
