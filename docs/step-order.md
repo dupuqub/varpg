@@ -16,8 +16,9 @@ The code carries the same numbers in the comments of `step`. If one of the two c
 | 4 | Collision between actors | Actors push each other by weight and hurt each other with the body slam; each reacts to a new contact. | After everyone moved. |
 | 4b | Things are born | Every hitbox is born here, through `spawnHitbox`: the strikes the minds decided in 1b (`emitStrikes`), the shots of the avatar's weapons (`fireWeapons`) and the blows of its swords (`swingMelees`), in that order. | The user's rule (2026-11-13): the actor moves and only then the hitbox is born, so it is where the bodies really are. |
 | 5 | Hitboxes hurt (`resolveHitboxes`) | Each hitbox moves by its velocity, hurts what it touches (each thing once), loses a frame, and goes when its frames or its pierce are spent, or (a bullet) when it leaves the window of the grid. | After birth, so a one-frame hitbox is born and tested in the same step. |
-| 6 | Destruction (`removeDestroyed`) | Whoever has no health left leaves the scene, in one place. | At the end, so nothing is removed while a loop walks the list. |
+| 6 | Destruction (`removeDestroyed`) | Whoever has no health left leaves the scene, in one place. The avatar is the one exception: it stays in the scene and ends the mission in stage 8. | At the end, so nothing is removed while a loop walks the list. |
 | 7 | The shield | The quiet frames count and the shield regenerates when the wait is over. | After the damage of this step. |
+| 8 | The mission ends (`state.mission = "aborted"`) | The avatar with no health left ends the mission. The frame is already counted. The next call of `step` returns at its first line. | After the frame counter goes up, so the frame that ended the mission is the last one counted. |
 
 The frame counter goes up at the very end. So everything that happens inside the step from frame n is **seen** in the state of frame n + 1, the one the screen shows after the step; the audit writes a hit with that frame (`recordHit`, review of 2026-11-13, point 6; test 159), so a paused screen and the audit say the same number.
 
@@ -28,6 +29,7 @@ The frame counter goes up at the very end. So everything that happens inside the
 - **Whoever died in this step does not strike** (4b skips an actor with no health, and still lowers the flag).
 - **The visual state is written, never read, by the rules.** `step` ages its traces at the very start (so a trace born in this step is drawn at age 0), and `spawnHitbox` writes a trace when a hitbox that lives its frames is born. A run with it and a run without it give the same state (test 155).
 - **The audit is written, never read, by the rules** (`recordHit`, called wherever damage is applied: the body slams in stages 2 and 4, the hitboxes in stage 5). A run with it and a run without it give the same state (test 160).
+- **An aborted state does not advance** (stage 8 sets `state.mission = "aborted"`, and the next `step` returns at its first line): the state, the visual state and the audit stay as they were (test 191).
 - **Simultaneous hits are decided by the order of the list** (deterministic, but arbitrary): two things that kill each other in the same step resolve in list order.
 
 ## Room left on purpose
