@@ -81,9 +81,28 @@ function simulationCheckText() {
   ].join("\n");
 }
 
+// The parts of one damage calculation, one per type of damage: the type, the packet, the reduction, the points and how many came
+// from the shield, and what was left. The report only writes what the audit says; it calculates no rule.
+function combatReportPartsText(parts) {
+  return parts.map((p) => `${p.type} ${p.amount.toFixed(2)} - ${(p.reduction * 100).toFixed(1)}% (${p.points} points, ${p.fromShield} from the shield) = ${p.after.toFixed(2)}`).join(", ");
+}
+
+// The one line of a hit, for every hit the report prints. A hit that broke the shield carries "overflow" and is written with both
+// of its calculations (the user, 2026-11-14): first against the shield, then the share that did not fit against the body.
+function combatReportHitLine(hit) {
+  const number = (value) => value.toFixed(2);
+  const start = `  frame ${hit.frame}: ${hit.source} ${hit.attack} -> ${hit.target}: `;
+  const end = `total ${number(hit.total)}; shield ${number(hit.shield)}, health ${number(hit.health)}`;
+  if (!hit.overflow) return `${start}${combatReportPartsText(hit.parts)}; ${end}`;
+  const o = hit.overflow;
+  return `${start}with the shield: ${combatReportPartsText(hit.parts)} = ${number(o.withShield)}; the shield took ${number(o.absorbed)}; ` +
+    `the share left, ${(o.share * 100).toFixed(1)}%, against the body: ${combatReportPartsText(o.parts)} = ${number(o.total)}; ${end}`;
+}
+
 // The combat report: the combat blueprint plays 900 frames (15 seconds) standing still among the 40 Biters of Chamber 2, with the
-// audit on, and the text says what every kind of hit did (the totals) and the last hits one by one. The same run gives the same text
-// everywhere (the simulation is deterministic).
+// audit on, and the text says what every kind of hit did (the totals), how many hits took nothing, every hit that broke the shield
+// (they are rarely among the last ones) and the last hits one by one. The same run gives the same text everywhere (the simulation
+// is deterministic).
 function combatReportText() {
   const frames = 900;
   const run = createRun(1, DEFINITIONS.combatBlueprint);
@@ -93,10 +112,14 @@ function combatReportText() {
   for (let i = 0; i < frames; i++) step(state, idle, run.blueprint, null, audit);
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const number = (value) => value.toFixed(2);
+  // The audit also holds lines that are not hits (start, resume); the hit lines are the ones the report reads.
+  const hits = audit.map((line) => JSON.parse(line)).filter((entry) => entry.event === "hit");
   const rows = Object.entries(combatAuditTotals(audit)).map(([kind, t]) =>
-    `  ${kind}: ${t.hits} hits, ${number(t.total)} damage (${number(t.shield)} to the shield, ${number(t.health)} to health), the minimum counted in ${t.minimumApplied}`);
-  const last = audit.slice(-10).map((line) => JSON.parse(line)).map((hit) =>
-    `  frame ${hit.frame}: ${hit.source} ${hit.attack} -> ${hit.target}: ${hit.parts.map((p) => `${p.type} ${number(p.amount)} - ${(p.reduction * 100).toFixed(1)}% (${p.points} points, ${p.fromShield} from the shield) = ${number(p.after)}`).join(", ")}; total ${number(hit.total)}${hit.minimumApplied ? " (minimum)" : ""}; shield ${number(hit.shield)}, health ${number(hit.health)}`);
+    `  ${kind}: ${t.hits} hits, ${number(t.total)} damage (${number(t.shield)} to the shield, ${number(t.health)} to health)`);
+  // A weightless Branch hits back with nothing, and a hit of 0 is still a hit.
+  const hitsOfZero = hits.filter((hit) => hit.total === 0).length;
+  const brokeShield = hits.filter((hit) => hit.overflow);
+  const last = hits.slice(-10).map(combatReportHitLine);
   return [
     "COMBAT REPORT",
     `build: ${buildText()}`,
@@ -104,6 +127,9 @@ function combatReportText() {
     `at the end: health ${number(player.health.now)}/${player.health.max}, shield ${number(player.shield.now)}/${player.shield.max}, Biters alive ${state.actors.length - 1}`,
     "totals by kind of hit:",
     ...rows,
+    `hits of 0 (a hit that took nothing): ${hitsOfZero}`,
+    `hits that broke the shield: ${brokeShield.length}`,
+    ...brokeShield.map(combatReportHitLine),
     `the last ${last.length} hits of ${audit.length} written:`,
     ...last,
   ].join("\n");

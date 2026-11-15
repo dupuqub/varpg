@@ -70,7 +70,7 @@ If the merge has a conflict, stop and call the user.
 
 **Check:** `node tests/screen/check.js T1` (every object type of the data has its own color).
 
-### [ ] T2. The COMBAT REPORT: no minimum, the hits of 0, both calculations of a broken shield (model: sonnet; issues 26 and 41)
+### [x] T2. The COMBAT REPORT: no minimum, the hits of 0, both calculations of a broken shield (model: sonnet; issues 26 and 41)
 
 **Files:** `src/chamber-0.js`, `AGENTS.md`.
 
