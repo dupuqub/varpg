@@ -141,13 +141,13 @@ The user (issue 45, the last comment): both keys are removed (data, `REPEATS`, `
 
 The user (issues 43 and 44, the last comments): a hitbox carries a TAG that says how it works. "Hits all touched" (the sword, and the bite keeps hitting what it hits today): everything in its contact is hit, Rocks and Shrooms included. "Hits only the first" (bullets): only the first thing its path meets in that frame, actors and objects alike, sorted by how far along its movement each is touched; ties keep the list order (actors in list order, then objects in the order of `objectsReaching`). Things that cannot be hit (ignored tags, the owner, the dead, the already struck) never count as first. With pierce above 0 the bullet hits the next thing in a later frame, never the same twice. **The name is the coordinator's proposal, for the user to overrule:** a key of the attack, `hits: "first" | "all"`, in `ATTACK_KEYS` and `HITBOX_ATTACK_KEYS`, checked on load like `exit`. How "how far along its movement" is found is the helper's choice (the simplest exact one: the time of first touch of the moving circle against each candidate's circle within the frame); say it in the report. Tests: the scene of R3.1 (a pierce 0 bullet meets a Rock a few pixels before a Biter in the same frame: the Rock is hit, the Biter untouched) and its mirror; a cone over two Biters and a Rock writes three audit lines; a bullet with pierce 1 touching two things in one frame hits one per frame. Raise `DEFINITIONS_VERSION`. Say which whole-state tests moved (a bullet that used to hit two things in one frame now hits one). Closes issues 43 and 44.
 
-### [ ] I20. A hit of 0 is still a hit (model: sonnet; issue 46)
+### [x] I20. A hit of 0 is still a hit (model: sonnet; issue 46)
 
 **Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `src/sim.js` (comments only).
 
 The user (issue 46): a hit that carries no damage is a hit: it writes its audit line (total 0), marks `struck`, spends a pierce and stops a bullet; it does not restart the shield's wait (it is not damage). No rule changes. Write it in "Damage" in `AGENTS.md` (replacing "an attack that hurts nobody writes none") and in the comment of `finalAttack` (issue 48). New test: the three scenes of finding R5.1. Closes issue 46; comment on issue 48 and close it if nothing of it is left.
 
-### [ ] I21. Tell the user (coordinator)
+### [x] I21. Tell the user (coordinator)
 
 Close issue 53. One message in Brazilian Portuguese: what was built, the name proposed for the TAG, what moved.
 

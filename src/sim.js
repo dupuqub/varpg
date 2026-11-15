@@ -597,7 +597,9 @@ function finalAttackNow(actor, name, attack, type) {
 // The packet of a hit by body slam. "hit" says what happened: for a collision it is { impact }, the part of the velocity
 // that went into the other thing, in px/frame. The body slam is the user's first attack: every type of it grows with
 // the impact, now x impact / referenceImpact (provisional formula, the agent's proposal, to be discussed). A weight of 0
-// gives an empty packet, so nothing happens, and so does an impact of 0 or less.
+// gives an empty packet, and so does an impact of 0 or less. An empty packet does no damage, but it is still a hit (the user,
+// 2026-11-14, issue 46): landHit writes its line (total 0), the target is marked and a pierce is spent; only the shield's wait is not
+// restarted (it is not damage).
 // Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all (the
 // minimum impact) is decided where the collision is. Pure.
 function finalAttack(attacker, hit) {
@@ -649,8 +651,10 @@ function nameOf(thing) {
 // share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
 // resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
 // share of the packet that did not fit (per type) is resolved again against the body alone and goes to health. The record then
-// carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took.
+// carries "overflow" (the share, the second calculation) and its total is the shield's part plus the second calculation (what was really taken is `shield` and `health`).
 // A target with no health takes no hit (canTakeHit, asked here and nowhere else): nothing is resolved, taken or recorded.
+// A hit of 0 (an empty packet) is a hit (the user, 2026-11-14, issue 46): it is recorded with a total of 0 and returns landed true, so
+// the caller marks and spends a pierce; it takes nothing and, being no damage, does not restart the shield's wait (applyDamage).
 // Returns { landed, resolved, taken, broken }; landed is false (and the rest null) when the target could not take the hit;
 // broken is true only for an object that reached 0 in this hit.
 function landHit(state, audit, sourceName, attackName, packet, target) {
@@ -710,7 +714,7 @@ function bodyHurts(attacker, target) {
 }
 
 // Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).
-// Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate.
+// Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate; a damage of 0 (a hit of 0) is not damage and does not.
 // Returns what was taken from each: { shield, health } (the health it really lost: it stops at 0).
 function applyDamage(actor, damage) {
   let left = damage;

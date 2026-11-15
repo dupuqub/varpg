@@ -4935,3 +4935,72 @@ test("219 how a hitbox hits is checked on load: without its hits, the bite of th
   refused('        hits: "all", // how its blow hits', "        // how its blow hits", /hits of the melee of the part sword-arm must be one of first, all/);
   refused('        hits: "first", // how its bullets hit', '        hits: "some", // how its bullets hit', /hits of the weapon of the part repeater-arm must be one of first, all, and it is "some"/);
 });
+
+test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three scenes of finding R5.1): landHit with an empty packet writes one audit line with total 0 and the totals count it as 1 hit and 0 damage; a bullet whose damage is 0 marks the Rock it touches as struck, spends its pierce (1 left becomes 0) and, with pierce 0, ends on the Rock, which keeps its 10 health; a hit of 0 on a target with a shield leaves the shield's quiet at 7, and a hit of 1 blunt sets it to 0; and the real case, the avatar's body slam into a Branch (weight 0), writes the Branch's slam of 0 and then the avatar's hit", () => {
+  // Scene 1: the audit.
+  const audit = plain(run(`
+    const s = createChamber1State();
+    const lines = createAudit();
+    const target = { id: "target", health: { now: 10, max: 10 }, resistance: {} };
+    const result = landHit(s, lines, "source", "poke", {}, target);
+    return { landed: result.landed, total: result.resolved.total, health: target.health.now, lines: lines.slice(), totals: combatAuditTotals(lines) };
+  `));
+  assert.strictEqual(audit.landed, true);
+  assert.strictEqual(audit.health, 10, "nothing was taken");
+  assert.strictEqual(audit.lines.length, 1, "one line");
+  const line = JSON.parse(audit.lines[0]);
+  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.parts, line.total, line.shield, line.health], ["hit", "source", "poke", "target", [], 0, 0, 0]);
+  assert.deepStrictEqual(audit.totals, { "source:poke": { hits: 1, total: 0, shield: 0, health: 0 } });
+
+  // Scene 2: a bullet of 0 on the Rock of seed 1 (radius 28 at 99,456, 10 health), from x 78 to 86 along y 428, the Biter far away.
+  const bullet = (pierce) => plain(run(`
+    ${ARMED}
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = 500; biter.position.y = 408;
+    const lines = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+    const hitbox = s.hitboxes[0];
+    hitbox.damage = { puncture: 0 }; // a packet that resolves to 0
+    hitbox.position.x = 78; hitbox.position.y = 428;
+    resolveHitboxes(s, lines);
+    return { lines: lines.slice(), rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ pierceLeft: h.pierceLeft, struck: [...h.struck] })) };
+  `));
+  const pierced = bullet(1);
+  assert.strictEqual(pierced.rock, 10, "the Rock loses nothing");
+  assert.deepStrictEqual(pierced.lines.map((text) => JSON.parse(text).total), [0]);
+  assert.deepStrictEqual(pierced.bullets, [{ pierceLeft: 0, struck: ["rock small:0,1"] }], "struck, and the pierce of 1 is spent; the bullet goes on");
+  const stopped = bullet(0);
+  assert.strictEqual(stopped.rock, 10, "the Rock loses nothing");
+  assert.deepStrictEqual(stopped.lines.map((text) => JSON.parse(text).total), [0]);
+  assert.deepStrictEqual(stopped.bullets, [], "with pierce 0 the bullet ends on the Rock");
+
+  // Scene 3: the shield's wait. A hit of 0 is not damage; a hit above 0 is.
+  const quiet = plain(run(`
+    const s = createChamber1State();
+    const make = () => ({ id: "target", health: { now: 100, max: 100 }, shield: { now: 40, max: 40, quiet: 7, resistance: {} }, resistance: {} });
+    const zero = make();
+    landHit(s, null, "source", "poke", {}, zero);
+    const above = make();
+    landHit(s, null, "source", "poke", { blunt: 1 }, above);
+    return { zero: zero.shield, above: above.shield };
+  `));
+  assert.deepStrictEqual([quiet.zero.quiet, quiet.zero.now], [7, 40], "a hit of 0 does not restart the wait");
+  assert.deepStrictEqual([quiet.above.quiet, quiet.above.now], [0, 39], "a hit of 1 blunt does, and the shield takes it");
+
+  // The real case: the avatar (no shield in the test game) walks at top speed into an isolated Branch, as in test 208.
+  const branch = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
+    p.move.velocity.x = 3; p.move.velocity.y = 0;
+    step(s, { move: { x: 1, y: 0 } }, undefined, null, lines);
+    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit") };
+  `, BRANCHY));
+  assert.strictEqual(branch.lines.length, 2, "two lines");
+  assert.deepStrictEqual(branch.lines.map((entry) => [entry.source, entry.attack, entry.target, entry.total]).slice(0, 1), [["branch " + branch.name, "bodySlam", "avatar_1", 0]], "the Branch's slam of 0 is first");
+  assert.deepStrictEqual([branch.lines[1].source, branch.lines[1].target], ["avatar_1", "branch " + branch.name], "then the avatar's hit");
+});
