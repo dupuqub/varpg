@@ -129,7 +129,7 @@ The line above in the loop, the same in `docs/base-plan.md` and in `docs/desks.m
 
 The user (issue 28, the summary comment): when the avatar's death is tested the world stops: nothing of the avatar takes effect after it, the rest of that step runs for nobody, the mission is aborted, no more frames run. Inside the one contact that kills, both sides still hurt each other, so the death is tested after that whole contact, never in the middle of it. Build: the death test after every place a hurt lands on the avatar (a contact with an object in stage 2, a contact with an actor in stage 4, a hitbox in stage 5), the early end of the step, `docs/step-order.md` rewritten to match (the line "whoever died in this step does not strike" included). The helper decides, and says in the report, what the early end still does (the frame counter, `removeDestroyed`, the visual state, `state.contacts`), keeping this: a death by a bite at the end of a step gives the same state as today wherever that is possible, and tests 190 to 193 still say the truth (change their titles if they do not). New test: the scene of finding R2.1 (the avatar at almost no health with an empty shield dashing into two Biters that overlap it: the second Biter is not hurt, no weapon fires, no sword swings, the audit ends on the contact that killed). Closes issue 28; comment on issue 30 and close it.
 
-### [ ] I18. `repeat` and `scale` go away; only a melee attack may use the weight (model: sonnet; issue 45)
+### [x] I18. `repeat` and `scale` go away; only a melee attack may use the weight (model: sonnet; issue 45)
 
 **Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/base-plan.md`.
 

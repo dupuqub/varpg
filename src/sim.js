@@ -246,27 +246,6 @@ function checkExit(exit, where) {
   if (!EXITS.includes(exit)) throw new Error("The exit of " + where + " must be one of " + EXITS.join(", ") + ", and it is " + JSON.stringify(exit));
 }
 
-// When an attack may hurt the same target again (the user, 2026-11-14, "The design of step 4" in docs/base-plan.md): "life", each target once in
-// the life of the hitbox (`struck`); "contact", once per new contact of two bodies (`state.contacts`). Nothing reads it yet; the one case
-// built for each is the one below: the body slam is "contact" and every other attack is "life".
-const REPEATS = ["life", "contact"];
-
-function checkRepeat(repeat, attackName, where) {
-  if (!REPEATS.includes(repeat)) throw new Error("The repeat of " + where + " must be one of " + REPEATS.join(", ") + ", and it is " + JSON.stringify(repeat));
-  const expected = attackName === "bodySlam" ? "contact" : "life";
-  if (repeat !== expected) throw new Error("The repeat of " + where + " must be " + expected + " until another case is built, and it is " + repeat);
-}
-
-// How the damage of an attack grows at the hit (the user, 2026-11-14, "The design of step 4" in docs/base-plan.md): "none", the packet as it
-// is; "impact", times the impact over `referenceImpact`. Nothing reads it yet; the body slam is "impact" and every other attack is "none".
-const SCALES = ["none", "impact"];
-
-function checkScale(scale, attackName, where) {
-  if (!SCALES.includes(scale)) throw new Error("The scale of " + where + " must be one of " + SCALES.join(", ") + ", and it is " + JSON.stringify(scale));
-  const expected = attackName === "bodySlam" ? "impact" : "none";
-  if (scale !== expected) throw new Error("The scale of " + where + " must be " + expected + " until another case is built, and it is " + scale);
-}
-
 function checkTarget(target, where) {
   if (!target || !TARGET_PICKS.includes(target.pick) || typeof target.tag !== "string" || target.tag === "") {
     throw new Error("The target of " + where + " must be { pick, tag }, with pick one of " + TARGET_PICKS.join(", ") + " and a tag that is a word: " + JSON.stringify(target));
@@ -274,12 +253,11 @@ function checkTarget(target, where) {
 }
 
 // The keys every aimed attack shares (issue 33: the user's "constructor ... without a thousand places to edit"): the bite of a recipe,
-// the weapon and the melee of a part all carry them, in this order. The body slam aims at nothing, so it has only BODY_ATTACK_KEYS
-// (its ignores come from the recipe's bodyIgnores). A new key of the action model is added here, once, and to CHECK_ATTACK_KEY.
-const ATTACK_KEYS = ["target", "exit", "repeat", "scale", "ignores"];
-const BODY_ATTACK_KEYS = ["repeat", "scale", "ignores"];
-// The keys of its attack that a hitbox keeps, copied at its birth (the owner may be gone before it ends).
-const HITBOX_ATTACK_KEYS = ["repeat", "ignores"];
+// the weapon and the melee of a part all carry them, in this order. The body slam aims at nothing, so it has none of them (its ignores
+// come from the recipe's bodyIgnores). A new key of the action model is added here, once, and to CHECK_ATTACK_KEY.
+const ATTACK_KEYS = ["target", "exit", "ignores"];
+// The keys of its attack that a hitbox keeps, copied at its birth (the owner may be gone before it ends). Only the ignored tags today.
+const HITBOX_ATTACK_KEYS = ["ignores"];
 
 // A copy of the given keys of an attack recipe (or record), in the order of the list, deep enough that changing the copy never changes
 // the recipe. The one place a builder takes the shared keys from (addWeaponAttacks, spawnHitbox; finalAttacks copies its whole recipe).
@@ -293,8 +271,6 @@ function attackKeys(source, keys = ATTACK_KEYS) {
 const CHECK_ATTACK_KEY = {
   target: (value, attackName, where) => checkTarget(value, where),
   exit: (value, attackName, where) => checkExit(value, where),
-  repeat: checkRepeat,
-  scale: checkScale,
   ignores: null,
 };
 
@@ -302,6 +278,16 @@ const CHECK_ATTACK_KEY = {
 // the attacks of an actor's recipe, the weapon and the melee of a part.
 function checkAttackKeys(recipe, attackName, where, keys = ATTACK_KEYS) {
   for (const key of keys) if (CHECK_ATTACK_KEY[key] !== null) CHECK_ATTACK_KEY[key](recipe[key], attackName, where);
+}
+
+// Only melee attacks may use the weight (the user, issue 45, 2026-11-14: "only melee attacks may use the weight", a `perWeight` above 0 is
+// refused on an attack that is not melee). Melee here: the body slam of the constants, an attack of an actor's recipe (the bite) and the
+// melee of a part. Not melee: the weapon of a part, whose projectile writes its damage as a plain number per type; a damage written
+// { flat, perWeight } with a perWeight above 0 on it is the weight in a place that may not have it.
+function checkNoWeight(amount, where) {
+  if (amount !== null && typeof amount === "object" && amount.perWeight > 0) {
+    throw new Error("The " + where + " uses the weight (perWeight " + amount.perWeight + "), and only a melee attack may: the body slam, the attack of an actor and the melee of a part");
+  }
 }
 
 function assertValidDefinitions() {
@@ -366,6 +352,7 @@ function assertValidDefinitions() {
     const types = Object.keys(bullet.damage ?? {});
     if (types.length === 0) throw new Error("The damage of the projectile of " + where + " is missing");
     for (const type of types) {
+      checkNoWeight(bullet.damage[type], "the damage " + type + " of the projectile of " + where);
       if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The damage of the projectile of " + where + " has " + type + ", which is not a type of damage");
       if (!(bullet.damage[type] > 0)) throw new Error("The damage " + type + " of the projectile of " + where + " must be above 0");
     }
@@ -393,8 +380,6 @@ function assertValidDefinitions() {
       if (!(amount.flat >= 0 && amount.perWeight >= 0)) throw new Error("The damage " + type + " of " + where + " needs flat and perWeight, both 0 or more: " + JSON.stringify(amount));
     }
   }
-  // The body slam, the first attack of every thing (it lives in the constants, not in a recipe): its repeat and scale are checked like the others.
-  checkAttackKeys(DEFINITIONS.constants.bodySlam.attack, "bodySlam", "the attack bodySlam of the constants", BODY_ATTACK_KEYS);
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
@@ -1790,8 +1775,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
-    // repeat: when it may hurt the same target again (nothing reads it yet); ignores: the tags it does not hurt, a copy of its
-    // attack's list at its birth (the owner may be gone before it ends).
+    // ignores: the tags it does not hurt, a copy of its attack's list at its birth (the owner may be gone before it ends).
     ...attackKeys(attack, HITBOX_ATTACK_KEYS),
   };
   state.hitboxes.push(hitbox);

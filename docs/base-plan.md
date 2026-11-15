@@ -132,10 +132,14 @@ That object already exists: `actor.attacks.bodySlam`. Step 4 gives it, and every
 |---|---|---|
 | damage | `now`, per type | `now`, frozen into the hitbox at its birth |
 | `ignores` | the tags its body does not hurt | the tags the hitbox does not hurt |
-| `repeat` | `contact`: once per new contact (`state.contacts`) | `life`: each target once in the hitbox's life (`struck`) |
-| `scale` | `impact`: times the impact, over `referenceImpact` | `none` |
+| `repeat` | removed (issue 45, 2026-11-14), see below | removed |
+| `scale` | removed (issue 45, 2026-11-14), see below | removed |
 
-The two paths of the code stay (the contact of bodies, and the hitboxes): the module is what each reads. The validator accepts only the cases that are built, as it does for `target.pick` and `exit`; a new case (a hitbox that hurts again every N frames, for an aura or a puddle) is added when its first content comes.
+The two paths of the code stay (the contact of bodies, and the hitboxes). The validator accepts only the cases that are built, as it does for `target.pick` and `exit`.
+
+**The keys `repeat` and `scale` were removed (the user, 2026-11-14, issue 45; P4 and P5 built them, data versions 56 and 57; removed in data version 60).** Nothing read them to decide: the "once" of a body is still `state.contacts`, that of a hitbox is `struck`, and the growth with the impact is still written inside `finalAttack`; each key was a label that a check kept true. The user's answer: `repeat` is replaced by the hitbox tag of issue 43 and by the basic rule that an actor is never hurt twice by the same hitbox in the same frame (which `struck` already does); `scale` is replaced by `perWeight`, which each attack already writes, with the new rule that only a melee attack may use the weight. The impact keeps multiplying the body slam only, inside its own formula. The design above stays as the record of what was tried; a new case (a hitbox that hurts again every N frames, for an aura or a puddle) brings its key back with its first content.
+
+**The size they cost, measured** (`JSON.stringify(state).length` of `createChamber2State(1, 1, DEFINITIONS.combatBlueprint)`, the state at the start of Chamber 2): 33845 bytes with the keys, 31067 without, 2778 bytes less per snap (the history keeps 120 snaps, so about 333 KB).
 
 ## After the last parcel
 
