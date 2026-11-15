@@ -65,7 +65,7 @@ From issue 48, only: R1.2 (`think`), R1.8 (split the comment above `pickTarget` 
 
 From issue 48, only: R2.5; R3.5 for the docs (objects have no resistance; "objects that block a bullet" is built; add the Biter to the actors in "The world: seed and objects"; close the open item about bullets and objects in `docs/weapons.md` with the user's answer of 2026-11-14); R5.6 the sentence in "Shield"; R5.5 delete points 8, 9, 10, 11 of `docs/review-2026-11-13.md`; R7.5 and R7.8 in `docs/method.md`. **Not** the mentions of `damageOf` (parcel I10) and **not** R4.5 (waits for issue 45). No new tests. Comment on issue 48.
 
-### [ ] I7. Test titles that claim more than the test checks (model: sonnet; issue 48, part 3)
+### [x] I7. Test titles that claim more than the test checks (model: sonnet; issue 48, part 3)
 
 **Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`.
 

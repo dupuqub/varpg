@@ -3560,7 +3560,7 @@ test("159 the combat audit writes every hit as a line with its numbers: a bite o
   assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
 });
 
-test("160 the audit holds no truth and has no limit: 3000 frames of Chamber 2 with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
+test("160 the audit holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
   const result = run(`
     const play = (withAudit) => {
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
@@ -4325,7 +4325,7 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
 });
 
 // ---- Hitboxes and objects ----
-test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock of seed 1 takes its damage off the rock (resolved against the rock's resistances, written in damagedObjects, one line in the combat audit with the rock's name), hurts it once however many frames it stays, does nothing to a rock far from it, does nothing when its list ignores object (the same shot, the tag is what protected the rock), and a rock that broke is no longer hit; a pierce of 0 ends the hitbox on the rock", () => {
+test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock of seed 1 takes its whole damage off the rock (a rock has no resistance: the 6 puncture of the shot is 6 health; written in damagedObjects, one line in the combat audit with the rock's name), hurts it once however many frames it stays, does nothing to a rock far from it, does nothing when its list ignores object (the same shot, the tag is what protected the rock), and a rock that broke is no longer hit; a pierce of 0 ends the hitbox on the rock", () => {
   const code = (ignores, pierce, damage) => `
     const s = createChamber1State();
     const audit = createAudit();
@@ -4341,7 +4341,7 @@ test("189 a hitbox hurts a Rock as the body slam does: a shot born on the rock o
     return { rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, audit: audit.slice(), hitboxes: s.hitboxes.length, struck: s.hitboxes[0]?.struck ?? null };
   `;
   const hit = run(code(null, "null"));
-  assert.ok(hit.rock < ROCK.health, "the shot must hurt the rock: " + hit.rock);
+  assert.strictEqual(ROCK.health - hit.rock, 6, "a rock has no resistance, so the shot takes its whole 6: " + hit.rock);
   const lines = hit.audit.map((line) => JSON.parse(line)).filter((line) => line.event === "hit");
   assert.strictEqual(lines.length, 1, "the shot hurts the rock once, however many frames it stays");
   assert.strictEqual(lines[0].target, "rock small:0,1");
@@ -4397,23 +4397,28 @@ test("191 a step on an aborted state changes nothing: the JSON of the state is t
   assert.strictEqual(result.linesAfter, result.lines);
 });
 
-test("192 an actor with no health is never a target, whoever it is: a Biter does not chase the avatar at zero health (it stands still), and the avatar's weapons skip a Biter at zero health", () => {
+test("192 an actor with no health is never a target, whoever it is: with the avatar at zero health one think leaves a walking Biter with a zero direction (it stands still), and with the only Biter at zero health one fireWeapons of the avatar's repeater fires nothing; with both alive the Biter walks at the avatar and the repeater fires one shot", () => {
   const result = run(`
-    ${ALONE_BITERS}
-    const s = aloneBiters(0);
+    const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
+    const s = createChamber2State(1, 1, run.blueprint);
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
     const avatar = s.actors[0], biter = s.actors[1];
-    const target = { pick: "closest", tag: "ally" };
+    biter.position.y = avatar.position.y;
+    const walk = () => { biter.position.x = avatar.position.x + 400; biter.move.direction.x = 1; biter.move.direction.y = 0; biter.ai.phase = "chase"; think(s, biter, null); return { x: biter.move.direction.x, y: biter.move.direction.y }; };
+    const fire = () => { biter.position.x = avatar.position.x + 100; s.hitboxes = []; for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; } fireWeapons(s, avatar, null); return s.hitboxes.length; };
     avatar.health.now = 0;
-    const deadAvatar = pickTarget(s, biter, target, Infinity)?.id ?? null;
+    const deadAvatar = walk();
     avatar.health.now = 10; biter.health.now = 0;
-    const deadBiter = pickTarget(s, avatar, { pick: "closest", tag: "enemy" }, Infinity)?.id ?? null;
+    const deadBiter = fire();
     biter.health.now = 10;
-    const alive = pickTarget(s, biter, target, Infinity)?.id ?? null;
-    return { deadAvatar, deadBiter, alive, avatar: avatar.id };
+    const aliveWalk = walk();
+    const aliveFire = fire();
+    return { deadAvatar, deadBiter, aliveWalk, aliveFire };
   `, QUIET);
-  assert.strictEqual(result.deadAvatar, null);
-  assert.strictEqual(result.deadBiter, null);
-  assert.strictEqual(result.alive, result.avatar);
+  assert.deepStrictEqual(plain(result.deadAvatar), { x: 0, y: 0 }, "the Biter stands still when its only target has no health");
+  assert.strictEqual(result.deadBiter, 0, "the repeater does not fire at a Biter with no health");
+  assert.ok(result.aliveWalk.x < 0, "with the avatar alive the Biter walks at it (the avatar is to its left)");
+  assert.strictEqual(result.aliveFire, 1, "with the Biter alive the repeater fires once");
 });
 
 test("193 recordFrame does not record a state that did not advance: recording the same frame again, or an aborted state that step no longer advances, leaves snaps, inputs and visuals as they were; a state that advanced is recorded", () => {
@@ -4568,7 +4573,7 @@ test("199 landHit on an actor: the shield takes its 3 first and the health the o
   assert.deepStrictEqual([r.lines[0].source, r.lines[0].attack, r.lines[0].target, r.lines[0].total, r.lines[0].shield, r.lines[0].health], ["source", "poke", "target", 5, 3, 2]);
 });
 
-test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6 and is not broken, a second of 6 takes it to 0 and is broken, and each hit writes one audit line with all of its total on health (and with no audit it still lands)", () => {
+test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6 and is not broken, a second of 6 takes it to 0 and is broken, and each hit writes one audit line with all of its total on health; with no audit the hit still lands (another rock goes from 10 to 9) and no line is written", () => {
   const result = run(`
     const s = createChamber1State();
     const audit = createAudit();
@@ -4578,11 +4583,12 @@ test("200 landHit on a Rock of 10 health: a hit of 4 changes damagedObjects to 6
     const second = landHit(s, audit, "source", "poke", { blunt: 6 }, rock);
     const afterSecond = { ...s.damagedObjects };
     const quiet = landHit(s, null, "source", "poke", { blunt: 1 }, { ...rock, square: { x: 5, y: 5 } });
-    return { first, second, quiet, afterFirst, afterSecond, lines: audit.map((line) => JSON.parse(line)) };
+    return { first, second, quiet, quietRock: s.damagedObjects["small:5,5"], afterFirst, afterSecond, lines: audit.map((line) => JSON.parse(line)) };
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.afterFirst, { "small:0,1": 6 });
   assert.deepStrictEqual(r.afterSecond, { "small:0,1": 0 });
+  assert.strictEqual(r.quietRock, 9, "with no audit the hit still lands: the quiet rock goes from 10 to 9");
   assert.deepStrictEqual([r.first.broken, r.second.broken, r.quiet.broken], [false, true, false]);
   assert.deepStrictEqual(r.first.taken, { shield: 0, health: 4 });
   assert.strictEqual(r.lines.length, 2);
