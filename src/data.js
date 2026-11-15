@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 60;
+const DEFINITIONS_VERSION = 61;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -147,6 +147,7 @@ const DEFINITIONS = {
           exit: "front", // where its hitbox is born (the user, 2026-11-13, issues 3 and 13: "the attack comes out of the front"): one body ahead of it, toward the target
           target: { pick: "closest", tag: "ally" }, // what the bite aims at: the closest thing that is "ally" (the avatar is the only one today)
           ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
+          hits: "all", // how its hitbox hits (the user, 2026-11-14, issues 43 and 44): "all", everything it touches is hit, each once; it keeps what the bite did before the rule (its list leaves only the avatar to hit)
         },
       },
       initial: {
@@ -207,8 +208,8 @@ const DEFINITIONS = {
     // it running"): a thing of weight 0, which hurts nobody and breaks easily (see "Weight 0" in AGENTS.md).
     // size: guess, smaller than a Rock (whose smallest radius is 16): from 6 to 10.
     // weightPerRadius 0: the user's decision (weightless), so its body slam is 0.
-    // healthRange: guess, the smallest health there is: 1. Until issue 47 is answered, it breaks only when a hit is at least 1, so a slow
-    //   walk into it can leave it with a little health and stop the avatar, and a fast walk or a dash breaks it (the user wants to see it).
+    // healthRange: 1 only because every object has the box { now, max }: no rule reads it for weight 0 (the user, 2026-11-15, issue 47:
+    //   "things with no weight break immediately; health is not a parameter for what weighs 0"). Any actor's body (the Biter's too) and any hit that lands breaks it (the user, 2026-11-15, I27: "the Branch has to break with anything"; it is a placeholder for the things meant to be broken).
     branch: {
       tags: ["object"],
       bodyIgnores: ["enemy", "object"],
@@ -279,6 +280,8 @@ const DEFINITIONS = {
     //     health") grows in a straight line with the points: every 100 points add the life it has without any. guess: the
     //     scale, to be tuned by playing with real items.
     //   There is no minimum damage (the user, 2026-11-14): the curve is what keeps anyone from being immune.
+    //   Resistance may be negative (the user, 2026-11-15: "negative resistance amplifies damage"): -50 points double the hit, -75 make it x4.
+    //     Points at or below minus the scale are refused (the curve would divide by zero); toward it the growth has no limit (the agent's reading).
     damage: { resistanceScale: 100 },
 
     // The ring of the shield (the user's idea, 2026-11-12): the avatar's body for collision and for being hit is a circle that goes
@@ -355,6 +358,7 @@ const DEFINITIONS = {
       specs: {},
       weapon: {
         ignores: ["self", "ally"], // the tags its bullets do not hurt (each attack has its own list; the hitbox copies it at its birth)
+        hits: "first", // how its bullets hit (the user, 2026-11-14, issues 43 and 44: "bullets hit only the first"): only the first thing a bullet's path meets in a frame is hit
         exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar
         target: { pick: "closest", tag: "enemy" },
         intervalFrames: 10,
@@ -382,6 +386,7 @@ const DEFINITIONS = {
       specs: {},
       melee: {
         ignores: ["self", "ally"], // the tags its blows do not hurt
+        hits: "all", // how its blow hits (the user, 2026-11-14, issues 43 and 44: "the sword hits everyone in the list"): everything in the cone is hit, each once, Biters, Rocks and Shrooms alike
         exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar
         target: { pick: "closest", tag: "enemy" },
         reach: 90,

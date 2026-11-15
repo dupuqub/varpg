@@ -2580,7 +2580,7 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   const legs = "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5 }";
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: 10 }, speed: 3.5, dashspeed: 1 }")), /The part legs has the spec dashspeed/);
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { fire: 10 }, speed: 3.5 }")), /resistance of the part legs is to fire/);
-  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -1 }, speed: 3.5 }")), /resistance of the part legs to blunt/);
+  assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -100 }, speed: 3.5 }")), /resistance of the part legs to blunt/); // -1 is allowed since issue 34 (negative resistance amplifies): the limit is minus the scale
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: -30, resistance: { blunt: 10 }, speed: 3.5 }")), /spec health of the part legs/);
   const bite = "damage: { puncture: { flat: 3, perWeight: 0.002 } }";
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 3, perWeight: 0.002 } }")), /attack bite of the actor biter has fire/);
@@ -2732,7 +2732,7 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
-    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"] }); // 100 px away: a miss
+    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"], hits: "all" }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
     return { rule: [hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, b), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
@@ -2855,7 +2855,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 60, hash: "4fe61d96b2431b71" };
+const DATA_FINGERPRINT = { version: 61, hash: "225a2cc7829dc5d2" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2966,7 +2966,7 @@ test("133 a blueprint with a repeater arm in place of the plain Arm L (the tests
   assert.deepStrictEqual(plain(result.weapons), [{ part: "repeater-arm", magazine: 30, reserve: 370, interval: 0, reload: 0 }]);
   assert.strictEqual(result.weight, 7550);
   assert.ok(Math.abs(result.speed - (4 - 7550 * 0.0002)) < 1e-12); // 0.5 + 3.5 - 1.51
-  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"] });
+  assert.deepStrictEqual(plain(result.attack), { base: { puncture: 10 }, now: { puncture: 10 }, projectile: { speed: 8, radius: 6, pierce: 0 }, target: { pick: "closest", tag: "enemy" }, exit: "center", ignores: ["self", "ally"], hits: "first" });
   assert.deepStrictEqual(plain(result.starterWeapons), []);
   assert.strictEqual(result.starterWeight, 5000);
   assert.deepStrictEqual(plain(result.starterAttacks), ["bodySlam"]);
@@ -3388,7 +3388,7 @@ test("153 a bullet has no life in frames: it flies past the old range (520 px) a
   const result = run(`
     ${ARMED}
     const { s, bp } = armed();
-    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0, ignores: ["ally"] });
+    const bullet = (x) => ({ owner: "avatar_1", attack: "repeater-arm", position: { x, y: 0 }, radius: 6, framesLeft: null, damage: { puncture: 10 }, velocity: { x: 8, y: 0 }, struck: [], pierceLeft: 0, ignores: ["ally"], hits: "first" });
     s.hitboxes = [bullet(s.actors[0].position.x)];
     const edge = s.grid.windowWidth * s.grid.cellSize / 2;
     s.actors[0].position.y = 0;
@@ -3661,7 +3661,7 @@ test("162 a cone is a hitbox shape: born pointing where it was told (and staying
 
 test("163 the sword arm is data: its recipe (melee, not weapon) is read and checked; a bad reach, angle, frames, aim correction, type of damage, or a part with both weapon and melee stops the game with a message that names it", () => {
   const sword = plain(run("return DEFINITIONS.parts['sword-arm']"));
-  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
+  assert.deepStrictEqual(sword.melee, { ignores: ["self", "ally"], hits: "all", exit: "center", target: { pick: "closest", tag: "enemy" }, reach: 90, angleDegrees: 90, windupFrames: 12, recoveryFrames: 18, aimCorrection: 0.1, damage: { slash: { flat: 30, perWeight: 0 } } });
   assert.strictEqual(sword.weapon, undefined);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => text.replace(from, to)), message);
   bad("reach: 90,", "reach: 0,", /reach of the melee/);
@@ -3671,7 +3671,7 @@ test("163 the sword arm is data: its recipe (melee, not weapon) is read and chec
   bad("aimCorrection: 0.1,", "aimCorrection: 2,", /aimCorrection of the melee/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { cut: { flat: 30, perWeight: 0 } },", /not a type of damage/);
   bad("damage: { slash: { flat: 30, perWeight: 0 } },", "damage: { slash: { flat: 30, perWeight: -1 } },", /flat and perWeight/);
-  bad("      melee: {", "      weapon: { exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
+  bad("      melee: {", "      weapon: { hits: \"first\", exit: \"center\", target: { pick: \"closest\", tag: \"enemy\" }, intervalFrames: 10, reloadFrames: 90, rounds: { weight: 6, magazine: 30, reserve: 370 }, projectile: { damage: { puncture: 10 }, speed: 8, radius: 6, pierce: 0 } },\n      melee: {", /weapon and melee/);
 });
 
 test("164 the sword swings: a target inside the reach starts the windup (12 frames), the cone is born at the last one and hurts for one frame (30 of slash), then 18 frames of recovery and the next windup; a target outside the reach starts nothing", () => {
@@ -4679,28 +4679,31 @@ test("207 the seed places weightless Branches: over the squares with an object f
   assert.ok(inChambers[0] > 0 && inChambers[1] > 0, "Branches in both chambers: " + inChambers);
 });
 
-test("208 the scene of issue 47, with today's rule (a Branch breaks only when a hit is at least its health): the avatar coasting into an isolated Branch of seed 1 at the minimum impact (1 px/frame) hurts it by less than 1, so the Branch keeps a little health and the avatar is stopped against it; at the top speed (3 px/frame, walking) the hit breaks it and the avatar keeps its speed and goes on", () => {
-  const scene = (speed, walking) => run(`
+test("208 the scene of issue 47, with the user's rule (2026-11-15: things with no weight break immediately, health is not a parameter for what weighs 0): the avatar coasting into an isolated Branch of seed 1 at the minimum impact (1 px/frame), walking at the top speed (3 px/frame), and starting already in touch with no speed, breaks it every time (its health goes to 0); the avatar is not pushed or bounced and keeps the speed it had", () => {
+  const scene = (speed, walking, inTouch) => run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
     const s = createChamber1State();
     const p = s.actors[0];
     // Coasting (no input): the velocity falls by the deceleration (0.125) before the move, so ${speed} + 0.125 lands on ${speed}.
-    const start = ${walking ? speed : `${speed} + 0.125`};
-    p.position.x = branch.position.x - (p.radius + branch.radius) - start + 0.5; p.position.y = branch.position.y;
+    const start = ${inTouch ? 0 : walking ? speed : `${speed} + 0.125`};
+    p.position.x = branch.position.x - (p.radius + branch.radius) ${inTouch ? "+ 2" : "- start + 0.5"}; p.position.y = branch.position.y;
     p.move.velocity.x = start; p.move.velocity.y = 0;
+    const x0 = p.position.x;
     step(s, { move: { x: ${walking ? 1 : 0}, y: 0 } });
-    return { health: s.damagedObjects[objectKey(branch)], vx: p.move.velocity.x, touching: Math.abs(branch.position.x - p.position.x - (p.radius + branch.radius)) < 1e-9 };
+    return { health: s.damagedObjects[objectKey(branch)], vx: p.move.velocity.x, x0, x: p.position.x };
   `, BRANCHY);
-  const slow = plain(scene(1, false));
-  assert.ok(slow.health > 0 && slow.health < 1, "the slow hit leaves the Branch with a little health: " + slow.health);
-  assert.strictEqual(slow.vx, 0, "the avatar is stopped");
-  assert.strictEqual(slow.touching, true, "and it just touches the Branch");
-  const fast = plain(scene(3, true));
-  assert.strictEqual(fast.health, 0, "at the top speed the Branch breaks");
+  const slow = plain(scene(1, false, false));
+  assert.strictEqual(slow.health, 0, "the slow contact breaks it");
+  assert.strictEqual(slow.vx, 1, "no push: the avatar keeps its speed and goes on");
+  const fast = plain(scene(3, true, false));
+  assert.strictEqual(fast.health, 0, "at the top speed it breaks");
   assert.strictEqual(fast.vx, 3, "a broken thing gives no push: the avatar keeps its speed");
+  const touching = plain(scene(0, false, true));
+  assert.strictEqual(touching.health, 0, "the avatar starting in touch, with no speed, breaks it");
+  assert.strictEqual(touching.vx, 0);
+  assert.strictEqual(touching.x, touching.x0, "and is not pushed out");
 });
-
 
 // ---- The avatar's death stops the world (issue 28) ----
 test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the audit has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
@@ -4826,4 +4829,563 @@ test("212 only a melee attack may use the weight (the user, issue 45): the data 
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 0, perWeight: 0.001 } }"), /damage puncture of the projectile of the weapon of the part repeater-arm uses the weight.*only a melee attack may/);
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0.5 } }"), /weapon of the part repeater-arm uses the weight/);
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0 } }"), /must be above 0/);
+});
+
+// ---- How a hitbox hits: only the first on its path, or all it touches (issues 43 and 44) ----
+// The scene of finding R3.1, played by resolveHitboxes alone (no other stage moves anything): the Rock of seed 1 at 99,456 (radius 28,
+// health 10) and a Biter of radius 20 standing just above it (centers 48 px apart or more, so the two bodies do not overlap). A bullet
+// of the repeater (radius 6, speed 8, puncture 10) flies right along y = 428, between them. With the Biter at x = 100 the bullet's path
+// first touches the Rock at x = 99 - sqrt(34² - 28²) = 79.71 and the Biter at x = 100 - sqrt(26² - 20²) = 83.39; with the Biter at
+// x = 95 it touches the Biter first, at 78.39. The bullet starts the frame at x0 and ends it at x0 + 8, touching neither at the start
+// and both at the end.
+const FIRST_SCENE = (biterX, x0, { pierce = 0, ignores = null, struck = null, frames = 1 } = {}) => `
+  ${ARMED}
+  const { s } = armed(0);
+  const [avatar, biter] = s.actors;
+  biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
+  const audit = createAudit();
+  spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+  const bullet = s.hitboxes[0];
+  bullet.position.x = ${x0}; bullet.position.y = 428;
+  ${ignores ? "bullet.ignores = " + JSON.stringify(ignores) + ";" : ""}
+  ${struck ? "bullet.struck = " + JSON.stringify(struck) + ";" : ""}
+  const frames = [];
+  for (let i = 0; i < ${frames}; i++) {
+    resolveHitboxes(s, audit);
+    frames.push({ targets: audit.map((line) => JSON.parse(line).target), biter: biter.health.now, rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ x: h.position.x, pierceLeft: h.pierceLeft, struck: [...h.struck] })) });
+  }
+  return { hits: bullet.hits, frames };
+`;
+
+test("213 a bullet hits only the first thing its path meets in the frame (the scene of finding R3.1): a pierce 0 bullet of the repeater (hits first) going right from x 78 to 86 along y 428 first touches the Rock of seed 1 at x 79.71 and a Biter standing just above the Rock at x 83.39, both in the same frame: the Rock takes the hit (one audit line, its 10 health gone), the Biter is untouched (30), and the bullet ends", () => {
+  const r = plain(run(FIRST_SCENE(100, 78)));
+  assert.strictEqual(r.hits, "first", "the bullet carries the key of its attack");
+  assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [] });
+});
+
+test("214 the mirror of test 213: with the Biter at x 95 the bullet going right from x 76 to 84 first touches the Biter (at x 78.39) and the Rock after it (at 79.71), both in the same frame: the Biter takes the hit (one audit line, 30 - 10 = 20 health: it resists no puncture), the Rock is untouched (10), and the bullet ends", () => {
+  const r = plain(run(FIRST_SCENE(95, 76)));
+  assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] });
+});
+
+test("215 a bullet with pierce 1 that touches two things in one frame hits only the first in that frame, and the second in the next frame because it still touches it: in the scene of test 213 with pierce 1, frame 1 hits the Rock only (the Biter still 30; the bullet goes on at x 86 with pierce 0 left and the Rock struck), frame 2 (x 94, still 20.9 px from the Biter's center, under 26) hits the Biter (20) and the bullet ends; a third frame changes nothing", () => {
+  const r = plain(run(FIRST_SCENE(100, 78, { pierce: 1, frames: 3 })));
+  assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [{ x: 86, pierceLeft: 0, struck: ["rock small:0,1"] }] });
+  assert.deepStrictEqual(r.frames[1], { targets: ["rock small:0,1", "biter_0"], biter: 20, rock: 0, bullets: [] });
+  assert.deepStrictEqual(r.frames[2], r.frames[1]);
+});
+
+test("216 what the bullet cannot hit never counts as first, and it passes it: in the scene of test 213 (the Rock first on the path), with the Rock already struck by this bullet, or with object in its ignored tags, the Biter behind it takes the hit (20) and the bullet ends, the Rock untouched (10); and a Biter at 0 health first on a path (at x 129, met at x 111) is passed for the living Biter met after it (at x 117.03, in the same frame from x 110 to 118): only the living one has an audit line", () => {
+  for (const options of [{ struck: ["rock " + ROCK.key] }, { ignores: ["self", "ally", "object"] }]) {
+    const r = plain(run(FIRST_SCENE(100, 78, options)));
+    assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] }, JSON.stringify(options));
+  }
+  const dead = plain(run(`
+    ${ARMED}
+    const { s } = armed(0, 1);
+    const [avatar, alive, corpse] = s.actors;
+    alive.radius = 12; alive.position.x = 132; alive.position.y = 10;
+    corpse.radius = 12; corpse.position.x = 129; corpse.position.y = 0; corpse.health.now = 0;
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
+    s.hitboxes[0].position.x = 110; s.hitboxes[0].position.y = 0;
+    resolveHitboxes(s, audit);
+    return { targets: audit.map((line) => JSON.parse(line).target), alive: alive.health.now, corpse: corpse.health.now, bullets: s.hitboxes.length };
+  `));
+  assert.deepStrictEqual(dead, { targets: ["biter_0"], alive: 20, corpse: 0, bullets: 0 });
+});
+
+test("217 a sword's cone hits all it touches (hits all): the cone of the sword-arm of the combat blueprint, born at the avatar at 39,456 pointing right (reach 90, 90 degrees), over two Biters (radius 10, at 60,440 and 60,472) and the Rock of seed 1 at 99,456, writes three audit lines, one for each (the Biters in list order, then the Rock), each hit once", () => {
+  const r = plain(run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    s.actors = [s.actors[0], s.actors.find((a) => a.id === "biter_0"), s.actors.find((a) => a.id === "biter_1")];
+    const [avatar, a, b] = s.actors;
+    avatar.position.x = 39; avatar.position.y = 456;
+    a.radius = 10; a.position.x = 60; a.position.y = 440;
+    b.radius = 10; b.position.x = 60; b.position.y = 472;
+    const attack = avatar.attacks["sword-arm"];
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "sword-arm", 1, 0, { radius: 0, frames: 1, speed: 0, pierce: null, cone: { reach: attack.reach, cosHalf: attack.cosHalf, sinHalf: attack.sinHalf } });
+    const hits = s.hitboxes[0].hits;
+    resolveHitboxes(s, audit);
+    resolveHitboxes(s, audit); // the cone is gone after its one frame: nothing more
+    return { hits, targets: audit.map((line) => JSON.parse(line).target) };
+  `));
+  assert.deepStrictEqual(r, { hits: "all", targets: ["biter_0", "biter_1", "rock small:0,1"] });
+});
+
+test("218 a hitbox that hits first and did not move in the frame met everything at the same moment, so the list order decides (the actors, then the objects): the bullet of the repeater with speed 0 placed at 80,428, touching both the Rock of seed 1 and a Biter of radius 20 at 85,408, hits the Biter and ends; with the Biter left out of its reach the Rock is hit", () => {
+  const still = (biterX) => plain(run(`
+    ${ARMED}
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.radius = 20; biter.position.x = ${biterX}; biter.position.y = 408;
+    const audit = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 0, pierce: 0 });
+    s.hitboxes[0].position.x = 80; s.hitboxes[0].position.y = 428;
+    resolveHitboxes(s, audit);
+    return audit.map((line) => JSON.parse(line).target);
+  `));
+  assert.deepStrictEqual(still(85), ["biter_0"]);
+  assert.deepStrictEqual(still(500), ["rock small:0,1"]);
+});
+
+test("219 how a hitbox hits is checked on load: without its hits, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place, and a hits that is not first or all is refused too", () => {
+  const refused = (from, to, message) => assert.throws(() => loadGame((text) => patchOnce(text, from, to)), message);
+  refused('          hits: "all", // how its hitbox hits', "          // how its hitbox hits", /hits of the attack bite of the actor biter must be one of first, all/);
+  refused('        hits: "first", // how its bullets hit', "        // how its bullets hit", /hits of the weapon of the part repeater-arm must be one of first, all/);
+  refused('        hits: "all", // how its blow hits', "        // how its blow hits", /hits of the melee of the part sword-arm must be one of first, all/);
+  refused('        hits: "first", // how its bullets hit', '        hits: "some", // how its bullets hit', /hits of the weapon of the part repeater-arm must be one of first, all, and it is "some"/);
+});
+
+test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three scenes of finding R5.1): landHit with an empty packet writes one audit line with total 0 and the totals count it as 1 hit and 0 damage; a bullet whose damage is 0 marks the Rock it touches as struck, spends its pierce (1 left becomes 0) and, with pierce 0, ends on the Rock, which keeps its 10 health; a hit of 0 on a target with a shield leaves the shield's quiet at 7, and a hit of 1 blunt sets it to 0; and the real case, the avatar's body slam into a Branch (weight 0), writes the Branch's slam of 0 and then the avatar's hit", () => {
+  // Scene 1: the audit.
+  const audit = plain(run(`
+    const s = createChamber1State();
+    const lines = createAudit();
+    const target = { id: "target", health: { now: 10, max: 10 }, resistance: {} };
+    const result = landHit(s, lines, "source", "poke", {}, target);
+    return { landed: result.landed, total: result.resolved.total, health: target.health.now, lines: lines.slice(), totals: combatAuditTotals(lines) };
+  `));
+  assert.strictEqual(audit.landed, true);
+  assert.strictEqual(audit.health, 10, "nothing was taken");
+  assert.strictEqual(audit.lines.length, 1, "one line");
+  const line = JSON.parse(audit.lines[0]);
+  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.parts, line.total, line.shield, line.health], ["hit", "source", "poke", "target", [], 0, 0, 0]);
+  assert.deepStrictEqual(audit.totals, { "source:poke": { hits: 1, total: 0, shield: 0, health: 0 } });
+
+  // Scene 2: a bullet of 0 on the Rock of seed 1 (radius 28 at 99,456, 10 health), from x 78 to 86 along y 428, the Biter far away.
+  const bullet = (pierce) => plain(run(`
+    ${ARMED}
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = 500; biter.position.y = 408;
+    const lines = createAudit();
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+    const hitbox = s.hitboxes[0];
+    hitbox.damage = { puncture: 0 }; // a packet that resolves to 0
+    hitbox.position.x = 78; hitbox.position.y = 428;
+    resolveHitboxes(s, lines);
+    return { lines: lines.slice(), rock: s.damagedObjects["${ROCK.key}"] ?? ${ROCK.health}, bullets: s.hitboxes.map((h) => ({ pierceLeft: h.pierceLeft, struck: [...h.struck] })) };
+  `));
+  const pierced = bullet(1);
+  assert.strictEqual(pierced.rock, 10, "the Rock loses nothing");
+  assert.deepStrictEqual(pierced.lines.map((text) => JSON.parse(text).total), [0]);
+  assert.deepStrictEqual(pierced.bullets, [{ pierceLeft: 0, struck: ["rock small:0,1"] }], "struck, and the pierce of 1 is spent; the bullet goes on");
+  const stopped = bullet(0);
+  assert.strictEqual(stopped.rock, 10, "the Rock loses nothing");
+  assert.deepStrictEqual(stopped.lines.map((text) => JSON.parse(text).total), [0]);
+  assert.deepStrictEqual(stopped.bullets, [], "with pierce 0 the bullet ends on the Rock");
+
+  // Scene 3: the shield's wait. A hit of 0 is not damage; a hit above 0 is.
+  const quiet = plain(run(`
+    const s = createChamber1State();
+    const make = () => ({ id: "target", health: { now: 100, max: 100 }, shield: { now: 40, max: 40, quiet: 7, resistance: {} }, resistance: {} });
+    const zero = make();
+    landHit(s, null, "source", "poke", {}, zero);
+    const above = make();
+    landHit(s, null, "source", "poke", { blunt: 1 }, above);
+    return { zero: zero.shield, above: above.shield };
+  `));
+  assert.deepStrictEqual([quiet.zero.quiet, quiet.zero.now], [7, 40], "a hit of 0 does not restart the wait");
+  assert.deepStrictEqual([quiet.above.quiet, quiet.above.now], [0, 39], "a hit of 1 blunt does, and the shield takes it");
+
+  // The real case: the avatar (no shield in the test game) walks at top speed into an isolated Branch, as in test 208.
+  const branch = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
+    p.move.velocity.x = 3; p.move.velocity.y = 0;
+    step(s, { move: { x: 1, y: 0 } }, undefined, null, lines);
+    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit") };
+  `, BRANCHY));
+  assert.strictEqual(branch.lines.length, 2, "two lines");
+  assert.deepStrictEqual(branch.lines.map((entry) => [entry.source, entry.attack, entry.target, entry.total]).slice(0, 1), [["branch " + branch.name, "bodySlam", "avatar_1", 0]], "the Branch's slam of 0 is first");
+  assert.deepStrictEqual([branch.lines[1].source, branch.lines[1].target], ["avatar_1", "branch " + branch.name], "then the avatar's hit");
+});
+
+test("221 the aborted line of the combat audit is { frame, event: \"aborted\" } in that order, and the totals skip it: the text of combatAuditAbortedLine(37) is exactly '{\"frame\":37,\"event\":\"aborted\"}', and the totals of a log with one hit and the aborted line are the same as the totals of the log with only the hit", () => {
+  const result = run(`
+    const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
+    const hit = combatAuditHitLine(12, "biter_3", "bite", "avatar_1", { parts: [part], total: 8 }, { shield: 3, health: 5 });
+    return {
+      text: combatAuditAbortedLine(37),
+      withAborted: combatAuditTotals([hit, combatAuditAbortedLine(37)]),
+      without: combatAuditTotals([hit]),
+    };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.text, '{"frame":37,"event":"aborted"}');
+  assert.deepStrictEqual(r.withAborted, r.without, "the aborted line counts for nothing");
+});
+
+// The scene of tests 222 to 225 (issue 42): the avatar with 0.01 health (no shield in the test game) and one Biter 200 px away that
+// chases it and bites. It dies a few frames in, by the rules alone. The history is recorded as the screen does (createHistory,
+// recordFrame after each step), the audit is written as the screen writes it (a start line, the hit lines of step, an aborted line
+// right after the step in which the mission became aborted, a resume line when play goes on from a past frame).
+const DEATH_HISTORY = `
+  ${ALONE_BITERS}
+  const IDLE = { move: { x: 0, y: 0 } };
+  function deadHistory() {
+    const s = aloneBiters(0);
+    s.actors[0].health.now = 0.01;
+    s.actors[1].position.x = s.actors[0].position.x + 200; s.actors[1].position.y = s.actors[0].position.y;
+    const h = createHistory(s, createRun(1).blueprint);
+    const audit = createAudit();
+    audit.push(combatAuditStartLine(s.frame, 1, 2));
+    for (let i = 0; i < 300 && s.mission === "running"; i++) {
+      step(s, IDLE, undefined, null, audit);
+      recordFrame(h, s, IDLE);
+    }
+    audit.push(combatAuditAbortedLine(s.frame));
+    return { s, h, audit };
+  }
+`;
+
+test("222 after the avatar's death the state freezes and the history ends on the aborted snap (issue 42): a Biter 200 px away bites the avatar of 0.01 health to death; the last snap says aborted and is the state's own frame; 10 more steps (with a dash and a move) and recordFrame leave the state as JSON, the snaps, the inputs and the visuals exactly as they were, so the last snap is still the aborted one", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const state = JSON.stringify(s), history = JSON.stringify(h);
+    const last = h.snaps[h.snaps.length - 1];
+    for (let i = 0; i < 10; i++) { const input = { move: { x: 1, y: 0 }, dash: true }; step(s, input); recordFrame(h, s, input); }
+    return {
+      mission: s.mission, health: s.actors[0].health.now, snaps: h.snaps.length, lastFrame: last.frame, stateFrame: s.frame,
+      lastMission: last.mission, before: h.snaps[h.snaps.length - 2].mission,
+      stateSame: JSON.stringify(s) === state, historySame: JSON.stringify(h) === history,
+    };
+  `, QUIET);
+  assert.strictEqual(result.mission, "aborted");
+  assert.strictEqual(result.health, 0);
+  assert.strictEqual(result.lastMission, "aborted", "the last snap says aborted");
+  assert.strictEqual(result.before, "running", "the one before it is still running: the death is the last step");
+  assert.strictEqual(result.lastFrame, result.stateFrame, "the last snap is the frame of the state");
+  assert.ok(result.snaps > 2, "some frames passed before the death");
+  assert.strictEqual(result.stateSame, true, "the state does not change");
+  assert.strictEqual(result.historySame, true, "nothing new is recorded");
+});
+
+test("223 a snap from before the death comes back running and the game plays on from it (issue 42): stateFromSnap of the snap before the death gives mission running and 0.01 health; with the same inputs, step gives the very state of the aborted snap again (same frame, same last health, JSON equal); with another input (a dash to the right, away from the Biter) it gives a different state on the same frame; the saved aborted snap is not changed by any of this", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const past = h.snaps.length - 2;
+    const aborted = JSON.stringify(h.snaps[past + 1]);
+    const again = stateFromSnap(h, past);
+    const resumed = { mission: again.mission, health: again.actors[0].health.now, frame: again.frame };
+    step(again, copyOf(h.inputs[past + 1]));
+    const other = stateFromSnap(h, past);
+    step(other, { move: { x: 1, y: 0 }, dash: true });
+    return {
+      resumed, sameAsAborted: JSON.stringify(again) === aborted, againHealth: again.actors[0].health.now, againMission: again.mission,
+      otherDiffers: JSON.stringify(other) !== aborted, otherFrame: other.frame, abortedFrame: h.snaps[past + 1].frame, otherMission: other.mission,
+      savedIntact: JSON.stringify(h.snaps[past + 1]) === aborted,
+    };
+  `, QUIET);
+  assert.deepStrictEqual(plain(result.resumed), { mission: "running", health: 0.01, frame: result.abortedFrame - 1 });
+  assert.strictEqual(result.sameAsAborted, true, "the same inputs on the same frame give the same death");
+  assert.strictEqual(result.againHealth, 0);
+  assert.strictEqual(result.againMission, "aborted");
+  assert.strictEqual(result.otherDiffers, true, "another input gives another state");
+  assert.strictEqual(result.otherFrame, result.abortedFrame, "it is the same frame");
+  assert.strictEqual(result.savedIntact, true, "the saved snap is not changed");
+});
+
+test("224 crossCheck is clean over a history that ends in the aborted snap and over one that went back and played on (issue 42): the history of the death gives null; after going back two snaps, discardAfter and 20 steps with another input recorded from there, the history gives null again, its snaps are the kept ones plus the new frames, and the new snaps are not aborted when the avatar walked away", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h } = deadHistory();
+    const ended = crossCheck(h);
+    const kept = h.snaps.length - 3;
+    discardAfter(h, kept);
+    const live = stateFromSnap(h, kept);
+    const away = { move: { x: -1, y: 0 } };
+    for (let i = 0; i < 20; i++) { step(live, away); recordFrame(h, live, away); }
+    return { ended, played: crossCheck(h), snaps: h.snaps.length, kept, frames: h.snaps.map((snap) => snap.frame), missions: h.snaps.slice(kept + 1).map((snap) => snap.mission) };
+  `, QUIET);
+  assert.strictEqual(result.ended, null, "the history that ends in the aborted snap");
+  assert.strictEqual(result.played, null, "the history that went back and played on");
+  assert.strictEqual(result.snaps, result.kept + 1 + 20);
+  assert.deepStrictEqual(result.frames, result.frames.map((_, index) => result.frames[0] + index), "the frames count up by one, no gap and no repeat");
+  assert.ok(result.missions.every((mission) => mission === "running" || mission === "aborted"));
+});
+
+test("225 the combat log only grows when the user goes back and resumes (issue 42, with the lines of issue 58): a log of the death run ends in the aborted line; going back two snaps and playing on cuts the history (discardAfter) but takes nothing out of the log, and the resume line is pushed after the aborted one with the frame it resumed from, which is lower; the lines written before are the same text as before, and the log of that run reads: start, hits, aborted, resume", () => {
+  const result = run(`
+    ${DEATH_HISTORY}
+    const { s, h, audit } = deadHistory();
+    const before = audit.slice();
+    const kept = h.snaps.length - 3;
+    discardAfter(h, kept);
+    const live = stateFromSnap(h, kept);
+    audit.push(combatAuditResumeLine(live.frame));
+    for (let i = 0; i < 5; i++) { step(live, IDLE, undefined, null, audit); recordFrame(h, live, IDLE); }
+    const events = audit.map((text) => JSON.parse(text)).map((entry) => entry.event);
+    return { before, after: audit.slice(0, before.length), events, beforeLength: before.length, resumeFrame: live.frame, abortedFrame: s.frame, snapFrame: h.snaps[kept].frame, totals: combatAuditTotals(before) };
+  `, QUIET);
+  assert.deepStrictEqual(result.after, result.before, "the lines written before are kept, in the same order");
+  const start = result.events.indexOf("start"), aborted = result.events.indexOf("aborted"), resume = result.events.indexOf("resume");
+  assert.strictEqual(start, 0, "the log opens with the start line");
+  assert.strictEqual(result.events[result.beforeLength - 1], "aborted", "it ended on the aborted line");
+  assert.strictEqual(resume, result.beforeLength, "the resume line comes right after the aborted line");
+  assert.ok(aborted < resume);
+  assert.ok(result.events.slice(1, aborted).every((event) => event === "hit"), "between start and aborted there are only hits");
+  assert.ok(result.snapFrame < result.abortedFrame, "it resumed from a frame before the death");
+  assert.ok(result.events.length >= result.beforeLength + 1, "the log only grew");
+});
+
+test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the user, 2026-11-15: \"the Branch has to break with anything\"; the rule that an actor never breaks an object stays for things with weight): a Biter moving into an isolated Branch of seed 1 at 3 px/frame breaks it (health 0, in the broken list), writes one audit line, a hit of total 0 from the Biter on the Branch (I28: everything that breaks a weightless thing writes a line; its body ignores `object`, so the hit is an empty packet), is not pushed or stopped and keeps its speed and its place", () => {
+  const result = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber2State(1, 1);
+    const biter = s.actors.find((actor) => actor.id === "biter_0");
+    s.actors = [s.actors[0], biter];
+    const lines = createAudit();
+    biter.position.x = branch.position.x - (biter.radius + branch.radius) + 1; biter.position.y = branch.position.y;
+    const place = { x: biter.position.x, y: biter.position.y };
+    biter.move.velocity.x = 3; biter.move.velocity.y = 0;
+    collideWithObjects(s, biter, [], lines);
+    return {
+      name: objectKey(branch), broken: isObjectBroken(s, branch), health: objectHealth(s, branch), lines: lines.slice(), vx: biter.move.velocity.x,
+      moved: [biter.position.x - place.x, biter.position.y - place.y], biterHealth: biter.health.now, biterMax: biter.health.max,
+    };
+  `, BRANCHY));
+  assert.strictEqual(result.broken, true, "the Biter breaks it");
+  assert.strictEqual(result.health, 0);
+  assert.strictEqual(result.lines.length, 1, "one line: the Biter's hit of 0 on the Branch");
+  const line = JSON.parse(result.lines[0]);
+  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.total], ["hit", "biter_0", "bodySlam", "branch " + result.name, 0]);
+  assert.strictEqual(result.vx, 3, "the Biter keeps its speed and goes through");
+  assert.deepStrictEqual(result.moved, [0, 0], "and is not pushed out");
+  assert.strictEqual(result.biterHealth, result.biterMax, "the Biter loses nothing");
+});
+
+test("227 breaking a weightless Branch still writes the audit lines (issue 47, hits of 0 are hits, issue 46): the avatar walking into an isolated Branch of seed 1 writes exactly two lines in this order, the Branch's slam on the avatar (bodySlam, total 0, the avatar loses nothing) and then the avatar's hit on the Branch (target the Branch, health taken at most its 1), the totals count both as hits, and the Branch is broken", () => {
+  const result = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    const before = p.health.now;
+    p.position.x = branch.position.x - (p.radius + branch.radius) - 3 + 0.5; p.position.y = branch.position.y;
+    p.move.velocity.x = 3; p.move.velocity.y = 0;
+    step(s, { move: { x: 1, y: 0 } }, undefined, null, lines);
+    return { name: objectKey(branch), lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit"), totals: combatAuditTotals(lines), lost: before - p.health.now, broken: isObjectBroken(s, branch) };
+  `, BRANCHY));
+  const name = "branch " + result.name;
+  assert.strictEqual(result.lines.length, 2, "two lines");
+  assert.deepStrictEqual(result.lines.map((entry) => [entry.source, entry.attack, entry.target]), [[name, "bodySlam", "avatar_1"], ["avatar_1", "bodySlam", name]]);
+  assert.strictEqual(result.lines[0].total, 0, "the Branch's slam is 0");
+  assert.ok(result.lines[1].health <= 1, "the avatar's hit takes at most the Branch's 1 health");
+  assert.strictEqual(result.lost, 0, "the avatar loses nothing");
+  assert.strictEqual(result.totals[name.replace(/ .*/, "") + ":bodySlam"].hits, 1, "the Branch's slam counts as a hit");
+  assert.strictEqual(result.totals["avatar:bodySlam"].hits, 1, "and so does the avatar's");
+  assert.strictEqual(result.broken, true);
+
+  // The avatar starting in touch, with no speed (the first contact is the first step): the lines are written too.
+  const touching = plain(run(`
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const s = createChamber1State();
+    const lines = createAudit();
+    const p = s.actors[0];
+    p.position.x = branch.position.x - (p.radius + branch.radius) + 2; p.position.y = branch.position.y;
+    step(s, { move: { x: 0, y: 0 } }, undefined, null, lines);
+    return { lines: lines.map((text) => JSON.parse(text)).filter((entry) => entry.event === "hit").map((entry) => [entry.source, entry.target, entry.total]), name: objectKey(branch), broken: isObjectBroken(s, branch) };
+  `, BRANCHY));
+  assert.strictEqual(touching.broken, true);
+  assert.deepStrictEqual(touching.lines, [["branch " + touching.name, "avatar_1", 0], ["avatar_1", "branch " + touching.name, touching.lines[1][2]]], "the same two lines with no speed at all");
+});
+
+// ---- A negative resistance amplifies the damage (issue 34, the user, 2026-11-15) ----
+const NEGATIVE_BLUNT = (points) => (text) => text.replace("resistance: { blunt: 20, puncture: 10 }, speed: 0.5", "resistance: { blunt: " + points + ", puncture: 10 }, speed: 0.5");
+
+test("228 a negative resistance amplifies the damage (the user, 2026-11-15; the curve is unchanged): with the scale 100, -50 blunt points are a reduction of -1 and a blunt 10 hit resolves to 20, -75 points a reduction of -3 and 40; an avatar whose parts sum to -50 (Torso -60, Legs 10) has -50 in its resistance and loses 20 of a blunt 10 through landHit; the shield's points below 0 amplify too while it stands", () => {
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+  const result = plain(run(`
+    const at = (points) => resolveDamage({ blunt: 10 }, { resistance: { blunt: points } });
+    const shielded = resolveDamage({ blunt: 10 }, { resistance: { blunt: 10 }, shield: { now: 5, max: 5, resistance: { blunt: -60 } } });
+    return { fifty: at(-50), seventyFive: at(-75), shielded };
+  `));
+  near(result.fifty.parts[0].reduction, -1);
+  near(result.fifty.total, 20);
+  near(result.seventyFive.parts[0].reduction, -3);
+  near(result.seventyFive.total, 40);
+  near(result.shielded.parts[0].points, -50);
+  near(result.shielded.total, 20);
+
+  const negative = loadGame(NEGATIVE_BLUNT(-60));
+  const hit = plain(run(`
+    const avatar = createAvatar(createRun(1).blueprint);
+    const before = avatar.health.now;
+    const landed = landHit(createChamber1State(), null, "source", "poke", { blunt: 10 }, avatar);
+    return { points: avatar.resistance.blunt, total: landed.resolved.total, lost: before - avatar.health.now };
+  `, negative));
+  assert.strictEqual(hit.points, -50);
+  near(hit.total, 20);
+  near(hit.lost, 20);
+});
+
+test("229 the three refusals of a negative resistance that would break the curve (issue 34): a part whose resistance is at or below minus the scale (-100 blunt on the Torso), a part whose shieldResistance is (-100 on the Generator), and a blueprint whose summed resistance of a type is (two Torsos of -60 blunt with the Legs make -110), with the shield's points counted too (a second Generator takes -80 to -110); the messages name the part, the type and the points; just above the limit (-99) loads", () => {
+  const torso = loadError(NEGATIVE_BLUNT(-100));
+  assert.match(torso ?? "", /resistance of the part torso to blunt must be above minus the resistance scale \(-100\), and it is -100/);
+  assert.throws(() => loadGame((text) => text.replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: -100"), { shield: true }), /shieldResistance of the part generator to blunt must be above minus the resistance scale \(-100\), and it is -100/);
+  assert.doesNotThrow(() => loadGame(NEGATIVE_BLUNT(-99)));
+
+  const sums = loadGame(NEGATIVE_BLUNT(-60));
+  const attempt = `const attempt = (blueprint) => { try { assertValidBlueprint(blueprint); return "accepted"; } catch (error) { return error.message; } };`;
+  const body = run(`${attempt} const full = createRun(1).blueprint; return { starter: attempt(full), twoTorsos: attempt({ parts: [...full.parts, "torso"] }) };`, sums);
+  assert.strictEqual(body.starter, "accepted", "-60 + 10 is -50 points: allowed");
+  assert.match(body.twoTorsos, /resistance to blunt \(the parts\) sums to -110 points, which is at or below minus the resistance scale \(-100\)/);
+
+  // The shield's points count too: Torso -60 and Legs 10 (-50) with a Generator of -30 load (the starter blueprint is -80), and a second Generator makes -110.
+  const shielded = loadGame((text) => NEGATIVE_BLUNT(-60)(text).replace(/shieldResistance: \{ blunt: (\d+)/, "shieldResistance: { blunt: -30"), { shield: true });
+  const withShield = run(`${attempt} const full = createRun(1).blueprint; return { one: attempt(full), two: attempt({ parts: [...full.parts, "generator"] }) };`, shielded);
+  assert.strictEqual(withShield.one, "accepted");
+  assert.match(withShield.two, /resistance to blunt \(the parts with the shield\) sums to -110 points/);
+});
+
+test("230 resolveDamage fails loudly when the points plus the scale are at or below 0, naming the type and the points (so a future buff cannot reach NaN or a negative damage unseen): -100 points and -130 points on blunt, a shield that brings the sum to -100, and the same type with an empty amount is not asked; -99 resolves to a hit of 1000", () => {
+  const result = plain(run(`
+    const ask = (packet, target, withShield) => { try { return resolveDamage(packet, target, withShield).total; } catch (error) { return error.message; } };
+    return {
+      exact: ask({ blunt: 10 }, { resistance: { blunt: -100 } }),
+      past: ask({ blunt: 10 }, { resistance: { puncture: 0, blunt: -130 } }),
+      shield: ask({ blunt: 10 }, { resistance: { blunt: -40 }, shield: { now: 1, resistance: { blunt: -60 } } }),
+      noShield: ask({ blunt: 10 }, { resistance: { blunt: -40 }, shield: { now: 1, resistance: { blunt: -60 } } }, false),
+      other: ask({ puncture: 10 }, { resistance: { blunt: -130 } }),
+      near: ask({ blunt: 10 }, { resistance: { blunt: -99 } }),
+    };
+  `));
+  assert.match(result.exact, /resistance to blunt is -100 points/);
+  assert.match(result.past, /resistance to blunt is -130 points/);
+  assert.match(result.shield, /resistance to blunt is -100 points/);
+  assert.ok(Math.abs(result.noShield - 10 * 100 / 60) < 1e-9, "without the shield the same target is -40 points");
+  assert.strictEqual(result.other, 10, "a type that is not in the packet is not asked");
+  assert.ok(Math.abs(result.near - 1000) < 1e-9);
+});
+
+test("231 amplified damage cannot take the shield or the health past their limits (issue 34): a shield with 10 left and -50 points takes a blunt 10 as 20, gives its 10, and the share that did not fit (half) is resolved again against the body alone (5); a hit of 1000 amplified on a body of 3 health leaves 0, never negative, and the shield never goes below 0 or above its maximum", () => {
+  const result = plain(run(`
+    const make = (shieldNow, health) => ({ id: "target", health: { now: health, max: 100 }, shield: { now: shieldNow, max: 40, quiet: 7, resistance: { blunt: -50 } }, resistance: { blunt: 0 } });
+    const s = createChamber1State();
+    const breaking = make(10, 100);
+    const first = landHit(s, null, "source", "poke", { blunt: 10 }, breaking);
+    const overkill = make(10, 3);
+    landHit(s, null, "source", "poke", { blunt: 1000 }, overkill);
+    const held = make(40, 100);
+    const kept = landHit(s, null, "source", "poke", { blunt: 10 }, held);
+    return { first: first.taken, breaking, overkill, kept: kept.taken, held };
+  `));
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+  near(result.first.shield, 10);
+  near(result.first.health, 5);
+  assert.strictEqual(result.breaking.shield.now, 0);
+  near(result.breaking.health.now, 95);
+  assert.strictEqual(result.overkill.health.now, 0);
+  assert.strictEqual(result.overkill.shield.now, 0);
+  near(result.kept.shield, 20);
+  assert.strictEqual(result.kept.health, 0);
+  near(result.held.shield.now, 20);
+  assert.ok(result.held.shield.now <= result.held.shield.max && result.held.health.now === 100);
+});
+
+test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too (issue 47, I27): landHit with an empty packet on an isolated Branch of seed 1 breaks it (landed, broken, one audit line of total 0); a bullet of 0 breaks it and spends its pierce like on any hit (pierce 1 goes on with 0 left, pierce 0 ends on it); and the same empty packet on a Rock leaves it whole", () => {
+  const scene = (pierce) => plain(run(`
+    ${ARMED}
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const isolated = (kind) => objects.find((object) => object.type === kind && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const branch = isolated("branch");
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = branch.position.x + 5000; biter.position.y = branch.position.y;
+    avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y; // near, so the bullet stays in the window of the grid
+    const lines = createAudit();
+    const direct = landHit(s, lines, "source", "poke", {}, branch);
+    const directBroken = isObjectBroken(s, branch);
+    delete s.damagedObjects[objectKey(branch)]; // whole again: the bullet's turn
+    const rock = isolated("rock");
+    const rockHit = landHit(s, null, "source", "poke", {}, rock);
+    const rockBroken = isObjectBroken(s, rock);
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: ${pierce} });
+    const hitbox = s.hitboxes[0];
+    hitbox.damage = { puncture: 0 };
+    hitbox.position.x = branch.position.x - 20; hitbox.position.y = branch.position.y;
+    const shotLines = createAudit();
+    resolveHitboxes(s, shotLines);
+    return {
+      direct: { landed: direct.landed, total: direct.resolved.total, broken: direct.broken, lines: lines.map((text) => JSON.parse(text).total), directBroken },
+      rock: { landed: rockHit.landed, broken: rockBroken },
+      shot: { broken: isObjectBroken(s, branch), lines: shotLines.map((text) => JSON.parse(text).total), bullets: s.hitboxes.map((h) => h.pierceLeft) },
+    };
+  `, BRANCHY));
+  const pierced = scene(1);
+  assert.deepStrictEqual(pierced.direct, { landed: true, total: 0, broken: true, lines: [0], directBroken: true });
+  assert.deepStrictEqual(pierced.rock, { landed: true, broken: false }, "a Rock keeps its health under a hit of 0");
+  assert.deepStrictEqual(pierced.shot, { broken: true, lines: [0], bullets: [0] }, "broken by a bullet of 0, which spends 1 pierce and goes on");
+  const stopped = scene(0);
+  assert.deepStrictEqual(stopped.shot, { broken: true, lines: [0], bullets: [] }, "with pierce 0 the bullet ends on it, as on any hit");
+});
+
+test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place, and (I28) the break leaves a line naming that actor and the Branch; a Rock does not break under any of them", () => {
+  const DUMMIED = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 1 }"), { branches: true });
+  const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
+  assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
+  const ids = { avatar: "avatar_1", dummy: "dummy_0", biter: "biter_0" };
+  for (const kind of kinds) {
+    for (const speed of [3, 0]) {
+      const result = plain(run(`
+        const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+        const isolated = (type) => objects.find((object) => object.type === type && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+        const branch = isolated("branch");
+        const rock = isolated("rock");
+        const s = createChamber2State(1, 1);
+        const actor = [...s.actors, ...createChamber1State().actors].find((a) => a.id === "${ids[kind]}");
+        if (!actor) throw new Error("no actor ${ids[kind]} in the scenes");
+        s.actors = [s.actors[0], actor].filter((a, i, all) => all.indexOf(a) === i); // the avatar must be in the state (worldStops)
+        const touch = (object) => {
+          actor.position.x = object.position.x - (actor.radius + object.radius) + 1; actor.position.y = object.position.y;
+          actor.move.velocity.x = ${speed}; actor.move.velocity.y = 0;
+          const place = { x: actor.position.x, y: actor.position.y };
+          const lines = createAudit();
+          collideWithObjects(s, actor, [], lines);
+          return { broken: isObjectBroken(s, object), vx: actor.move.velocity.x, moved: [actor.position.x - place.x, actor.position.y - place.y], lines: lines.map((text) => JSON.parse(text)).map((e) => [e.source, e.target]) };
+        };
+        return { branch: touch(branch), rock: touch(rock).broken, name: objectKey(branch) };
+      `, DUMMIED));
+      assert.strictEqual(result.branch.broken, true, kind + " at speed " + speed + " breaks the Branch");
+      assert.strictEqual(result.branch.vx, speed, kind + " keeps its velocity");
+      assert.deepStrictEqual(result.branch.moved, [0, 0], kind + " is not pushed out of it");
+      assert.strictEqual(result.rock, false, kind + " does not break a Rock");
+      assert.ok(result.branch.lines.some(([source, target]) => source === ids[kind] && target === "branch " + result.name), kind + " at speed " + speed + " leaves a line naming it and the Branch");
+    }
+  }
+});
+
+test("234 a bullet that ends on a Branch leaves a line naming the Branch (issue 47, I28; the user, 2026-11-15: \"we have to know why projectiles were lost\"): a bullet of pierce 0 and real damage that ends on an isolated Branch of seed 1 writes one audit line, source the owner, attack the weapon, target `branch <place>`, and the bullet is gone from the list", () => {
+  const result = plain(run(`
+    ${ARMED}
+    const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
+    const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
+    const { s } = armed(0);
+    const [avatar, biter] = s.actors;
+    biter.position.x = branch.position.x + 5000; biter.position.y = branch.position.y;
+    avatar.position.x = branch.position.x - 150; avatar.position.y = branch.position.y;
+    spawnHitbox(s, avatar, "repeater-arm", 1, 0, { radius: 6, frames: null, speed: 8, pierce: 0 });
+    s.hitboxes[0].position.x = branch.position.x - 20; s.hitboxes[0].position.y = branch.position.y;
+    const lines = createAudit();
+    resolveHitboxes(s, lines);
+    return { name: objectKey(branch), broken: isObjectBroken(s, branch), bullets: s.hitboxes.length, lines: lines.map((text) => JSON.parse(text)) };
+  `, BRANCHY));
+  assert.strictEqual(result.broken, true);
+  assert.strictEqual(result.bullets, 0, "the bullet ended on it");
+  assert.strictEqual(result.lines.length, 1, "one line says where it ended");
+  assert.deepStrictEqual([result.lines[0].event, result.lines[0].source, result.lines[0].attack, result.lines[0].target], ["hit", "avatar_1", "repeater-arm", "branch " + result.name]);
+  assert.ok(result.lines[0].total > 0, "real damage, not a hit of 0");
 });

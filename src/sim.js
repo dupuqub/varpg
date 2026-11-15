@@ -166,7 +166,7 @@ function writeShield(actor, blueprint) {
   shield.delayFrames = fromParts(actor, blueprint, "shieldDelayFrames");
   shield.regenPerFrame = fromParts(actor, blueprint, "shieldRegenPerFrame");
   for (const type of DEFINITIONS.damageTypes) {
-    shield.resistance[type] = isAvatar(actor) ? partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0) : 0;
+    shield.resistance[type] = isAvatar(actor) ? sumShieldResistance(blueprint, type) : 0;
   }
 }
 
@@ -204,6 +204,11 @@ function sumResistance(blueprint, type) {
   return partsOf(blueprint).reduce((sum, part) => sum + (part.specs.resistance?.[type] || 0), 0);
 }
 
+// The sum of the shield's resistance of the parts to one type of damage (a part without it adds 0).
+function sumShieldResistance(blueprint, type) {
+  return partsOf(blueprint).reduce((sum, part) => sum + (part.specs.shieldResistance?.[type] || 0), 0);
+}
+
 // What the parts add to a value, for the avatar. Objects get nothing from the blueprint.
 function fromParts(actor, blueprint, name) {
   return isAvatar(actor) ? sumSpec(blueprint, name) : 0;
@@ -211,11 +216,24 @@ function fromParts(actor, blueprint, name) {
 
 // Fails loudly if the blueprint is not allowed: an unknown part, or more weight than the
 // blueprint can carry (the capacity of the Torso). A hard limit, not a speed penalty.
+// It also refuses a summed resistance (issue 34, the user: "negative resistance amplifies damage") at or below minus the scale: the
+// curve points / (points + resistanceScale) would divide by zero or flip. Two sums are checked, because the shield comes and goes: the
+// body's alone (what is left once the shield is gone) and the body's plus the shield's (while the shield stands).
 function assertValidBlueprint(blueprint) {
   const weight = totalWeight(blueprint);
   const capacity = sumSpec(blueprint, "capacity");
   if (weight > capacity) {
     throw new Error("The blueprint weighs " + weight + " kg and can carry only " + capacity + " kg");
+  }
+  const scale = DEFINITIONS.constants.damage.resistanceScale;
+  for (const type of DEFINITIONS.damageTypes) {
+    const body = sumResistance(blueprint, type);
+    const withShield = body + sumShieldResistance(blueprint, type);
+    for (const [points, what] of [[body, "the parts"], [withShield, "the parts with the shield"]]) {
+      if (points <= -scale) {
+        throw new Error("The blueprint's resistance to " + type + " (" + what + ") sums to " + points + " points, which is at or below minus the resistance scale (" + -scale + "): the damage would grow without end");
+      }
+    }
   }
 }
 
@@ -246,6 +264,14 @@ function checkExit(exit, where) {
   if (!EXITS.includes(exit)) throw new Error("The exit of " + where + " must be one of " + EXITS.join(", ") + ", and it is " + JSON.stringify(exit));
 }
 
+// How a hitbox hits (the user, 2026-11-14, issues 43 and 44: "a TAG to say how the hitbox works"): "first", only the first thing its path
+// meets in a frame is hit (bullets); "all", everything it touches is hit, each once (the sword, and the bite). See hitsThisFrame.
+const HITS = ["first", "all"];
+
+function checkHits(hits, where) {
+  if (!HITS.includes(hits)) throw new Error("The hits of " + where + " must be one of " + HITS.join(", ") + ", and it is " + JSON.stringify(hits));
+}
+
 function checkTarget(target, where) {
   if (!target || !TARGET_PICKS.includes(target.pick) || typeof target.tag !== "string" || target.tag === "") {
     throw new Error("The target of " + where + " must be { pick, tag }, with pick one of " + TARGET_PICKS.join(", ") + " and a tag that is a word: " + JSON.stringify(target));
@@ -255,9 +281,9 @@ function checkTarget(target, where) {
 // The keys every aimed attack shares (issue 33: the user's "constructor ... without a thousand places to edit"): the bite of a recipe,
 // the weapon and the melee of a part all carry them, in this order. The body slam aims at nothing, so it has none of them (its ignores
 // come from the recipe's bodyIgnores). A new key of the action model is added here, once, and to CHECK_ATTACK_KEY.
-const ATTACK_KEYS = ["target", "exit", "ignores"];
-// The keys of its attack that a hitbox keeps, copied at its birth (the owner may be gone before it ends). Only the ignored tags today.
-const HITBOX_ATTACK_KEYS = ["ignores"];
+const ATTACK_KEYS = ["target", "exit", "ignores", "hits"];
+// The keys of its attack that a hitbox keeps, copied at its birth (the owner may be gone before it ends): the ignored tags and how it hits.
+const HITBOX_ATTACK_KEYS = ["ignores", "hits"];
 
 // A copy of the given keys of an attack recipe (or record), in the order of the list, deep enough that changing the copy never changes
 // the recipe. The one place a builder takes the shared keys from (addWeaponAttacks, spawnHitbox; finalAttacks copies its whole recipe).
@@ -272,6 +298,7 @@ const CHECK_ATTACK_KEY = {
   target: (value, attackName, where) => checkTarget(value, where),
   exit: (value, attackName, where) => checkExit(value, where),
   ignores: null,
+  hits: (value, attackName, where) => checkHits(value, where),
 };
 
 // The one check of the shared keys of an attack, asked in the four places an attack recipe lives: the constants (the body slam),
@@ -327,8 +354,11 @@ function assertValidDefinitions() {
       if (name === "resistance" || name === "shieldResistance") {
         for (const [type, points] of Object.entries(value)) {
           if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The " + name + " of the part " + id + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
-          // Finite too (issue 34): Infinity points make the curve points / (points + resistanceScale) give NaN, which the state must never hold.
-          if (!(Number.isFinite(points) && points >= 0)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be a finite number, 0 or more, and it is " + points);
+          // Finite (issue 34): Infinity points make the curve points / (points + resistanceScale) give NaN, which the state must never hold.
+          // Below 0 is allowed (the user, 2026-11-15: "negative resistance amplifies damage"), but points at or below minus the scale
+          // divide by zero or flip the curve, so a part cannot have them.
+          if (!Number.isFinite(points)) throw new Error("The " + name + " of the part " + id + " to " + type + " must be a finite number, and it is " + points);
+          if (points <= -DEFINITIONS.constants.damage.resistanceScale) throw new Error("The " + name + " of the part " + id + " to " + type + " must be above minus the resistance scale (" + -DEFINITIONS.constants.damage.resistanceScale + "), and it is " + points);
         }
       } else if (name === "shieldDelayFrames" && !(Number.isInteger(value) && value >= 1)) {
         throw new Error("The spec shieldDelayFrames of the part " + id + " must be a whole number of frames, 1 or more, and it is " + value);
@@ -588,7 +618,9 @@ function finalAttackNow(actor, name, attack, type) {
 // The packet of a hit by body slam. "hit" says what happened: for a collision it is { impact }, the part of the velocity
 // that went into the other thing, in px/frame. The body slam is the user's first attack: every type of it grows with
 // the impact, now x impact / referenceImpact (provisional formula, the agent's proposal, to be discussed). A weight of 0
-// gives an empty packet, so nothing happens, and so does an impact of 0 or less.
+// gives an empty packet, and so does an impact of 0 or less. An empty packet does no damage, but it is still a hit (the user,
+// 2026-11-14, issue 46): landHit writes its line (total 0), the target is marked and a pierce is spent; only the shield's wait is not
+// restarted (it is not damage).
 // Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all (the
 // minimum impact) is decided where the collision is. Pure.
 function finalAttack(attacker, hit) {
@@ -608,6 +640,10 @@ function finalAttack(attacker, hit) {
 // The curve never reaches 100% and never stops paying (the user's wish: nobody immortal, and always something to gain
 // by adding more). The total is the sum of the parts. There is no minimum damage (the user, 2026-11-14): the curve alone is
 // what keeps a target from being immune, since it never takes everything off. An empty packet costs nothing.
+// Negative points are a negative reduction and the hit grows (the user, 2026-11-15: "negative resistance amplifies damage"): with the
+// scale 100, -50 points is a reduction of -1 (x2) and -75 is -3 (x4). The growth has no limit as the points go toward minus the scale
+// (the agent's reading of the formula). Points at or below minus the scale cannot exist (refused when the data loads and in
+// assertValidBlueprint), and if one ever reaches this function it throws, so a future buff cannot make NaN or a negative damage unseen.
 // withShield false leaves the shield's resistance out (the part of a hit that goes past a broken shield, see landHit).
 // Returns { parts: [{ type, amount, points, fromShield, reduction, after }], total }.
 function resolveDamage(packet, target, withShield = true) {
@@ -619,6 +655,7 @@ function resolveDamage(packet, target, withShield = true) {
     if (!(amount > 0)) continue;
     const fromShield = withShield && shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
     const points = (target.resistance?.[type] ?? 0) + fromShield;
+    if (points + scale <= 0) throw new Error("The resistance to " + type + " is " + points + " points, at or below minus the resistance scale (" + -scale + "): the curve cannot be calculated");
     const reduction = points / (points + scale);
     const after = amount * (1 - reduction);
     parts.push({ type, amount, points, fromShield, reduction, after });
@@ -640,10 +677,12 @@ function nameOf(thing) {
 // share of the whole packet that is left is tested against the body, with only the resistances of the body"): the packet is
 // resolved with the shield's resistance; if that is more than the shield has left, the shield takes what it has, and the same
 // share of the packet that did not fit (per type) is resolved again against the body alone and goes to health. The record then
-// carries "overflow" (the share, the second calculation) and its total is what the shield and the body really took.
+// carries "overflow" (the share, the second calculation) and its total is the shield's part plus the second calculation (what was really taken is `shield` and `health`).
 // A target with no health takes no hit (canTakeHit, asked here and nowhere else): nothing is resolved, taken or recorded.
+// A hit of 0 (an empty packet) is a hit (the user, 2026-11-14, issue 46): it is recorded with a total of 0 and returns landed true, so
+// the caller marks and spends a pierce; it takes nothing and, being no damage, does not restart the shield's wait (applyDamage).
 // Returns { landed, resolved, taken, broken }; landed is false (and the rest null) when the target could not take the hit;
-// broken is true only for an object that reached 0 in this hit.
+// broken is true only for an object that reached 0 in this hit, or one of weight 0, which any hit that lands breaks (a resolved 0 too).
 function landHit(state, audit, sourceName, attackName, packet, target) {
   if (!canTakeHit(state, target)) return { landed: false, resolved: null, taken: null, broken: false };
   const isObject = target.id === undefined;
@@ -653,6 +692,7 @@ function landHit(state, audit, sourceName, attackName, packet, target) {
   if (isObject) {
     const before = objectHealth(state, target);
     broken = damageObject(state, target, resolved.total);
+    if (target.weight === 0) { breakObject(state, target); broken = true; } // a weightless thing breaks with any hit that lands, even a resolved 0 (the user, 2026-11-15, issue 47)
     taken = { shield: 0, health: Math.min(resolved.total, before) }; // what it really lost: the overkill is not health taken
   } else if (shieldAlive(target) && resolved.total > target.shield.now) {
     const absorbed = target.shield.now;
@@ -701,7 +741,7 @@ function bodyHurts(attacker, target) {
 }
 
 // Takes damage off an actor: the shield absorbs first, and what is left goes to health (the user's decision, 2026-11-11).
-// Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate.
+// Health stops at 0. Any damage, absorbed or not, restarts the wait for the shield to regenerate; a damage of 0 (a hit of 0) is not damage and does not.
 // Returns what was taken from each: { shield, health } (the health it really lost: it stops at 0).
 function applyDamage(actor, damage) {
   let left = damage;
@@ -961,6 +1001,24 @@ function crushObject(state, actor, object) {
   return true;
 }
 
+// Weight 0 (the user, 2026-11-15, issue 47: "things with no weight break immediately; health is not a parameter for what weighs 0",
+// and the same day, after I24: "the Branch has to break with anything"): an object of weight 0 breaks at the first contact with ANY
+// actor's body (the avatar, a Dummy, a Biter), whatever its health and with no minimum impact. Breaking it is not damage, so it does not
+// ask bodyHurts whether the body hurts objects: the Biter's body ignores `object` and still breaks it. Like crushing: no push, no bounce,
+// the mover keeps its speed and goes on. Everything that breaks it writes a line (the user, 2026-11-15, I28: "we have to know why
+// projectiles were lost"): the object's slam on the actor where bodyHurts says it hurts it (total 0), then the actor's hit on the
+// object; a body that ignores objects (the Biter's, the Dummy's) lands an empty packet through the same door, a hit of total 0 (issue 46),
+// no invented damage. `impact` is the speed going into the object (0 when the actor is not going in). Returns true if the object broke.
+function breakWeightless(state, audit, actor, object, impact) {
+  if (object.weight !== 0) return false;
+  const hit = { impact };
+  if (bodyHurts(object, actor)) slamActor(state, audit, object, hit, actor);
+  if (bodyHurts(actor, object)) slamObject(state, audit, actor, hit, object);
+  else landHit(state, audit, nameOf(actor), "bodySlam", {}, object); // a body that does not hurt objects: a hit of 0, same door
+  breakObject(state, object);
+  return true;
+}
+
 // ---- Collision with objects ----
 
 // Does a circle touch a cone (a slice of a disc: the strike of a sword)? Exact, with + - * / and Math.sqrt only.
@@ -1022,7 +1080,8 @@ function objectsNear(state, actor) {
 // Dummies; the user's rule, 2026-11-11: a Shroom bounces everyone, it only does not hurt everyone).
 // For each object the actor overlaps (circle against circle):
 // 1. The "normal" is the direction from the object to the actor (a unit vector).
-// 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens.
+// 2. An actor that crushes (crushObject) breaks the object and goes on: nothing below happens. The same for an object of
+//    weight 0 and any actor's body (breakWeightless): it breaks at once, with no minimum impact.
 // 3. If the actor is going toward the object fast enough (collision.minImpact) and was not already touching it in the
 //    last frame, that is a collision, and its impact is the speed going INTO the object (along the normal). When the
 //    side hurts the other (bodyHurts: the tags its body ignores) with its own weight
@@ -1046,16 +1105,15 @@ function collideWithObjects(state, actor, lastContacts, audit = null) {
     if (contact === null) continue;
     if (crushObject(state, actor, object)) continue;
     const { normalX, normalY, overlap } = contact;
+    const velocity = actor.move.velocity;
+    const goingIn = velocity.x * normalX + velocity.y * normalY; // negative when the actor is going toward the object
+    if (breakWeightless(state, audit, actor, object, Math.max(0, -goingIn))) continue;
 
     // Only the MOMENT of the collision hurts. A pair that was already touching in the last frame is
     // friction (pressing, sliding): it still pushes and bounces, but it is not a new hit.
     const key = actor.id + "|" + object.type + " " + objectKey(object);
     const isNewContact = !lastContacts.includes(key);
     state.contacts.push(key);
-
-    // Negative when the actor is going toward the object.
-    const velocity = actor.move.velocity;
-    const goingIn = velocity.x * normalX + velocity.y * normalY;
 
     // A collision needs an impact of at least collision.minImpact; below it nothing triggers.
     const collides = goingIn < 0 && -goingIn >= DEFINITIONS.constants.collision.minImpact;
@@ -1635,6 +1693,8 @@ function fireWeapons(state, player, byTag) {
 //           that a frame written twice, or an actor dying twice, can be understood: { frame, event }.
 //   start   a chamber begins: { frame, event, run, chamber }. Each chamber starts a new log (the user, 2026-11-13, issue 18), and this
 //           line says which run and chamber the lines after it belong to.
+//   aborted the mission is aborted: { frame, event }. The user (2026-11-15, issue 58) asked for it, like start and resume; the screen
+//           writes it once, right after the step in which the mission became aborted.
 function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
   return JSON.stringify({
     frame,
@@ -1656,6 +1716,12 @@ function combatAuditResumeLine(frame) {
 
 function combatAuditStartLine(frame, run, chamber) {
   return JSON.stringify({ frame, event: "start", run, chamber });
+}
+
+// The user (2026-11-15, issue 58) asked for a line when the mission is aborted, like start and resume. The screen writes it once,
+// right after the step in which the mission became aborted; the rules never read the log.
+function combatAuditAbortedLine(frame) {
+  return JSON.stringify({ frame, event: "aborted" });
 }
 
 // The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,
@@ -1799,7 +1865,49 @@ function hitboxHurts(hitbox, target) {
   return !ignoresTarget(hitbox.ignores, tagsOf(target));
 }
 
-// Every living hitbox moves by its velocity, hurts what it touches (each thing once: struck), and loses a frame; the ones
+// How far along its movement of this frame a round hitbox first touched a target it touches now, from 0 (it already touched it where
+// the frame started) to 1 (only where the frame ended). It moved in a straight line from "from" by its velocity; the moving circle first
+// touches the target's circle at the smallest t of |from + t x velocity - target| = the sum of the two radii (a quadratic in t, solved
+// with arithmetic and Math.sqrt only). A hitbox that did not move this frame (velocity zero), or a cone (it is born still and has no
+// round path), touched everything at 0, so its candidates keep the list order.
+function firstTouchAt(hitbox, from, target) {
+  const vx = hitbox.velocity.x;
+  const vy = hitbox.velocity.y;
+  const speedSquared = vx * vx + vy * vy;
+  if (hitbox.cone || speedSquared === 0) return 0;
+  const dx = from.x - target.position.x;
+  const dy = from.y - target.position.y;
+  const touching = hitbox.radius + target.radius;
+  const c = dx * dx + dy * dy - touching * touching;
+  if (c <= 0) return 0; // touching (or just at the edge) where the frame started
+  const b = dx * vx + dy * vy;
+  const discriminant = b * b - speedSquared * c; // not below 0, since it touches at the end; floating point may leave a crumb below
+  const t = (-b - Math.sqrt(Math.max(discriminant, 0))) / speedSquared;
+  return Math.min(Math.max(t, 0), 1);
+}
+
+// The user (2026-11-14, issues 43 and 44): "a hitbox says by a TAG how it works": "all", everything in its contact is hit, each once
+// (the sword's cone, the bite); "first", only the first thing its path meets in that frame is hit (bullets), actors and objects alike,
+// sorted by how far along its movement each is touched (firstTouchAt), ties keeping the list order. Things it cannot hit never count
+// as first: the candidates are only those it touches, does not ignore and has not struck, and one with no health (canTakeHit, asked
+// in landHit) is passed, so the next in the order is tried. Returns the order to try the candidates in, and whether the hitbox stops
+// after the first hit that lands (one hit per frame for "first"; with pierce above 0 the next thing can be hit in a later frame).
+function hitsThisFrame(hitbox, from, candidates) {
+  if (hitbox.hits !== "first") return { order: candidates, onlyOne: false };
+  const order = [];
+  const at = [];
+  for (const target of candidates) {
+    const t = firstTouchAt(hitbox, from, target);
+    let place = order.length;
+    while (place > 0 && at[place - 1] > t) place -= 1; // strictly after: a tie keeps the list order
+    order.splice(place, 0, target);
+    at.splice(place, 0, t);
+  }
+  return { order, onlyOne: true };
+}
+
+// Every living hitbox moves by its velocity, hurts what it touches (each thing once: struck; a "first" hitbox only the first its path met
+// this frame, see hitsThisFrame), and loses a frame; the ones
 // with no frames left, or that crossed all they could, are gone. The rule is hitboxHurts (the tags a hitbox ignores). Things with no health left
 // are not hit (a corpse does not spend a pierce). A bullet is slower than the radii it must not skip over (see the
 // validation of weapons), so it cannot jump a target between two frames. When a hit kills the avatar the world stops
@@ -1808,6 +1916,7 @@ function hitboxHurts(hitbox, target) {
 function resolveHitboxes(state, audit = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID); // the window of a bullet is centered on it
   for (const hitbox of state.hitboxes) {
+    const from = { x: hitbox.position.x, y: hitbox.position.y }; // where its movement of this frame starts (firstTouchAt)
     hitbox.position.x += hitbox.velocity.x;
     hitbox.position.y += hitbox.velocity.y;
     // What it may touch: the actors, then the objects near it (the same rule for both, the user, 2026-11-13: a shot hurts a Rock or a
@@ -1815,19 +1924,20 @@ function resolveHitboxes(state, audit = null) {
     const reach = Math.max(hitbox.radius, hitbox.cone ? hitbox.cone.reach : 0);
     const { x, y } = hitbox.position;
     const objects = objectsReaching(state.seed, x - reach, y - reach, x + reach, y + reach);
-    for (const target of [...state.actors, ...objects]) {
-      const name = nameOf(target);
-      if (!hitboxHurts(hitbox, target) || hitbox.struck.includes(name)) continue;
-      if (!hitboxTouches(hitbox, target)) continue;
+    // The candidates, in list order (the actors, then the objects): what it touches, does not ignore and has not struck.
+    const candidates = [...state.actors, ...objects].filter((target) => hitboxHurts(hitbox, target) && !hitbox.struck.includes(nameOf(target)) && hitboxTouches(hitbox, target));
+    const { order, onlyOne } = hitsThisFrame(hitbox, from, candidates);
+    for (const target of order) {
       // The hit lands like any other; a target that cannot take it (no health, canTakeHit) is not struck and spends no pierce.
       if (!landHit(state, audit, hitbox.owner, hitbox.attack, hitbox.damage, target).landed) continue;
-      hitbox.struck.push(name);
+      hitbox.struck.push(nameOf(target));
       if (hitbox.pierceLeft === 0) {
         hitbox.framesLeft = 0; // it crossed all it could: it ends here
         break;
       }
       if (hitbox.pierceLeft !== null) hitbox.pierceLeft -= 1;
       if (worldStops(state)) break; // this hit killed the avatar: the world stops (this hitbox hits nothing else)
+      if (onlyOne) break; // "first": one hit per frame; the next thing, if any, waits for a later frame
     }
     if (hitbox.framesLeft !== null && hitbox.framesLeft > 0) hitbox.framesLeft -= 1; // the hitbox that killed still ends its turn
     if (worldStops(state)) break; // the world stopped: the hitboxes after this one do not move, hurt or lose a frame

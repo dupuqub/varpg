@@ -135,21 +135,61 @@ The user (issue 28, the summary comment): when the avatar's death is tested the 
 
 The user (issue 45, the last comment): both keys are removed (data, `REPEATS`, `SCALES`, `checkRepeat`, `checkScale`, `ATTACK_KEYS`, `BODY_ATTACK_KEYS`, `HITBOX_ATTACK_KEYS`, `CHECK_ATTACK_KEY`, the copy in the hitbox; tests 195 to 198 are deleted with their README rows, test 206 and any other assertion that reads the keys is adapted and named in the report). New check in `assertValidDefinitions`: a `perWeight` above 0 is refused on an attack that is not melee. Melee here: the body slam, an attack of an actor's recipe (the bite), the `melee` of a part; not melee: the `weapon` of a part (its projectile). New test for the check (a patched weapon whose damage uses the weight is refused; today's data loads). Raise `DEFINITIONS_VERSION` and the fingerprint of test 129. Update point 7 of the action model and the two "Every attack record has..." points in `AGENTS.md`, and the table of step 4 in `docs/base-plan.md` (the size measured beside P4 and P5: 2778 bytes per snap, gone). The basic rule "an actor is never hurt twice by the same hitbox in the same frame" is already `struck`: write it in `AGENTS.md`, no code. Whole-state tests: the state loses two keys per attack, so say which known answers moved, if any. Closes issue 45; R4.5 of issue 48.
 
-### [ ] I19. A hitbox says how it hits: only the first on its path, or all it touches (model: opus; issues 43 and 44)
+### [x] I19. A hitbox says how it hits: only the first on its path, or all it touches (model: opus; issues 43 and 44)
 
 **Files:** `src/data.js`, `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/weapons.md`.
 
 The user (issues 43 and 44, the last comments): a hitbox carries a TAG that says how it works. "Hits all touched" (the sword, and the bite keeps hitting what it hits today): everything in its contact is hit, Rocks and Shrooms included. "Hits only the first" (bullets): only the first thing its path meets in that frame, actors and objects alike, sorted by how far along its movement each is touched; ties keep the list order (actors in list order, then objects in the order of `objectsReaching`). Things that cannot be hit (ignored tags, the owner, the dead, the already struck) never count as first. With pierce above 0 the bullet hits the next thing in a later frame, never the same twice. **The name is the coordinator's proposal, for the user to overrule:** a key of the attack, `hits: "first" | "all"`, in `ATTACK_KEYS` and `HITBOX_ATTACK_KEYS`, checked on load like `exit`. How "how far along its movement" is found is the helper's choice (the simplest exact one: the time of first touch of the moving circle against each candidate's circle within the frame); say it in the report. Tests: the scene of R3.1 (a pierce 0 bullet meets a Rock a few pixels before a Biter in the same frame: the Rock is hit, the Biter untouched) and its mirror; a cone over two Biters and a Rock writes three audit lines; a bullet with pierce 1 touching two things in one frame hits one per frame. Raise `DEFINITIONS_VERSION`. Say which whole-state tests moved (a bullet that used to hit two things in one frame now hits one). Closes issues 43 and 44.
 
-### [ ] I20. A hit of 0 is still a hit (model: sonnet; issue 46)
+### [x] I20. A hit of 0 is still a hit (model: sonnet; issue 46)
 
 **Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `src/sim.js` (comments only).
 
 The user (issue 46): a hit that carries no damage is a hit: it writes its audit line (total 0), marks `struck`, spends a pierce and stops a bullet; it does not restart the shield's wait (it is not damage). No rule changes. Write it in "Damage" in `AGENTS.md` (replacing "an attack that hurts nobody writes none") and in the comment of `finalAttack` (issue 48). New test: the three scenes of finding R5.1. Closes issue 46; comment on issue 48 and close it if nothing of it is left.
 
-### [ ] I21. Tell the user (coordinator)
+### [x] I21. Tell the user (coordinator)
 
 Close issue 53. One message in Brazilian Portuguese: what was built, the name proposed for the TAG, what moved.
+
+### [x] I22. A line of the combat log for the aborted mission (model: haiku; issue 58)
+
+**Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15, issue 58): the combat log gets a line when the mission is aborted, like `start` and `resume`. Beside `combatAuditStartLine` and `combatAuditResumeLine`: `combatAuditAbortedLine(frame)` returns the JSON line `{ frame, event: "aborted" }`. The screen writes it (the Screen desk's parcel T4); the rules still never read the log. The comment that lists the kinds of line, a test with its row (the line's text, and `combatAuditTotals` skipping it), the caudit point of `AGENTS.md` and "Code layout". Closes issue 58.
+
+### [x] I23. The history past the death is written down and tested (model: sonnet; issue 42)
+
+**Files:** `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`, `docs/step-order.md`.
+
+The user (issue 42, the comments of 2026-11-14, and again 2026-11-15): after the avatar's death the buttons stay and the state freezes (only the frames stop). Back and forward still walk the saved snaps. Pressing play on a frame from before the death goes on from there: the death is undone, the mission is `running` again. It is a debugger for now; in the finished game the death will not be undoable by going back in time (later). The combat log shows that an abort happened (the `aborted` line, issue 58) and then that the user went back and resumed (the `resume` line): the log only grows. No code change is expected: write it in `AGENTS.md` ("Destruction" and "Frame debug") and `docs/step-order.md`, and test it with `createHistory`, `recordFrame`, `stateFromSnap`, `discardAfter`, `crossCheck`: (1) after the death, `step` changes nothing and the history's last snap says `aborted`; (2) a snap from before the death comes back as `running` and `step` plays on from it (the avatar's last health taken again on the same frame if the same inputs are played, a different state if other inputs); (3) `crossCheck` over a history that ends in the aborted snap, and over one that went back and played on, returns `null`; (4) a log built with the lines `aborted` and `resume` is kept whole (nothing is removed when the history is cut). If a test shows the code does something else, stop and report. Closes issue 42.
+
+### [x] I24. A weightless thing breaks at the first contact (model: sonnet; issue 47)
+
+**Files:** `src/sim.js`, `src/data.js` (comments only, unless the helper finds a reason), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15): "things with no weight break immediately; health is not a parameter for what weighs 0". Build: a contact between a thing of weight 0 and a body that hurts objects (`bodyHurts`: today the avatar, and an actor that `crushes`) breaks it at once, whatever its health and with no minimum impact, like crushing: no push, no bounce, the mover keeps its speed and goes on. A Biter does not break it (its body ignores `object`, the user's rule of 2026-11-10: an actor never breaks an object) and stands against it as against a Rock; the coordinator's reading, written in `AGENTS.md` as the agent's. The contact still writes its audit lines (the weightless thing's slam of total 0 on the avatar, and the avatar's hit on it; hits of 0 are hits, issue 46). One small named function with the user's sentence above it; the health of the Branch (1) stays in the data only because every object has the box `{ now, max }`, and no rule reads it for weight 0. Test 208 is rewritten for the new rule (a slow contact, a fast one, and the avatar starting in touch: all break it), new test for the Biter not breaking it, and the audit lines. Raise `DEFINITIONS_VERSION` only if `src/data.js` changes in more than comments. Write in `AGENTS.md` ("Weight 0", the Branch paragraph, "Collision with still things") and remove the sentence that says a slow walk can stop the avatar. Closes issue 47.
+
+### [x] I25. A negative resistance amplifies the damage (model: sonnet; issue 34, the parked part)
+
+**Files:** `src/sim.js`, `src/data.js` (only if a comment needs it), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15): "negative resistance amplifies damage". Today `assertValidDefinitions` refuses points below 0. Allow them: the curve is unchanged, `reduction = points / (points + resistanceScale)`, so negative points give a negative reduction and the hit grows (example with the scale 100: -50 points is a reduction of -1, damage x2; -75 gives x4; the amplification grows without limit as the points go toward minus the scale; that is the agent's reading of the formula, not the user's choice, say so in `AGENTS.md`). The guard: points plus the scale must stay above 0, or the curve divides by zero or flips. What must not exist cannot be made: refuse on load a part whose resistance (or shield resistance) is at or below minus the scale, refuse in `assertValidBlueprint` a blueprint whose summed resistance of a type (with the shield's, when a Generator is in it) is at or below minus the scale, and make `resolveDamage` fail loudly (a thrown Error naming the type and the points) if it ever sees points plus the scale at or below 0, so a future buff cannot reach `NaN` or a negative damage unseen. Tests: a part with -50 blunt points makes a blunt 10 hit resolve to 20; -75 to 40; the three refusals; today's data unchanged (every whole-state test bit for bit). Update `AGENTS.md` ("Damage", the resistance line of "The kit of parts") and the comments of `resolveDamage`. Comment on issue 34 and close it.
+
+### [x] I26. Tell the user (coordinator)
+
+One short message in Brazilian Portuguese with what was built and the readings taken without asking.
+
+### [x] I27. A weightless thing breaks with anything (model: sonnet; corrects the reading of I24)
+
+**Files:** `src/sim.js`, `src/data.js` (comments only), `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15, after I24): "the Branch has to break with anything. It is only a visual mark for entertainment, to see things breaking. Today it is a Branch, but it is a placeholder for the things we want to break to show mechas and huge monsters as machines of destruction." So the coordinator's reading in I24 (a Biter does not break it) is wrong and goes away. Build: any actor's body that touches a thing of weight 0 breaks it at once (the Biter too, although its body ignores `object` for damage: breaking a weightless thing is not damage, health is not a parameter), with no push, no stop, the actor keeps its speed and goes through. Any hit that lands on it (a bullet, a hitbox that does not ignore `object`) breaks it whatever the damage resolved to (a hit of 0 too). The hit itself follows today's rules unchanged (a bullet spends its pierce or stops as on any hit: the coordinator's reading, say so in `AGENTS.md`). The rule "an actor never breaks an object" (2026-11-10) stays for things with weight; write the exception beside it. Audit lines as today where a hit lands; a Biter's contact writes what `breakWeightless` writes for the avatar unless that would need a damage the Biter does not have, in which case stop and report what you chose. Test 226 is rewritten (the Biter breaks it and walks on), new tests for a bullet of resolved 0 breaking it and for the user's sentence (every kind of actor in the data breaks it by contact). Remove the I24 reading from `AGENTS.md`. Raise `DEFINITIONS_VERSION` only if data changes beyond comments.
+
+### [x] I28. Everything that breaks a weightless thing writes a line (model: sonnet; replaces the first I28, a wrong reading)
+
+**Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
+
+The user (2026-11-15): "wrong, everything writes the Branch, we have to know why projectiles were lost." (The coordinator had read his earlier sentence as "no line at all"; that reading is dropped and was never built.) Also confirmed by him: a bullet stops on a weightless thing if it has no pierce. Build: every break of a thing of weight 0 writes a line in the combat audit, whoever did it. A bullet or a hitbox that lands on it already writes its hit line (keep; the line must let a reader see that the projectile was spent or ended on the Branch: if today's line already names the attacker, the target `branch` and the total, that is enough, say so; if not, stop and report what is missing). The avatar's contact keeps its lines of I24. New: the contact of an actor whose body does not hurt objects (the Biter, the Dummy) writes a line too, a hit of total 0 from that actor on the Branch, through the same door as the others (`landHit` with an empty packet, or the smallest equal thing; no invented damage). Test 226 changes (the Biter's break writes one line of total 0), test 233 asserts a line for every kind of actor, a test that a bullet ended on a Branch leaves a line naming the Branch. Write in `AGENTS.md` ("Weight 0", combat audit) and remove the I27 reading that a Biter writes no line.
 
 ## Waiting for the user (do not start)
 
@@ -157,8 +197,6 @@ One question at a time, the one that unblocks most first. The model is the one t
 
 | Issue | Question | Unblocks | Model after the answer |
 |---|---|---|---|
-| 47 | Does a weightless thing always break at the first collision? | Best answered after playing I14 | (a) haiku (docs), (b) sonnet |
-| 42 | After the death, can the history go back past it? | S2 (Screen desk) | Screen desk, sonnet |
 
 ## The Screen desk's parcels (for a Screen desk conversation, not this coordinator)
 
