@@ -175,7 +175,7 @@ The user (2026-11-15): "things with no weight break immediately; health is not a
 
 The user (2026-11-15): "negative resistance amplifies damage". Today `assertValidDefinitions` refuses points below 0. Allow them: the curve is unchanged, `reduction = points / (points + resistanceScale)`, so negative points give a negative reduction and the hit grows (example with the scale 100: -50 points is a reduction of -1, damage x2; -75 gives x4; the amplification grows without limit as the points go toward minus the scale; that is the agent's reading of the formula, not the user's choice, say so in `AGENTS.md`). The guard: points plus the scale must stay above 0, or the curve divides by zero or flips. What must not exist cannot be made: refuse on load a part whose resistance (or shield resistance) is at or below minus the scale, refuse in `assertValidBlueprint` a blueprint whose summed resistance of a type (with the shield's, when a Generator is in it) is at or below minus the scale, and make `resolveDamage` fail loudly (a thrown Error naming the type and the points) if it ever sees points plus the scale at or below 0, so a future buff cannot reach `NaN` or a negative damage unseen. Tests: a part with -50 blunt points makes a blunt 10 hit resolve to 20; -75 to 40; the three refusals; today's data unchanged (every whole-state test bit for bit). Update `AGENTS.md` ("Damage", the resistance line of "The kit of parts") and the comments of `resolveDamage`. Comment on issue 34 and close it.
 
-### [ ] I26. Tell the user (coordinator)
+### [x] I26. Tell the user (coordinator)
 
 One short message in Brazilian Portuguese with what was built and the readings taken without asking.
 
