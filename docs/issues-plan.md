@@ -151,7 +151,7 @@ The user (issue 46): a hit that carries no damage is a hit: it writes its audit 
 
 Close issue 53. One message in Brazilian Portuguese: what was built, the name proposed for the TAG, what moved.
 
-### [ ] I22. A line of the combat log for the aborted mission (model: haiku; issue 58)
+### [x] I22. A line of the combat log for the aborted mission (model: haiku; issue 58)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 

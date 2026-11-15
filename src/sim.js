@@ -1648,6 +1648,8 @@ function fireWeapons(state, player, byTag) {
 //           that a frame written twice, or an actor dying twice, can be understood: { frame, event }.
 //   start   a chamber begins: { frame, event, run, chamber }. Each chamber starts a new log (the user, 2026-11-13, issue 18), and this
 //           line says which run and chamber the lines after it belong to.
+//   aborted the mission is aborted: { frame, event }. The user (2026-11-15, issue 58) asked for it, like start and resume; the screen
+//           writes it once, right after the step in which the mission became aborted.
 function combatAuditHitLine(frame, source, attack, target, resolved, taken) {
   return JSON.stringify({
     frame,
@@ -1669,6 +1671,12 @@ function combatAuditResumeLine(frame) {
 
 function combatAuditStartLine(frame, run, chamber) {
   return JSON.stringify({ frame, event: "start", run, chamber });
+}
+
+// The user (2026-11-15, issue 58) asked for a line when the mission is aborted, like start and resume. The screen writes it once,
+// right after the step in which the mission became aborted; the rules never read the log.
+function combatAuditAbortedLine(frame) {
+  return JSON.stringify({ frame, event: "aborted" });
 }
 
 // The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,

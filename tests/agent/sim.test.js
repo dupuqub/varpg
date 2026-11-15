@@ -5004,3 +5004,18 @@ test("220 a hit of 0 is still a hit (the user, 2026-11-14, issue 46; the three s
   assert.deepStrictEqual(branch.lines.map((entry) => [entry.source, entry.attack, entry.target, entry.total]).slice(0, 1), [["branch " + branch.name, "bodySlam", "avatar_1", 0]], "the Branch's slam of 0 is first");
   assert.deepStrictEqual([branch.lines[1].source, branch.lines[1].target], ["avatar_1", "branch " + branch.name], "then the avatar's hit");
 });
+
+test("221 the aborted line of the combat audit is { frame, event: \"aborted\" } in that order, and the totals skip it: the text of combatAuditAbortedLine(37) is exactly '{\"frame\":37,\"event\":\"aborted\"}', and the totals of a log with one hit and the aborted line are the same as the totals of the log with only the hit", () => {
+  const result = run(`
+    const part = { type: "puncture", amount: 10, points: 0, fromShield: 0, reduction: 0, after: 10 };
+    const hit = combatAuditHitLine(12, "biter_3", "bite", "avatar_1", { parts: [part], total: 8 }, { shield: 3, health: 5 });
+    return {
+      text: combatAuditAbortedLine(37),
+      withAborted: combatAuditTotals([hit, combatAuditAbortedLine(37)]),
+      without: combatAuditTotals([hit]),
+    };
+  `);
+  const r = plain(result);
+  assert.strictEqual(r.text, '{"frame":37,"event":"aborted"}');
+  assert.deepStrictEqual(r.withAborted, r.without, "the aborted line counts for nothing");
+});
