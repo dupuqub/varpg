@@ -101,7 +101,7 @@ Do issue 29's "To do". The damage does not change, only the record: the whole-st
 
 Do issue 32's "To do". The hard part: `resolveHitboxes` filters before it marks `struck` and spends a pierce, so moving the guard into `landHit` alone would change when a pierce is spent. Choose where the one function is asked so every whole-state test stays bit for bit the same, and say in the report why that place. New test: `landHit` twice on the same Rock with an overkill writes one line and says `broken` once (or the equivalent for the place chosen). Closes issue 32.
 
-### [ ] I13. One function builds an attack record (model: opus; issue 33)
+### [x] I13. One function builds an attack record (model: opus; issue 33)
 
 **Files:** `src/sim.js`, `tests/agent/sim.test.js`, `tests/agent/README.md`, `AGENTS.md`.
 

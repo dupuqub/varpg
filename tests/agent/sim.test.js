@@ -4700,3 +4700,32 @@ test("205 a target with no health takes no hit, by one rule asked in landHit (ca
   assert.strictEqual(r.lines, 2, "one line for the Rock and one for the Biter with health, none for the hits that did not land");
 });
 
+// ---- One function builds an attack record (issue 33) ----
+test("206 the keys every attack shares are checked by one function in the four places an attack recipe lives: without its scale, the body slam of the constants, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place; and a record built from a recipe carries copies of the shared keys (changing the record's target and ignores leaves the recipe as it was)", () => {
+  const SCALE = '          scale: "none", // how its damage grows at the hit';
+  const PART_SCALE = '\n        scale: "none", // how its damage grows at the hit'; // the newline keeps it from matching inside the bite's line
+  const nth = (text, from, n) => { let at = -1; for (let i = 0; i <= n; i++) at = text.indexOf(from, at + 1); assert.notStrictEqual(at, -1, "the patch must apply"); return text.slice(0, at) + text.slice(at).replace(from, "\n        // no scale"); };
+  const refused = (patch, message) => assert.throws(() => loadGame((text) => { const patched = patch(text); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
+  refused((text) => text.replace(', repeat: "contact", scale: "impact" }', ', repeat: "contact" }'), /scale of the attack bodySlam of the constants/);
+  refused((text) => text.replace(SCALE, "          // no scale"), /scale of the attack bite of the actor biter/);
+  refused((text) => nth(text, PART_SCALE, 0), /scale of the weapon of the part repeater-arm/);
+  refused((text) => nth(text, PART_SCALE, 1), /scale of the melee of the part sword-arm/);
+  const result = run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = createChamber2State(1, 1, run.blueprint);
+    const avatar = s.actors[0];
+    const records = ["repeater-arm", "sword-arm"].map((part) => {
+      const record = avatar.attacks[part];
+      const keys = ATTACK_KEYS.every((key) => record[key] !== undefined);
+      record.target.tag = "changed"; record.ignores.push("changed");
+      const recipe = DEFINITIONS.parts[part].weapon ?? DEFINITIONS.parts[part].melee;
+      return { keys, recipeTag: recipe.target.tag, recipeIgnores: recipe.ignores.includes("changed") };
+    });
+    return records;
+  `);
+  assert.deepStrictEqual(plain(result), [
+    { keys: true, recipeTag: "enemy", recipeIgnores: false },
+    { keys: true, recipeTag: "enemy", recipeIgnores: false },
+  ]);
+});
+

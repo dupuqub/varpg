@@ -273,6 +273,37 @@ function checkTarget(target, where) {
   }
 }
 
+// The keys every aimed attack shares (issue 33: the user's "constructor ... without a thousand places to edit"): the bite of a recipe,
+// the weapon and the melee of a part all carry them, in this order. The body slam aims at nothing, so it has only BODY_ATTACK_KEYS
+// (its ignores come from the recipe's bodyIgnores). A new key of the action model is added here, once, and to CHECK_ATTACK_KEY.
+const ATTACK_KEYS = ["target", "exit", "repeat", "scale", "ignores"];
+const BODY_ATTACK_KEYS = ["repeat", "scale", "ignores"];
+// The keys of its attack that a hitbox keeps, copied at its birth (the owner may be gone before it ends).
+const HITBOX_ATTACK_KEYS = ["repeat", "ignores"];
+
+// A copy of the given keys of an attack recipe (or record), in the order of the list, deep enough that changing the copy never changes
+// the recipe. The one place a builder takes the shared keys from (addWeaponAttacks, spawnHitbox; finalAttacks copies its whole recipe).
+function attackKeys(source, keys = ATTACK_KEYS) {
+  const copy = {};
+  for (const key of keys) copy[key] = source[key] === undefined ? undefined : JSON.parse(JSON.stringify(source[key])); // a record made by hand in a test may lack a key
+  return copy;
+}
+
+// The check of each shared key; ignores is checked with the other lists of tags, below in assertValidDefinitions.
+const CHECK_ATTACK_KEY = {
+  target: (value, attackName, where) => checkTarget(value, where),
+  exit: (value, attackName, where) => checkExit(value, where),
+  repeat: checkRepeat,
+  scale: checkScale,
+  ignores: null,
+};
+
+// The one check of the shared keys of an attack, asked in the four places an attack recipe lives: the constants (the body slam),
+// the attacks of an actor's recipe, the weapon and the melee of a part.
+function checkAttackKeys(recipe, attackName, where, keys = ATTACK_KEYS) {
+  for (const key of keys) if (CHECK_ATTACK_KEY[key] !== null) CHECK_ATTACK_KEY[key](recipe[key], attackName, where);
+}
+
 function assertValidDefinitions() {
   // The things made by the seed from ranges: every object, and the actors of the crowds (the Dummy and the Biter).
   for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy, biter: DEFINITIONS.actors.biter })) {
@@ -325,10 +356,7 @@ function assertValidDefinitions() {
     const weapon = part.weapon;
     if (!weapon) continue;
     const where = "the weapon of the part " + id;
-    checkTarget(weapon.target, where);
-    checkExit(weapon.exit, where);
-    checkRepeat(weapon.repeat, id, where);
-    checkScale(weapon.scale, id, where);
+    checkAttackKeys(weapon, id, where);
     const whole = (value, least) => Number.isInteger(value) && value >= least;
     if (!whole(weapon.intervalFrames, 1) || !whole(weapon.reloadFrames, 1)) throw new Error("The intervalFrames and reloadFrames of " + where + " must be whole numbers, 1 or more");
     const rounds = weapon.rounds;
@@ -350,10 +378,7 @@ function assertValidDefinitions() {
     if (!melee) continue;
     const where = "the melee of the part " + id;
     if (part.weapon) throw new Error("The part " + id + " has weapon and melee: a part is one or the other");
-    checkTarget(melee.target, where);
-    checkExit(melee.exit, where);
-    checkRepeat(melee.repeat, id, where);
-    checkScale(melee.scale, id, where);
+    checkAttackKeys(melee, id, where);
     if (!Number.isInteger(melee.reach) || melee.reach < 1) throw new Error("The reach of " + where + " must be a whole number of pixels, 1 or more, and it is " + melee.reach);
     if (!(melee.angleDegrees > 0 && melee.angleDegrees <= 180)) throw new Error("The angleDegrees of " + where + " must be above 0 and at most 180 (half of it is the opening to each side, at most 90), and it is " + melee.angleDegrees);
     for (const field of ["windupFrames", "recoveryFrames"]) {
@@ -369,8 +394,7 @@ function assertValidDefinitions() {
     }
   }
   // The body slam, the first attack of every thing (it lives in the constants, not in a recipe): its repeat and scale are checked like the others.
-  checkRepeat(DEFINITIONS.constants.bodySlam.attack.repeat, "bodySlam", "the attack bodySlam of the constants");
-  checkScale(DEFINITIONS.constants.bodySlam.attack.scale, "bodySlam", "the attack bodySlam of the constants");
+  checkAttackKeys(DEFINITIONS.constants.bodySlam.attack, "bodySlam", "the attack bodySlam of the constants", BODY_ATTACK_KEYS);
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
@@ -386,10 +410,7 @@ function assertValidDefinitions() {
       for (const field of ["reach", "windupFrames", "freezeFrames"]) {
         if (!Number.isInteger(attack[field]) || attack[field] < 0) throw new Error("The " + field + " of " + where + " must be a whole number, 0 or more, and it is " + attack[field]);
       }
-      checkTarget(attack.target, where);
-      checkExit(attack.exit, where);
-      checkRepeat(attack.repeat, name, where);
-      checkScale(attack.scale, name, where);
+      checkAttackKeys(attack, name, where);
       const hitbox = attack.hitbox;
       if (!hitbox || !Number.isInteger(hitbox.radius) || hitbox.radius < 1 || !Number.isInteger(hitbox.frames) || hitbox.frames < 1) {
         throw new Error("The hitbox of " + where + " needs a whole radius and whole frames, 1 or more: " + JSON.stringify(hitbox));
@@ -555,6 +576,7 @@ function finalAttacks(thing) {
   for (const [name, recipe] of Object.entries(attackRecipes(thing))) {
     const base = packetOf(recipe.damage, thing.weight);
     const { damage, ...own } = recipe;
+    // The whole recipe is copied in its own order, so the shared keys (ATTACK_KEYS, checked by checkAttackKeys) come with the rest.
     attacks[name] = { base, now: { ...base }, ...JSON.parse(JSON.stringify(own)) };
   }
   return attacks;
@@ -1436,7 +1458,7 @@ function meleeStates(blueprint) {
 function addWeaponAttacks(actor) {
   for (const weapon of actor.weapons ?? []) {
     const { damage, ...projectile } = DEFINITIONS.parts[weapon.part].weapon.projectile;
-    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, target: { ...DEFINITIONS.parts[weapon.part].weapon.target }, exit: DEFINITIONS.parts[weapon.part].weapon.exit, repeat: DEFINITIONS.parts[weapon.part].weapon.repeat, scale: DEFINITIONS.parts[weapon.part].weapon.scale, ignores: [...DEFINITIONS.parts[weapon.part].weapon.ignores] };
+    actor.attacks[weapon.part] = { base: { ...damage }, now: { ...damage }, projectile, ...attackKeys(DEFINITIONS.parts[weapon.part].weapon) };
   }
   // A melee attack: the packet like every attack (flat + perWeight x weight, "terms" keeps the recipe so it follows the
   // weight every frame, see finalAttackNow), and the cone: its reach, the half opening as cosine and sine (computed
@@ -1447,11 +1469,7 @@ function addWeaponAttacks(actor) {
     const half = recipe.angleDegrees / 2;
     actor.attacks[melee.part] = {
       base, now: { ...base }, terms: JSON.parse(JSON.stringify(recipe.damage)),
-      target: { ...recipe.target },
-      exit: recipe.exit,
-      repeat: recipe.repeat,
-      scale: recipe.scale,
-      ignores: [...recipe.ignores],
+      ...attackKeys(recipe),
       reach: recipe.reach, cosHalf: cosDegrees(half), sinHalf: sinDegrees(half),
       windupFrames: recipe.windupFrames, recoveryFrames: recipe.recoveryFrames, aimCorrection: recipe.aimCorrection,
     };
@@ -1743,8 +1761,9 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     velocity: { x: towardX * shape.speed, y: towardY * shape.speed },
     struck: [],
     pierceLeft: shape.pierce,
-    repeat: attack.repeat, // when it may hurt the same target again (nothing reads it yet)
-    ignores: [...attack.ignores], // the tags it does not hurt: a copy of its attack's list at its birth (the owner may be gone before it ends)
+    // repeat: when it may hurt the same target again (nothing reads it yet); ignores: the tags it does not hurt, a copy of its
+    // attack's list at its birth (the owner may be gone before it ends).
+    ...attackKeys(attack, HITBOX_ATTACK_KEYS),
   };
   state.hitboxes.push(hitbox);
   if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
