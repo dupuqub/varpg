@@ -204,6 +204,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Movement and input", issue 66 parcel 2):
   - "it was checked in Chromium with real touch events (half stick = 0.5, beyond the radius = 1, dead zone = 0, a second finger dashes in the movement direction and spends a charge, the top bar still takes taps)."
 
+## 2026-11-12: the frame debug buttons checked in Chromium (section "Simulation", "Frame debug")
+
+- **Who:** the agent that built the frame debug buttons, on the user's request of 2026-11-12 (commit 1ee9b93).
+- **What it replaced:** nothing; a past measurement. The logic is still in `src/main.js` with no Node test (that stays in `AGENTS.md`); the history it walks is tested in Node (tests 222 to 225, named in `AGENTS.md`).
+- **Moved from AGENTS.md** (section "Simulation", issue 66 parcel 18):
+  - "it was checked in Chromium (back and forward return the same snaps, play from the past keeps the cross-check clean)" (from "The logic is in `src/main.js` (it touches the page), so it has no Node test; it was checked in Chromium (back and forward return the same snaps, play from the past keeps the cross-check clean).", which is now "The logic is in `src/main.js` (it touches the page), so it has no Node test.")
+
 ## 2026-11-12: going back while paused is built (section "Run history (two logs)", "Going back while paused")
 
 - **Who decided:** the user asked for the frame debug buttons (2026-11-12, commit 1ee9b93: pause and play, one frame back, one frame forward).
