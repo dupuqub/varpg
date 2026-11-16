@@ -147,6 +147,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
   - "Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed)."
 
+## 2026-11-14: the Branch is a third object of the definitions (section "State, definitions, blueprint and rules", "Definitions")
+
+- **Who decided:** the user (issue 51: "weightless branches in combat and in the movement test, 10% of the seed, just to have it running"; written into `src/data.js` on 2026-11-14, commit e189203).
+- **What it replaced:** the count of 2026-11-13 (commit b64ac02), five things with two objects, the rock and the Shroom. Today `DEFINITIONS.objects` holds the rock, the Shroom and the Branch, all placed only by the seed (the Branch through `rareKinds` of the layer); test 73 keeps the three entries.
+- **Moved from AGENTS.md** (section "State, definitions, blueprint and rules", issue 66 parcel 19):
+  - "There are exactly five things in it today" and "and two objects (`DEFINITIONS.objects`: the rock and the Shroom, created only by the seed, from ranges)" (from "There are exactly five things in it today: three actors (...) and two objects (`DEFINITIONS.objects`: the rock and the Shroom, created only by the seed, from ranges).", which is now "There are exactly six things in it today: three actors (...) and three objects (`DEFINITIONS.objects`: the rock, the Shroom and the Branch, created only by the seed, from ranges; test 73).")
+
 ## 2026-11-13: the Radar is read by `pickTarget`, no longer by `closestTarget` (section "Theme: mechas", "Head")
 
 - **Who:** the Rules desk, on the user's direction of 2026-11-13 (issue 13, step 1b, commit 13eb13f). The rule of the Radar is the user's (2026-11-13, commit 8a37a4b) and did not change.
@@ -247,6 +254,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "The Dummy", issue 66 parcel 5):
   - "(History: on its first day a taken place was refused and the seed tried another, up to a number of tries; the user replaced that with the birth rule the same night, and `safeRadius` and `placementTries` of the Dummies died with it.)"
 
+## 2026-11-11: the result of an effect is written into the actor, not left unstored (section "State, definitions, blueprint and rules", "Effects: recipe versus result")
+
+- **Who decided:** the user, correcting an agent's reading (commit 9ea6722, "The state is rich and small: the user's rule replaces an agent's reading").
+- **His words:** "I do not know how to work another way; leaving things out of the state is not optimal" (kept in `AGENTS.md`, in the rule "The state is rich and small at the same time").
+- **What it replaced:** the agent's text "How much it gives *now* is **not stored**: a pure function (like `finalSpeed`) computes it every frame from the recipe, the blueprint and the state. Only something with memory goes into the state, such as a buff that lasts some more time." and the warning "do not store derived values (a final speed, a total damage) in actors for convenience". Today the result is calculated by a final function and written into the actor.
+- **Moved from AGENTS.md** (section "State, definitions, blueprint and rules", issue 66 parcel 19):
+  - "(History: this file used to say the result is "not stored" and warned against storing derived values. That was an agent's reading, not the user's rule, and he corrected it on 2026-11-11.)"
+
 ## 2026-11-11: static values once, at the start of the run; dynamic values every frame (section "Actor", "An actor in the state")
 
 - **Who decided:** the user, correcting an agent's reading of his rule (commit 611e9cc, test 79).
@@ -304,3 +319,11 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** Chamber 1 drew the window as an amber overlay fixed on the player (`drawCollisionWindow` in `src/render.js`), which was removed.
 - **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
   - ", and the overlay was removed" (from "(The user no longer wants to see the collision boxes, and the overlay was removed.)", which is now "(The user no longer wants to see the collision boxes.)")
+
+## 2026-11-09: nothing is pre-resolved; the blueprint stays an input (section "State, definitions, blueprint and rules", "Blueprint")
+
+- **Who decided:** the user, on a proposal of the agent (commit 00a3c38, "Put the initial state in the definitions; document the build and effects").
+- **What it replaced:** the agent's proposal of a "pre-run state": an avatar "already prepared" with the build (today the blueprint) applied. The user found it confusing and it was dropped. Today the blueprint is an input of the run, the third argument of `step` and of the `final...` functions that need it (that stays in `AGENTS.md`, with "Nothing is pre-resolved (the user, 2026-11-09).").
+- **Moved from AGENTS.md** (section "State, definitions, blueprint and rules", issue 66 parcel 19):
+  - "(The agent once proposed an avatar "already prepared" with the blueprint applied."
+  - "The user found it confusing and it was dropped: nothing is pre-resolved.)" (its rule, "nothing is pre-resolved", stays in `AGENTS.md`)
