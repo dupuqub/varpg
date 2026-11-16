@@ -99,7 +99,7 @@ function combatReportHitLine(hit) {
     `the share left, ${(o.share * 100).toFixed(1)}%, against the body: ${combatReportPartsText(o.parts)} = ${number(o.total)}; ${end}`;
 }
 
-// The combat report: the combat blueprint plays 900 frames (15 seconds) standing still among the 40 Biters of Chamber 2, with the
+// The combat report: the combat blueprint plays 900 frames (15 seconds) standing still among the 48 Biters of Chamber 2, with the
 // journal on, and the text says what every kind of hit did (the totals), how many hits took nothing, every hit that broke the shield
 // (they are rarely among the last ones) and the last hits one by one. The same run gives the same text everywhere (the simulation
 // is deterministic).

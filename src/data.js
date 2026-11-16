@@ -1,5 +1,5 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
-// There are five things in it: three actors, the avatar, the Dummy and the Biter, and two objects, the Rock and the Shroom.
+// There are six things in it: three actors, the avatar, the Dummy and the Biter, and three objects, the Rock, the Shroom and the Branch.
 // The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
 // The Dummy and the Biter are actors made by the seed from the ranges of their entries, like an object (see "terrain" and "maps" below).
 // Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object

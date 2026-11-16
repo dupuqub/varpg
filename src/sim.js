@@ -1388,7 +1388,7 @@ function shareCell(a, b) {
 }
 
 // The index of the grid: for each cell ("x,y"), the numbers of the actors that move (not the avatar) that cover it. It is made again in every
-// step from actor.cells (it is not part of the state), and kept right while the collisions push the Dummies.
+// step from actor.cells (it is not part of the state), and kept right while the collisions push the actors that move.
 function addToCells(inCell, number, cells) {
   for (let y = cells.from.y; y <= cells.to.y; y++) {
     for (let x = cells.from.x; x <= cells.to.x; x++) {
@@ -1427,45 +1427,45 @@ function nextInCells(inCell, cells, after) {
 // with the actors that move after it in the list (so each pair is looked at once). (The objects were met in the movement, by collideWithObjects, like
 // the avatar's.) The result is exactly the one of testing every
 // pair in that order; the grid only skips the pairs that cannot touch:
-// - a Dummy is tested against the avatar only if they share a cell, and against the Dummies that share a cell with it;
+// - an actor that moves is tested against the avatar only if they share a cell, and against the actors that move that share a cell with it;
 //   the avatar is pushed too, so its cells are written again after a push (it is not in the index, only read);
 // - the cells are read from the actors (actor.cells, written by step after the movement), and whenever a collision
-//   pushes a Dummy its cells are written again at once, so a Dummy pushed into a third one in the same step still
-//   finds it. That is why the next Dummy to test is asked again after every test (nextInCells), instead of from a
+//   pushes an actor its cells are written again at once, so an actor pushed into a third one in the same step still
+//   finds it. That is why the next actor to test is asked again after every test (nextInCells), instead of from a
 //   list made before.
 function collideActors(state, lastContacts, journal = null) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-  const dummies = state.actors.filter((actor) => actor.move && !isAvatar(actor));
+  const movers = state.actors.filter((actor) => actor.move && !isAvatar(actor));
 
   const inCell = new Map();
-  dummies.forEach((dummy, number) => addToCells(inCell, number, dummy.cells));
+  movers.forEach((mover, number) => addToCells(inCell, number, mover.cells));
 
-  // A Dummy moved: its cells are written again, in the actor and in the index.
+  // An actor moved: its cells are written again, in the actor and in the index.
   const refreshCells = (number) => {
-    removeFromCells(inCell, number, dummies[number].cells);
-    setCells(dummies[number], state.grid);
-    addToCells(inCell, number, dummies[number].cells);
+    removeFromCells(inCell, number, movers[number].cells);
+    setCells(movers[number], state.grid);
+    addToCells(inCell, number, movers[number].cells);
   };
 
-  for (let i = 0; i < dummies.length; i++) {
-    const dummy = dummies[i];
+  for (let i = 0; i < movers.length; i++) {
+    const mover = movers[i];
 
-    if (shareCell(dummy.cells, player.cells)) {
-      if (touchActors(state, lastContacts, dummy, player, dummy.id + "|" + AVATAR_ID, journal)) {
+    if (shareCell(mover.cells, player.cells)) {
+      if (touchActors(state, lastContacts, mover, player, mover.id + "|" + AVATAR_ID, journal)) {
         refreshCells(i);
         setCells(player, state.grid); // the avatar was pushed too (it is not in the index, only its cells are read)
       }
       if (worldStops(state)) return; // this whole contact killed the avatar: the world stops (no more contacts)
     }
 
-    let j = nextInCells(inCell, dummy.cells, i);
+    let j = nextInCells(inCell, mover.cells, i);
     while (j !== -1) {
-      if (touchActors(state, lastContacts, dummy, dummies[j], dummy.id + "|" + dummies[j].id, journal)) {
+      if (touchActors(state, lastContacts, mover, movers[j], mover.id + "|" + movers[j].id, journal)) {
         refreshCells(i);
         refreshCells(j);
       }
       if (worldStops(state)) return; // asked after every contact, so a hurt that reaches the avatar later stops here too
-      j = nextInCells(inCell, dummy.cells, j);
+      j = nextInCells(inCell, mover.cells, j);
     }
   }
 }
@@ -1486,8 +1486,8 @@ function think(state, actor, byTag) {
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
 
-  // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: how far a non-avatar actor
-  // sees is open, issue 13). Whoever has no health is not a target. With none it stands still.
+  // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: a non-avatar actor sees with
+  // no limit, Infinity, the user's answer on issue 13). Whoever has no health is not a target. With none it stands still.
   const target = pickTarget(state, actor, attack.target, Infinity, byTag);
   if (target === null) {
     direction.x = 0;
