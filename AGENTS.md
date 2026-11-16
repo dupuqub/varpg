@@ -93,7 +93,13 @@ Moved to docs/rules/world.md (summary pending), with "Collision with still thing
 
 ### Damage
 
-Moved to docs/rules/damage.md (summary pending).
+- A hit is a packet with one amount per damage type, and the target resists each type on its own with its points, on a curve that never takes everything off; there is no minimum damage, and negative points amplify the hit (docs/rules/damage.md).
+- The shield takes damage before health and adds its own resistance while it has something left; it refills after a wait with no damage, and its ring is the avatar's radius (docs/rules/damage.md).
+- Health stops at zero: an actor at zero leaves the scene at the end of the step, but the avatar at zero ends the mission (docs/rules/damage.md).
+- A target with no health takes no hit, a hitbox hurts each thing at most once, and a hit of zero is still a hit (docs/rules/damage.md).
+- Every hit writes one line in the combat journal, which lives outside the state and which the rules never read (docs/rules/damage.md).
+- The body slam is a blunt hit on both sides at the moment of a new collision, each side with its own weight scaled by the impact; with today's tags it hurts only where the avatar is one of the two (docs/rules/damage.md).
+- Only melee attacks may grow with the weight, and a thing of weight zero breaks at the first contact with any actor or any hit (docs/rules/damage.md).
 
 ### Movement and input
 
