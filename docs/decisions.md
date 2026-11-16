@@ -6,6 +6,24 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 
 ---
 
+## 2026-11-15: the Dummies of Chamber 1 are born through the spawn array (section "Spawn", "The spawn events" and the agent's reading 8)
+
+- **Who decided:** the user (issue 62; built by the Rules desk, commit 28c00f1, data version 63).
+- **His words:** "os dummies tbm deveriam nascer no frame 0, não quero códigos não reutilizados ou reutilizáveis no jogo" (the Dummies too should be born at frame 0; I do not want code in the game that is not reused or reusable).
+- **What it replaced:** the state of issue 61 (commit 8e8e11c): Chamber 1 had an empty array and its Dummies were made with the state (`createCrowd`, `DEFINITIONS.terrain.dummies.count`). Today `maps.chamber1.spawns` has one event (`initialFrame` 0, count 1000, type `"dummy"`), and what the Dummy rolls for itself (its first angle) goes through `OWN_ROLLS` in `src/sim.js`. Tests 245 to 247.
+- **Moved from AGENTS.md** (section "Spawn", issue 66 parcel 4):
+  - "Chamber 1 has an empty array (its Dummies are made with the state)." (it had stayed in the section after issue 62 and contradicted the reading 8 of the same section and the section "The Dummy")
+  - "the Dummy (which rolls its first angle) has been spawned since issue 62, through `OWN_ROLLS`." (from the agent's reading 8)
+
+## 2026-11-15: the spawn events array replaces the Biters made with the state (section "Spawn", "The spawn events" and "The agent's readings")
+
+- **Who decided:** the user (issue 61, 2026-11-15: every map has an array of hand-written spawn events); built by the Rules desk (issue 61, commit 8e8e11c, data version 62). The readings of the Rules desk were written the same day, for the points the issue left to it.
+- **What it replaced:** Chamber 2's Biters were made with the state (`terrain.biters`, `createBiters`); there was no `DEFINITIONS.maps`.
+- **Moved from AGENTS.md** (section "Spawn", issue 66 parcel 4):
+  - "`terrain.biters` and `createBiters` died with it." (from the sentence on Chamber 2's array)
+  - "of what issue 61 left to the Rules desk" (from the heading of the agent's readings)
+  - "a new entry" (from the agent's reading 5: "The array lives in a new entry `DEFINITIONS.maps`")
+
 ## 2026-11-15: a weightless thing breaks with the body of any actor (section "Damage", "Weight 0")
 
 - **Who decided:** the user, after I24 (issue 47; issues plan I27, commit c5d8da9).
