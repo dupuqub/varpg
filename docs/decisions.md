@@ -218,6 +218,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "The user first asked whether the ring was the real collision box or only visual; his answer was the real one, with the continuous radius."
 
+## 2026-11-11: the diagnostics bench is Chamber 0, no longer Chamber 2 (section "Screens", "Chamber 0: Diagnostics")
+
+- **Who decided:** the user (commit 4e63e8f, "Chamber 2 becomes Chamber 0").
+- **His reason, as the commit gives it:** "The diagnostics bench is the base under the game chambers, so the user numbered it 0 and it comes first in the list."
+- **What it replaced:** the bench was **Chamber 2: Diagnostics** (its script was `src/chamber-2.js`); the number 2 went later to the played Chamber 2: Combat.
+- **Moved from AGENTS.md** (section "Screens", issue 66 parcel 16):
+  - "the user renamed it from 2 on 2026-11-11, and it comes first in the list" (from "(numbered 0 because it is the base under the game chambers; the user renamed it from 2 on 2026-11-11, and it comes first in the list)", which is now "(numbered 0 by the user because it is the base under the game chambers, and it comes first in the list)")
+
 ## 2026-11-11 (the night of 2026-11-10): the Dummy hurts and is hurt only by the avatar, and the push is split by weight (section "The Dummy", "Only the avatar hurts a Dummy")
 
 - **Who decided:** the user (his rule of 2026-11-10, commit 7e79ad8: the body slam hurts only where the avatar is one of the two sides; his decision of 2026-11-11, commit 4efa571: the push between actors is split by weight, the avatar included).
@@ -254,6 +262,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** the cells were counted relative to the avatar (it was always in cell zero), an agent's choice the user never confirmed, and `isInWindow` said whether a cell was inside the window (only the tests called it). Today the cells are counted in the world (`cellIndex`, `setCells`), so the cells of an actor change only when it moves; `isInWindow` was removed.
 - **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
   - "(History: they were first counted relative to the avatar, an agent's choice the user never confirmed; when the avatar became pushable by other actors, 2026-11-11, that choice would have moved everyone's cells at every push, so the agent changed it. `isInWindow`, which read a relative cell, was called by nothing in the game and died with it.)"
+
+## 2026-11-10: Chamber 1 is also the first combat test (section "Screens", "Chamber 1: Movement")
+
+- **Who decided:** the user, on his idea of the first combat test (commit a225558, the body slam; `AGENTS.md` then said "First combat test (the user's idea ...): colliding with rocks while moving, in Chamber 1 (so Chamber 1 is no longer only about movement)").
+- **What it replaced:** "**Chamber 1: Movement** is only for testing movement. Nothing else goes in it." (`AGENTS.md` before commit a225558).
+- **Moved from AGENTS.md** (section "Screens", issue 66 parcel 16):
+  - "started as a movement test only; the user later decided to use it for the first combat test too" (from "**Chamber 1: Movement** started as a movement test only; the user later decided to use it for the first combat test too (colliding with the objects of the seed).", which is now "**Chamber 1: Movement** is a movement test and, by the user's decision, the first combat test too (colliding with the objects of the seed).")
 
 ## 2026-11-10 (for every actor but the avatar, 2026-11-12): the wrap is built (section "Collision grid", "Consequences" and the wrap)
 
