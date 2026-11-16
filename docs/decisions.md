@@ -6,6 +6,21 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 
 ---
 
+## 2026-11-15: the history past the death needed no code (section "Actor", "Destruction", "After the death")
+
+- **Who decided:** the user (issue 42, comments of 2026-11-14 and 2026-11-15; issues plan I23, commit 86b233d).
+- **What it replaced:** nothing; the story of the parcel: the rule was already what the code did, and the parcel only added tests 222 to 225, which stay named in `AGENTS.md`.
+- **Moved from AGENTS.md** (section "Actor", issue 66 parcel 6):
+  - "No code was needed for this; " (from "No code was needed for this; tests 222 to 225 keep it.", which is now "Tests 222 to 225 keep it.")
+
+## 2026-11-15: the draws of a spawned actor no longer share the slots of the old crowd maker (section "Actor", "Draws and ids of an actor born from a spawn event")
+
+- **Who decided:** the user (issue 62; built by the Rules desk, commit 28c00f1, data version 63; see the entry of the same day for the section "The Dummy").
+- **His words:** "os dummies tbm deveriam nascer no frame 0, não quero códigos não reutilizados ou reutilizáveis no jogo" (the Dummies too should be born at frame 0; I do not want code in the game that is not reused or reusable).
+- **What it replaced:** `createCrowd` drew its actors with `hashInts(seed, index, 0, salt)`, the same two slots `drawBirth` uses as (event, nth). The crowd maker is gone; today every actor born from a spawn event draws from `hashInts(seed, event, nth, salt)` (`drawBirth`, test 235).
+- **Moved from AGENTS.md** (section "Actor", issue 66 parcel 6):
+  - "(the two slots the old crowd maker, now gone, used as (index, 0))" (from "all from `hashInts(seed, event, nth, salt)` (the two slots the old crowd maker, now gone, used as (index, 0)), and `birthOffset(seed, event, nth, radius, grid)` takes the pair.")
+
 ## 2026-11-15: the Dummy's `wander` carries its pair (event, nth) and turns by it; the crowd maker is gone (section "The Dummy", "Made by the seed" and "How it moves")
 
 - **Who decided:** the user (issue 62; built by the Rules desk, commit 28c00f1, data version 63). The forms (the pair in `wander`, the hash of the hash for the turns, `createChamberState` without `populate`) are the agent's choices, as the issue left them open.
@@ -86,6 +101,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
   - "Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed)."
 
+## 2026-11-13: the place of exit of a hitbox is a key of the attack (section "Actor", "Hitboxes")
+
+- **Who decided:** the Rules desk, on issue 13 (the action model, step 2a; commit 63c325f, data version 55, test 186). The two exits are the user's words of 2026-11-13, kept in `AGENTS.md`.
+- **What it replaced:** `hitboxOrigin` asked who the owner was: the avatar's hitboxes were born at its center and anyone else's one body ahead. Today every attack has `exit` (`"center"` or `"front"`) in its recipe, and `hitboxOrigin(owner, exit, towardX, towardY)` reads it; same behavior with the data of that day.
+- **Moved from AGENTS.md** (section "Actor", issue 66 parcel 6):
+  - "since issue 13" (from "since issue 13 it is a key of the attack, not a rule about the avatar", which is now "it is a key of the attack, not a rule about the avatar")
+
 ## 2026-11-13: the combat journal built in pieces (section "Damage", "The combat journal")
 
 - **Who:** the Rules desk, on the user's request of 2026-11-13 (commit 247ebac and the ones before it).
@@ -134,6 +156,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** the Dummy's first day (commit a2d4897, 2026-11-10): a taken place was refused and the seed tried another, up to a number of tries (`safeRadius`, `placementTries`, `isPlaceTaken`). Today `birthOffset` places every actor (test 101 keeps the ring with room).
 - **Moved from AGENTS.md** (section "The Dummy", issue 66 parcel 5):
   - "(History: on its first day a taken place was refused and the seed tried another, up to a number of tries; the user replaced that with the birth rule the same night, and `safeRadius` and `placementTries` of the Dummies died with it.)"
+
+## 2026-11-11: static values once, at the start of the run; dynamic values every frame (section "Actor", "An actor in the state")
+
+- **Who decided:** the user, correcting an agent's reading of his rule (commit 611e9cc, test 79).
+- **His words:** "everything calculated is stored" (his rule, as `AGENTS.md` quotes it); his correction, in the words `AGENTS.md` gave it: dynamic things every frame, static things at the start of the run.
+- **What it replaced:** for a few hours `finalizeActor` recalculated every value every step, the weight included. Today `finalizeStatic` runs once, when the actor is made, and `finalizeDynamic` every frame, at the start of `step`.
+- **Moved from AGENTS.md** (section "Actor", issue 66 parcel 6):
+  - "(History: for a few hours an agent recalculated everything every frame, the weight included, having read "everything calculated is stored" as "everything is recalculated". The user: dynamic things every frame, static things at the start of the run.)"
 
 ## 2026-11-11: resistance is a hyperbolic curve, not a fixed percentage (section "Damage")
 
