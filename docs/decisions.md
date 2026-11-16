@@ -55,6 +55,20 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1; the tests stay named in `AGENTS.md`):
   - "Built in pieces, test by test (172 the lines, 173 the totals, 159 and 160 the log written by the rules, 174 the history, 175 the screen lines)."
 
+## 2026-11-13: a weapon's target is data of its attack (section "Movement and input", "There is no manual aim")
+
+- **Who decided:** the user (issue 13, the action model; Rules desk step 1a, commit f4ff920, test 183).
+- **What it replaced:** the note of 2026-11-09 (commit 88536c0, when the manual aim was removed) that a weapon's target would be data of the weapon later; today it is the key `target`, `{ pick, tag }`, of the attack, read by `pickTarget`.
+- **Moved from AGENTS.md** (section "Movement and input", issue 66 parcel 2):
+  - "a weapon's target will be data of the weapon, later."
+
+## 2026-11-12: the touch controls checked in Chromium (section "Movement and input", "Touch")
+
+- **Who:** the agent that built the touch controls, on the user's request of 2026-11-12 (commit 0e6fa94).
+- **What it replaced:** nothing; a past measurement. The touch controls still have no Node test, and the numbers are still guesses to tune on a phone (both stay in `AGENTS.md`).
+- **Moved from AGENTS.md** (section "Movement and input", issue 66 parcel 2):
+  - "it was checked in Chromium with real touch events (half stick = 0.5, beyond the radius = 1, dead zone = 0, a second finger dashes in the movement direction and spends a charge, the top bar still takes taps)."
+
 ## 2026-11-12: the shield's ring is the real collision box (section "Damage", "Shield")
 
 - **Who decided:** the user (commit e34cdaa).
