@@ -210,4 +210,4 @@ The coordinator of the Rules desk does not touch these files. The user opens a S
 
 ## Not a parcel
 
-Issue 13 (the action model) is the direction, not work: it stays open. Its next step, the body's object as a hitbox, waits for the answer to issue 45.
+Issue 13 (the action model) is the direction, not work, and **it is closed**: it was closed as a direction on 2026-11-16 (issue 65). On 2026-11-14 this line said: "it stays open. Its next step, the body's object as a hitbox, waits for the answer to issue 45" (issue 45 is closed too).
