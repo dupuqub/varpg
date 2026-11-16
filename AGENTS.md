@@ -159,7 +159,7 @@ The user asked for the kit with **only what is used now**: weight, speed, health
 - The avatar's starting health is not written by hand: `createChamber1State(runId, seed, blueprint)` sets it to `finalMaxHealth`.
 - **Known weakness:** the values of the parts were chosen by the agent to reproduce what the avatar had before parts existed. They are not wrong, but they did not come from a goal of play, which is the opposite of the user's "no normalization". They are the first candidates to be redone.
 - From the user's old project, for reference: each part had `Specs` that add up, `Mods` that look like multipliers (not used here yet), and `Weight`, which was simply subtracted from the speed.
-- Open: whether other parts (the generator) add to the capacity; whether the recharge of the dash also comes from the Booster (the maximum of charges already does).
+- Open: whether other parts (the generator) add to the capacity.
 
 ### Parts made by seed (the user's idea, not implemented)
 

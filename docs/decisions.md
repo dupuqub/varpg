@@ -285,6 +285,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
   - "(History: they were first counted relative to the avatar, an agent's choice the user never confirmed; when the avatar became pushable by other actors, 2026-11-11, that choice would have moved everyone's cells at every push, so the agent changed it. `isInWindow`, which read a relative cell, was called by nothing in the game and died with it.)"
 
+## 2026-11-10: the recharge of the dash comes from the Booster too (section "The kit of parts", "Open")
+
+- **Who decided:** the user (2026-11-10: "at first every number of the dash comes from the Booster", kept in `AGENTS.md` in the line of `finalDashRechargeFrames`; commit 3a75c7b, "Dash recharge time comes from the Booster").
+- **What it replaced:** the open question written the same morning (commit d12be0a), when only the maximum of charges came from the parts and `rechargeFrames` was still in the avatar's definition. Today `rechargeFrames` is a spec of the Booster in `src/data.js`, `finalDashRechargeFrames` sums it from the parts, and test 57 keeps it (240 with the Booster, 0 without).
+- **Moved from AGENTS.md** (section "The kit of parts", issue 66 parcel 20):
+  - "; whether the recharge of the dash also comes from the Booster (the maximum of charges already does)" (from "Open: whether other parts (the generator) add to the capacity; whether the recharge of the dash also comes from the Booster (the maximum of charges already does).", which is now "Open: whether other parts (the generator) add to the capacity.")
+
 ## 2026-11-10: Chamber 1 is also the first combat test (section "Screens", "Chamber 1: Movement")
 
 - **Who decided:** the user, on his idea of the first combat test (commit a225558, the body slam; `AGENTS.md` then said "First combat test (the user's idea ...): colliding with rocks while moving, in Chamber 1 (so Chamber 1 is no longer only about movement)").
