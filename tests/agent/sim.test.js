@@ -60,6 +60,12 @@ function loadGame(patchData = null, { shield = false, patchSim = null, branches 
   // The rules need the blueprint of the run as the third argument of step. Most tests do not care
   // which one, so here step plays with the starter blueprint unless a test passes another.
   vm.runInContext("const realStep = step; step = (state, input, blueprint = createRun(1).blueprint, ...rest) => realStep(state, input, blueprint, ...rest);", context);
+  // Since issue 61 no Biter exists at frame 0: the spawn events of frame 0 are born at the END of the first step, and are first seen at
+  // frame 1. The tests that build a scene with the Biters of the start (written before issue 61) call firstBirths on the new state: the
+  // real rule of stage 7b (spawnEvents, with no journal) is applied to the state of frame 0 and the frame is counted, and nothing else of
+  // a step happens (no movement, no shot, no shield). So the scene is the state of frame 1 as it would be if step 0 had moved nobody, with
+  // the Biters of frame 0 (ids "biter 0,<n>", event 0 and nth n, and the draws of that pair), and the next step does not make them again.
+  vm.runInContext("function firstBirths(state) { spawnEvents(state, null); state.frame += 1; return state; }", context);
   return context;
 }
 
@@ -67,6 +73,17 @@ function loadGame(patchData = null, { shield = false, patchSim = null, branches 
 // loadGame fails loudly (the patch would change nothing).
 function withDummies(count) {
   return loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: " + count + " }"));
+}
+
+// The Biters of Chamber 2 as the tests written before issue 61 knew them: one crowd of `count` at the start and nobody born later. The
+// whole spawn array of the map chamber2 is replaced by its single event of frame 0 with that count (the later waves are taken out), so a
+// test that plays more than 300 frames meets the fixed crowd it was written for. It fails loudly if the array is no longer written so.
+const CHAMBER2_SPAWNS = /spawns: \[\n *\{ initialFrame: 0, count: 40, type: "biter" \},[^\n]*\n(?: *\{ initialFrame: \d+, count: 5, type: "biter" \},[^\n]*\n)+ *\],/;
+function startingBiters(count) {
+  return (text) => {
+    assert.ok(CHAMBER2_SPAWNS.test(text), "the spawn array of chamber2 is no longer written as the tests expect");
+    return text.replace(CHAMBER2_SPAWNS, 'spawns: [{ initialFrame: 0, count: ' + count + ', type: "biter" }],');
+  };
 }
 
 // The game most tests play in has no Dummies (the rock and avatar tests count every hit on a rock, and a wandering
@@ -2595,13 +2612,13 @@ test("118 a part can only have the specs the rules read, and resistance only to 
 // The Biter chases the avatar and, when the space between the two bodies is within its reach, strikes with a hitbox and holds
 // still. A game with 6 Biters and no objects, so the only things that happen are the ones a test sets up.
 
-const QUIET = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }"));
+const QUIET = loadGame((text) => startingBiters(6)(text.replace("chancePercent: 35", "chancePercent: 0")));
 
 // A state with the avatar and only the Biters of the given numbers.
 const ALONE_BITERS = `
   function aloneBiters(...numbers) {
-    const s = createChamber2State(1, 1);
-    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter_" + n))];
+    const s = firstBirths(createChamber2State(1, 1));
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter 0," + n))];
     return s;
   }
 `;
@@ -2732,7 +2749,7 @@ test("123 who a hitbox hurts: the avatar's hitbox hurts what is not the avatar, 
     const avatar = s.actors[0];
     const b = s.actors[1];
     b.position.x = 900; b.position.y = 0; // far from the avatar: it will not strike
-    s.hitboxes.push({ owner: "biter_0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"], hits: "all" }); // 100 px away: a miss
+    s.hitboxes.push({ owner: "biter 0,0", attack: "bite", position: { x: 100, y: 0 }, radius: 20, framesLeft: 3, damage: { puncture: 9 }, velocity: { x: 0, y: 0 }, struck: [], pierceLeft: null, ignores: ["enemy", "object"], hits: "all" }); // 100 px away: a miss
     step(s, { move: { x: 0, y: 0 } });
     return { rule: [hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, b), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, avatar), hitboxHurts({ ignores: b.attacks.bodySlam.ignores }, b)], health: avatar.health.now, left: s.hitboxes.map((hitbox) => hitbox.framesLeft) };
   `, QUIET);
@@ -2747,7 +2764,7 @@ test("124 an actor with no health left leaves the scene at the end of the step, 
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0, 1, 2, 3);
-    s.actors[2].health.now = 0; // biter_1
+    s.actors[2].health.now = 0; // biter 0,1
     step(s, { move: { x: 0, y: 0 } });
     const order = s.actors.map((actor) => actor.id);
 
@@ -2768,8 +2785,8 @@ test("124 an actor with no health left leaves the scene at the end of the step, 
     step(d, { move: { x: 0, y: 0 } });
     return { order, avatarStays, afterDash, avatarHurt: u.actors[0].health.now < 100, dummies: d.actors.map((actor) => actor.id) };
   `, QUIET);
-  assert.deepStrictEqual(plain(result.order), ["avatar_1", "biter_0", "biter_2", "biter_3"]);
-  assert.deepStrictEqual(plain(result.avatarStays), ["avatar_1", "biter_0"]); // the avatar at 0 stays: there is no death for it yet
+  assert.deepStrictEqual(plain(result.order), ["avatar_1", "biter 0,0", "biter 0,2", "biter 0,3"]);
+  assert.deepStrictEqual(plain(result.avatarStays), ["avatar_1", "biter 0,0"]); // the avatar at 0 stays: there is no death for it yet
   assert.deepStrictEqual(plain(result.afterDash), ["avatar_1"]);
   assert.deepStrictEqual(plain(result.dummies), ["avatar_1", "dummy_1"]);
 });
@@ -2787,17 +2804,20 @@ test("125 two Biters that overlap are pushed apart by weight until they touch, n
   `, QUIET);
   assert.ok(Math.abs(result.gap) < 1e-6, "they were not pushed to just touching: " + result.gap);
   assert.deepStrictEqual(plain(result.health), [30, 30]);
-  assert.deepStrictEqual(plain(result.contacts), ["biter_0|biter_1"]);
+  assert.deepStrictEqual(plain(result.contacts), ["biter 0,0|biter 0,1"]);
   const [weightA, weightB] = result.before.weights;
   const pushA = (result.before.a - result.a); // a (on the left, pushed left) took b's share of the 4 px
   assert.ok(Math.abs(Math.abs(pushA) - 4 * weightB / (weightA + weightB)) < 0.3, "the heavier one did not move less: " + pushA); // the two also walk 0.125 toward the avatar
 });
 
-test("126 Chamber 2 has 40 Biters (ids biter_0 to biter_39), no Dummies, born off the screen inside the window with a radius from 12 to 20 and 30 health, the same for the same seed and not for another, and the state is plain JSON", () => {
+test("126 Chamber 2 has no Biter at frame 0 and 40 after its first step (ids biter 0,0 to biter 0,39: event 0 of its spawn array, issue 61), no Dummies, born off the screen inside the window with a radius from 12 to 20 and 30 health, the same for the same seed and not for another, and the state is plain JSON", () => {
   const result = run(`
-    const s = createChamber2State(1, 7);
-    const again = createChamber2State(1, 7);
-    const other = createChamber2State(1, 8);
+    const still = { move: { x: 0, y: 0 } };
+    const firstStep = (seed) => { const state = createChamber2State(1, seed); step(state, still); return state; };
+    const atZero = createChamber2State(1, 7).actors.length;
+    const s = firstStep(7);
+    const again = firstStep(7);
+    const other = firstStep(8);
     const biters = s.actors.filter((actor) => actor.ai);
     const width = s.grid.windowWidth * s.grid.cellSize;
     const height = s.grid.windowHeight * s.grid.cellSize;
@@ -2811,12 +2831,14 @@ test("126 Chamber 2 has 40 Biters (ids biter_0 to biter_39), no Dummies, born of
       if (Math.abs(dx) > width / 2 || Math.abs(dy) > height / 2) bad++; // outside the window
       if (b.ai.phase !== "chase" || b.ai.frames !== 0 || b.ai.attack !== "bite" || b.crushes !== false) bad++;
     }
-    return { count: biters.length, others: s.actors.length - biters.length - 1, ids: biters.map((b) => b.id), bad, hitboxes: s.hitboxes,
+    return { atZero, frame: s.frame, count: biters.length, others: s.actors.length - biters.length - 1, ids: biters.map((b) => b.id), bad, hitboxes: s.hitboxes,
       same: JSON.stringify(s) === JSON.stringify(again), different: JSON.stringify(s) !== JSON.stringify(other), json: JSON.stringify(s) };
   `);
+  assert.strictEqual(result.atZero, 1, "the state of frame 0 has only the avatar (issue 61: spawn is the last thing of a step)");
+  assert.strictEqual(result.frame, 1);
   assert.strictEqual(result.count, 40);
   assert.strictEqual(result.others, 0);
-  assert.deepStrictEqual(plain(result.ids), Array.from({ length: 40 }, (_, i) => "biter_" + i));
+  assert.deepStrictEqual(plain(result.ids), Array.from({ length: 40 }, (_, i) => "biter 0," + i));
   assert.strictEqual(result.bad, 0);
   assert.deepStrictEqual(plain(result.hitboxes), []);
   assert.strictEqual(result.same, true);
@@ -2824,7 +2846,7 @@ test("126 Chamber 2 has 40 Biters (ids biter_0 to biter_39), no Dummies, born of
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });
 
-test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing among 40 Biters give the same state twice and a clean cross-check, and the Biters really reach it and bite", () => {
+test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing among the Biters of its spawn events (40 seen from frame 1, 5 more from 301 and from 601, issue 61) give the same state twice and a clean cross-check, and the Biters really reach it and bite", () => {
   const result = run(`
     const play = () => {
       const run = createRun(1);
@@ -2848,14 +2870,14 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
   assert.strictEqual(result.check, null);
   assert.ok(result.health < 100, "no Biter bit the avatar in 15 seconds: health " + result.health);
   assert.ok(result.mostHitboxes >= 1);
-  assert.ok(result.alive > 0 && result.alive <= 40);
+  assert.ok(result.alive > 0 && result.alive <= 50, "alive: " + result.alive); // at most the 40 + 5 + 5 born in the steps of frames 0, 300 and 600
 });
 
 // ---- Guards of the review of 2026-11-11 (salts, fingerprint of the data, snap of another version) ----
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 61, hash: "225a2cc7829dc5d2" };
+const DATA_FINGERPRINT = { version: 62, hash: "7be62b4b0a10c4fb" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -2933,8 +2955,8 @@ test("132 with no windup (windupFrames 0) the Biter strikes in the same step it 
 // ---- The repeater (the user, 2026-11-11): ammunition with weight, cadence, reload, auto-aim, a bullet that travels and pierces ----
 
 // A game with 6 Biters, none of them able to bite, and the pierce 1 variant (a weapon whose bullet crosses one thing).
-const PIERCE_ONE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("radius: 6, pierce: 0", "radius: 6, pierce: 1"));
-const PIERCE_THREE = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }").replace("radius: 6, pierce: 0", "radius: 6, pierce: 3"));
+const PIERCE_ONE = loadGame((text) => startingBiters(6)(text.replace("chancePercent: 35", "chancePercent: 0")).replace("radius: 6, pierce: 0", "radius: 6, pierce: 1"));
+const PIERCE_THREE = loadGame((text) => startingBiters(6)(text.replace("chancePercent: 35", "chancePercent: 0")).replace("radius: 6, pierce: 0", "radius: 6, pierce: 3"));
 
 // The avatar with the combat blueprint, and the Biters of the given numbers held still (the freeze is made very long, so
 // they stay where the test puts them and do not bite). `bp` is the blueprint to give to step.
@@ -2942,8 +2964,8 @@ const ARMED = `
   function armed(...numbers) {
     const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
     const bp = run.blueprint;
-    const s = createChamber2State(1, 1, bp);
-    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter_" + n))];
+    const s = firstBirths(createChamber2State(1, 1, bp));
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "biter 0," + n))];
     for (const b of s.actors.slice(1)) { b.ai.phase = "freeze"; b.ai.frames = 1000000; b.health.now = 30; b.health.max = 30; }
     return { s, bp };
   }
@@ -2987,6 +3009,7 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
     const third = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520);
     b.health.now = 30; a.health.now = 30;
     a.position.x = 0; a.position.y = -200;     // the same distance as b: a is first in the list, so it is the target
+    b.radius = a.radius;                       // and the same edge (closest is to the edge, test 201): the Biters of the start had equal radii before issue 61
     const tie = pickTarget(t.s, t.s.actors[0], { pick: "closest", tag: "enemy" }, 520).id;
 
     const u = armed(0);
@@ -2994,10 +3017,10 @@ test("134 the auto-aim picks the closest actor in range (the first in the list o
     step(u.s, idle, u.bp);
     return { first, second, third, tie, bullet: JSON.parse(JSON.stringify(u.s.hitboxes)), avatarRadius: u.s.actors[0].radius, avatar: u.s.actors[0].position };
   `);
-  assert.strictEqual(result.first, "biter_1");
-  assert.strictEqual(result.second, "biter_0");
+  assert.strictEqual(result.first, "biter 0,1");
+  assert.strictEqual(result.second, "biter 0,0");
   assert.strictEqual(result.third, null);
-  assert.strictEqual(result.tie, "biter_0");
+  assert.strictEqual(result.tie, "biter 0,0");
   assert.strictEqual(result.bullet.length, 1);
   const [bullet] = plain(result.bullet);
   // Born at the center of the avatar (0, 0) (the user, 2026-11-13), then moved by its velocity in the same step: 8 x (0.6, 0.8).
@@ -3132,7 +3155,7 @@ test("139 a bullet that kills leaves a corpse that the bullet does not spend a p
     const avatar = t.s.actors[0];
     return { ids: t.s.actors.map((a) => a.id), behind: behind.health.now, avatarHealth: avatar.health.now, rule: hitboxHurts({ ignores: avatar.attacks.bodySlam.ignores }, avatar) };
   `, PIERCE_ONE);
-  assert.deepStrictEqual(plain(result.ids), ["avatar_1", "biter_1"]); // the weak one is gone
+  assert.deepStrictEqual(plain(result.ids), ["avatar_1", "biter 0,1"]); // the weak one is gone
   assert.strictEqual(result.behind, 20); // the bullet had a pierce left because the dead one did not spend it... and hurt this one
   assert.strictEqual(result.avatarHealth, 100);
   assert.strictEqual(result.rule, false);
@@ -3217,7 +3240,7 @@ test("143 the weight of the avatar comes from the parts of the blueprint and the
 // The real Generator (shield: true), the world as QUIET (no objects, six Biters). The shield: a health that regenerates, from the
 // Generator; it absorbs first; it adds resistance while it has something left; the ring (the radius of the avatar for collision
 // and for being hit) goes from the body to 1.8 times the body in a straight line with the shield that is left.
-const SHIELDED = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace("biters: { count: 40 }", "biters: { count: 6 }"), { shield: true });
+const SHIELDED = loadGame((text) => startingBiters(6)(text.replace("chancePercent: 35", "chancePercent: 0")), { shield: true });
 const IDLE = "const idle = { move: { x: 0, y: 0 }, dash: false };";
 
 test("144 the Generator gives the avatar its shield: 40, a wait of 180 frames, 0.25 back per frame, and 11 points of resistance to each type while it lasts; it is born full and not waiting, and its radius is the ring, 16 x 1.8", () => {
@@ -3268,7 +3291,7 @@ test("146 the resistance of the shield counts only while it has something left: 
 test("147 the shield waits 180 quiet frames after any damage and then gives back 0.25 per frame up to its maximum; damage during the regeneration starts the wait again", () => {
   const result = run(`
     ${IDLE}
-    const s = createChamber2State(1, 1);
+    const s = firstBirths(createChamber2State(1, 1));
     s.actors = [s.actors[0]];
     const avatar = s.actors[0];
     applyDamage(avatar, 10); // 30 left, the wait starts
@@ -3293,7 +3316,7 @@ test("147 the shield waits 180 quiet frames after any damage and then gives back
 test("148 the radius of the avatar follows the shield in a straight line, from the body (16, empty) to the ring (28.8, full): half a shield is 22.4, and it is calculated again every frame and stored in the avatar", () => {
   const result = run(`
     ${IDLE}
-    const s = createChamber2State(1, 1);
+    const s = firstBirths(createChamber2State(1, 1));
     s.actors = [s.actors[0]];
     const avatar = s.actors[0];
     const radii = [];
@@ -3314,8 +3337,8 @@ test("149 the ring growing over a Biter hurts nobody (a hit needs an impact, and
   const result = run(`
     ${IDLE}
     function scene(biterX) {
-      const s = createChamber2State(1, 1);
-      const biter = s.actors.find((actor) => actor.id === "biter_0");
+      const s = firstBirths(createChamber2State(1, 1));
+      const biter = s.actors.find((actor) => actor.id === "biter 0,0");
       s.actors = [s.actors[0], biter];
       biter.ai.phase = "freeze"; biter.ai.frames = 1000000; // it stays where it is put and does not bite
       biter.position.x = biterX; biter.position.y = 0;
@@ -3346,7 +3369,7 @@ test("149 the ring growing over a Biter hurts nobody (a hit needs an impact, and
 
 test("150 the cross-check stays clean in a shielded run where Biters hit the avatar and the shield drains and comes back, and the state is plain numbers", () => {
   const result = run(`
-    const s = createChamber2State(1, 1);
+    const s = firstBirths(createChamber2State(1, 1));
     const avatar = s.actors[0];
     const h = createHistory(s, createRun(1).blueprint);
     let lowest = avatar.shield.now;
@@ -3406,7 +3429,7 @@ test("154 the Radar is the only truth about what can be aimed at: the Head gives
     ${ARMED}
     const shotsAt = (x, makeBlueprint) => {
       const t = armed(0);
-      if (makeBlueprint) { t.bp = makeBlueprint(t.bp); t.s = createChamber2State(1, 1, t.bp); t.s.actors = [t.s.actors[0], t.s.actors.find((a) => a.id === "biter_0")]; t.s.actors[1].ai.phase = "freeze"; t.s.actors[1].ai.frames = 1000000; }
+      if (makeBlueprint) { t.bp = makeBlueprint(t.bp); t.s = firstBirths(createChamber2State(1, 1, t.bp)); t.s.actors = [t.s.actors[0], t.s.actors.find((a) => a.id === "biter 0,0")]; t.s.actors[1].ai.phase = "freeze"; t.s.actors[1].ai.frames = 1000000; }
       t.s.actors[1].position.x = x; t.s.actors[1].position.y = 0;
       step(t.s, idle, t.bp);
       return t.s.hitboxes.filter((h) => h.attack === "repeater-arm").length;
@@ -3514,7 +3537,7 @@ test("158 a Biter that died in the step does not strike: its decision to strike 
     ${ALONE_BITERS}
     const s = aloneBiters(0, 1);
     const [avatar, a, b] = s.actors;
-    for (const biter of [a, b]) { biter.position.x = 16 + biter.radius + 5; biter.position.y = biter.id === "biter_0" ? 0 : 60; biter.attacks.bite.windupFrames = 0; }
+    for (const biter of [a, b]) { biter.position.x = 16 + biter.radius + 5; biter.position.y = biter.id === "biter 0,0" ? 0 : 60; biter.attacks.bite.windupFrames = 0; }
     b.position.x = -(16 + b.radius + 5); b.position.y = 0;
     a.health.now = 0; // died before the hitboxes are born (killed earlier in the step)
     const visual = createVisual();
@@ -3549,9 +3572,10 @@ test("159 the combat journal writes every hit as a line with its numbers: a bite
     return { bite, frames, bullet, biteTotals: combatJournalTotals(journal), bulletTotals: combatJournalTotals(shots), health: avatar.health.now };
   `, QUIET);
   const bite = plain(result.bite);
-  assert.deepStrictEqual([bite.source, bite.attack, bite.target], ["biter_0", "bite", "avatar_1"]);
-  // The frame of a hit is the frame the screen shows when it is seen: the state after the step it happened in (0 before, 1 after).
-  assert.deepStrictEqual(plain(result.frames), { before: 0, after: 1 });
+  assert.deepStrictEqual([bite.source, bite.attack, bite.target], ["biter 0,0", "bite", "avatar_1"]);
+  // The frame of a hit is the frame the screen shows when it is seen: the state after the step it happened in (1 before, 2 after: since
+  // issue 61 the scene starts at frame 1, the first frame the Biters of the start exist in).
+  assert.deepStrictEqual(plain(result.frames), { before: 1, after: 2 });
   assert.strictEqual(bite.frame, result.frames.after);
   assert.strictEqual(bite.parts.length, 1);
   const part = bite.parts[0];
@@ -3566,11 +3590,11 @@ test("159 the combat journal writes every hit as a line with its numbers: a bite
   assert.deepStrictEqual([Object.keys(plain(result.biteTotals)), totals.hits, totals.shield], [["biter:bite"], 1, 0]);
   assert.ok(Math.abs(totals.total - bite.total) < 1e-12 && Math.abs(totals.health - bite.total) < 1e-9);
   const bullet = plain(result.bullet);
-  assert.deepStrictEqual([bullet.source, bullet.attack, bullet.target, bullet.total, bullet.parts[0].points], ["avatar_1", "repeater-arm", "biter_0", 10, 0]);
+  assert.deepStrictEqual([bullet.source, bullet.attack, bullet.target, bullet.total, bullet.parts[0].points], ["avatar_1", "repeater-arm", "biter 0,0", 10, 0]);
   assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
 });
 
-test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit in frame order, and the totals read from it count the same number of hits", () => {
+test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit or a birth (issue 61: 40 + 9 x 5 = 85 births in the steps of frames 0 to 2700) in frame order, and the totals read from it count the same number of hits as there are hit lines", () => {
   const result = run(`
     const play = (withJournal) => {
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
@@ -3586,13 +3610,16 @@ test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 
     const counted = Object.values(combatJournalTotals(a.journal)).reduce((sum, t) => sum + t.hits, 0);
     let ordered = true;
     for (let i = 1; i < entries.length; i++) if (entries[i].frame < entries[i - 1].frame) ordered = false;
-    return { same: a.state === b.state, lines: a.journal.length, allHits: entries.every((e) => e.event === "hit"), ordered, counted, none: b.journal };
+    const hits = entries.filter((e) => e.event === "hit").length;
+    const births = entries.filter((e) => e.event === "birth").length;
+    return { same: a.state === b.state, lines: a.journal.length, hits, births, ordered, counted, none: b.journal };
   `);
   assert.strictEqual(result.same, true);
-  assert.ok(result.lines > 100, "the log must keep more than the old limit of 100: " + result.lines);
-  assert.strictEqual(result.allHits, true);
+  assert.ok(result.hits > 100, "the log must keep more than the old limit of 100: " + result.hits);
+  assert.strictEqual(result.hits + result.births, result.lines, "every line is a hit or a birth");
+  assert.strictEqual(result.births, 85);
   assert.strictEqual(result.ordered, true);
-  assert.strictEqual(result.counted, result.lines);
+  assert.strictEqual(result.counted, result.hits);
   assert.strictEqual(result.none, null);
 });
 
@@ -3679,8 +3706,8 @@ test("164 the sword swings: a target inside the reach starts the windup (12 fram
     const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
     function swordGame(x, y) {
       const run = createRun(1, { parts: swordParts });
-      const s = createChamber2State(1, 1, run.blueprint);
-      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+      const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
       const biter = s.actors[1];
       biter.ai.phase = "freeze"; biter.ai.frames = 1000000; biter.health.now = 90; biter.health.max = 90;
       biter.position.x = x; biter.position.y = y;
@@ -3719,8 +3746,8 @@ test("165 the aim of the sword is locked when the windup starts but may be corre
     const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
     function swordGame(x, y) {
       const run = createRun(1, { parts: swordParts });
-      const s = createChamber2State(1, 1, run.blueprint);
-      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+      const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+      s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
       const biter = s.actors[1];
       biter.ai.phase = "freeze"; biter.ai.frames = 1000000; biter.health.now = 90; biter.health.max = 90;
       biter.position.x = x; biter.position.y = y;
@@ -3752,8 +3779,8 @@ test("165 the aim of the sword is locked when the windup starts but may be corre
 test("166 the blow comes even if the target is gone during the windup (as the Biter's does): it lands on nothing and the recovery begins at the same step", () => {
   const result = run(`
     const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"] });
-    const s = createChamber2State(1, 1, run.blueprint);
-    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
     s.actors[1].ai.phase = "freeze"; s.actors[1].ai.frames = 1000000;
     s.actors[1].position.x = 60; s.actors[1].position.y = 0;
     s.actors[0].position.x = 0; s.actors[0].position.y = 0;
@@ -3801,7 +3828,7 @@ function firstDash(where) {
     const result = {};
     for (const name of Object.keys(DEFINITIONS).filter((key) => key.endsWith("Blueprint"))) {
       const blueprint = DEFINITIONS[name];
-      const s = createChamber2State(1, 1, blueprint);
+      const s = firstBirths(createChamber2State(1, 1, blueprint));
       const avatar = s.actors.find((actor) => actor.id === AVATAR_ID);
       const radius = avatar.radius; // at birth: the ring, when the blueprint has a shield
       step(s, { move: { x: 1, y: 0 }, dash: true }, blueprint);
@@ -3828,7 +3855,7 @@ function brokenPromises(measured) {
   }
   return broken;
 }
-const EMPTY_SHIELDED = (patch = (text) => text) => loadGame((text) => patch(text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }").replace(/biters: \{ count: \d+ \}/, "biters: { count: 0 }")), { shield: true });
+const EMPTY_SHIELDED = (patch = (text) => text) => loadGame((text) => patch(startingBiters(0)(text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }"))), { shield: true });
 
 test("169 the first dash cannot touch an object, for every blueprint in the data, with the shield full: the starter dashes 142.5 px and the combat 147.45 px, born at the ring (28.8), so with the largest object (32) the safe radius must be above 208.25", () => {
   const measured = firstDash(EMPTY_SHIELDED());
@@ -3845,14 +3872,14 @@ test("169 the first dash cannot touch an object, for every blueprint in the data
 // ---- Hitboxes of the avatar are born at its center (the user, 2026-11-13; review of that day, point 2; issue 2) ----
 // "The reach of the sword stays untouched; the point of origin is the center of the avatar/actor." The sword tests above play
 // without a shield, where the body is the only radius; this one plays with the real shield, full (the ring) and empty (the body).
-const SWORD_SHIELDED = loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace(/biters: \{ count: \d+ \}/, "biters: { count: 1 }"), { shield: true });
+const SWORD_SHIELDED = loadGame((text) => startingBiters(1)(text.replace("chancePercent: 35", "chancePercent: 0")), { shield: true });
 
 test("170 the reach of the sword is counted from the center of the avatar, so the shield does not change it: with the shield full (radius 28.8) or empty (16) a Biter whose edge is 90 px from the center starts the windup and one at 90.5 does not; the cone is born at the center and never hurts the avatar or its shield", () => {
   const result = run(`
     const swordParts = ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"];
     function swordGame(gap, shieldFull) {
       const run = createRun(1, { parts: swordParts });
-      const s = createChamber2State(1, 1, run.blueprint);
+      const s = firstBirths(createChamber2State(1, 1, run.blueprint));
       const avatar = s.actors[0];
       const biter = s.actors[1];
       biter.ai.phase = "freeze"; biter.ai.frames = 1000000;
@@ -4309,7 +4336,7 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
     const s = createChamber2State(1, 1, run.blueprint);
     const journal = createJournal();
     for (let i = 0; i < 900; i++) step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, journal);
-    const crowd = createChamber2State(1, 1, run.blueprint);
+    const crowd = firstBirths(createChamber2State(1, 1, run.blueprint));
     const index = tagIndex(crowd.actors);
     const picks = [];
     for (const from of crowd.actors.slice(0, 12)) {
@@ -4319,7 +4346,7 @@ test("188 the index by tag gives the same answer as the plain walk, tie included
         picks.push(plain === indexed);
       }
     }
-    const twins = createChamber2State(1, 1, run.blueprint);
+    const twins = firstBirths(createChamber2State(1, 1, run.blueprint));
     twins.actors[2].position = { ...twins.actors[3].position };
     twins.actors[2].radius = twins.actors[3].radius;
     const tie = [pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000)?.id, pickTarget(twins, twins.actors[0], { pick: "closest", tag: "enemy" }, 100000, tagIndex(twins.actors))?.id];
@@ -4384,7 +4411,7 @@ test("190 a step that ends with the avatar at zero health says the mission is ab
   assert.strictEqual(result.fresh, "running");
   assert.strictEqual(result.alive, "running");
   assert.strictEqual(result.dead, "aborted");
-  assert.strictEqual(result.frame, 2);
+  assert.strictEqual(result.frame, 3); // the scene starts at frame 1 (issue 61: the Biters of the start are first seen there), and two steps were played
 });
 
 test("191 a step on an aborted state changes nothing: the JSON of the state is the same, the visual state has no new trace and does not age, and the journal has no new line, even with the avatar's input and a Biter on top of it", () => {
@@ -4410,8 +4437,8 @@ test("191 a step on an aborted state changes nothing: the JSON of the state is t
 test("192 an actor with no health is never a target, whoever it is: with the avatar at zero health one think leaves a walking Biter with a zero direction (it stands still), and with the only Biter at zero health one fireWeapons of the avatar's repeater fires nothing; with both alive the Biter walks at the avatar and the repeater fires one shot; each by the plain walk of pickTarget and by the index of tagIndex that every step uses", () => {
   const result = run(`
     const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
-    const s = createChamber2State(1, 1, run.blueprint);
-    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
     const avatar = s.actors[0], biter = s.actors[1];
     biter.position.y = avatar.position.y;
     const walk = (index) => { biter.position.x = avatar.position.x + 400; biter.move.direction.x = 1; biter.move.direction.y = 0; biter.ai.phase = "chase"; think(s, biter, index); return { x: biter.move.direction.x, y: biter.move.direction.y }; };
@@ -4633,7 +4660,7 @@ test("206 the keys every attack shares are checked by one function in three of t
   refused((text) => nth(text, PART_EXIT, 1), /exit of the melee of the part sword-arm/);
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
-    const s = createChamber2State(1, 1, run.blueprint);
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
     const avatar = s.actors[0];
     const records = ["repeater-arm", "sword-arm"].map((part) => {
       const record = avatar.attacks[part];
@@ -4706,12 +4733,12 @@ test("208 the scene of issue 47, with the user's rule (2026-11-15: things with n
 });
 
 // ---- The avatar's death stops the world (issue 28) ----
-test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the journal has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 1, and the next step changes nothing", () => {
+test("209 the avatar's death stops the world (issue 28, the scene of finding R2.1): the avatar of the combat blueprint, at 0.01 health and no shield (the test game has none), its repeater ready and its sword one frame from the blow, dashes into two Biters that both overlap it after the dash; the first contact hurts both sides and kills it, and then nothing more happens: the second Biter is not hurt, no shot is fired and no sword swings (no hitbox, the magazine as it was, the sword still in its windup), the journal has exactly the two lines of that contact (the avatar's slam on the first Biter, then the first Biter's slam that killed), the mission is aborted on frame 2 (the scene starts at frame 1, the first frame of the Biters of the start since issue 61), and the next step changes nothing", () => {
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
-    const s = createChamber2State(1, 1, bp);
-    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0"), s.actors.find((actor) => actor.id === "biter_1")];
+    const s = firstBirths(createChamber2State(1, 1, bp));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0"), s.actors.find((actor) => actor.id === "biter 0,1")];
     const [avatar, first, second] = s.actors;
     for (const b of [first, second]) { b.ai.phase = "freeze"; b.ai.frames = 1000000; b.health.now = 30; b.health.max = 30; }
     avatar.position.x = 0; avatar.position.y = 0;
@@ -4744,10 +4771,10 @@ test("209 the avatar's death stops the world (issue 28, the scene of finding R2.
   assert.deepStrictEqual(r.magazinesAfter, r.magazines, "no round is spent");
   assert.deepStrictEqual(r.swords, ["windup 1"], "the sword did not swing");
   assert.strictEqual(r.lines, 2, JSON.stringify(r.journal));
-  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target), ["avatar_1 > biter_0", "biter_0 > avatar_1"], "the journal ends on the contact that killed, both sides of it");
+  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target), ["avatar_1 > biter 0,0", "biter 0,0 > avatar_1"], "the journal ends on the contact that killed, both sides of it");
   assert.strictEqual(r.journal[1].health, 0.01, "the last line is the hit that took the avatar's last 0.01");
   assert.strictEqual(r.mission, "aborted");
-  assert.strictEqual(r.frame, 1);
+  assert.strictEqual(r.frame, 2); // the scene starts at frame 1 (issue 61), and the step of the death is counted
   assert.strictEqual(r.same, true, "the next step changes nothing");
   assert.strictEqual(r.linesAfter, 2, "the next step writes no line");
 });
@@ -4756,8 +4783,8 @@ test("210 the avatar's death in a contact with an object stops the world too: th
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
-    const s = createChamber2State(1, 1, bp);
-    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const s = firstBirths(createChamber2State(1, 1, bp));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
     const [avatar, biter] = s.actors;
     avatar.health.now = 0.01; avatar.shield.now = 0;
     for (const weapon of avatar.weapons) { weapon.interval = 0; weapon.reload = 0; }
@@ -4793,8 +4820,8 @@ test("211 the avatar's death by a hitbox stops the world inside stage 5: the ava
   const result = run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
     const bp = run.blueprint;
-    const s = createChamber2State(1, 1, bp);
-    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter_0")];
+    const s = firstBirths(createChamber2State(1, 1, bp));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
     const [avatar, biter] = s.actors;
     avatar.position.x = 0; avatar.position.y = 0;
     avatar.health.now = 0.01;
@@ -4811,7 +4838,7 @@ test("211 the avatar's death by a hitbox stops the world inside stage 5: the ava
   `, QUIET);
   const r = plain(result);
   assert.strictEqual(r.health, 0);
-  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter_0 > avatar_1 bite"]);
+  assert.deepStrictEqual(r.journal.map((line) => line.source + " > " + line.target + " " + line.attack), ["biter 0,0 > avatar_1 bite"]);
   assert.strictEqual(r.journal[0].health, 0.01);
   assert.strictEqual(r.biter, 30, "the sword's cone, born after the bite, hurts nobody");
   assert.ok(!r.hitboxes.some((hitbox) => hitbox.attack === "bite"), "the bite that killed ended its turn and is gone, as before");
@@ -4865,20 +4892,20 @@ test("213 a bullet hits only the first thing its path meets in the frame (the sc
 
 test("214 the mirror of test 213: with the Biter at x 95 the bullet going right from x 76 to 84 first touches the Biter (at x 78.39) and the Rock after it (at 79.71), both in the same frame: the Biter takes the hit (one journal line, 30 - 10 = 20 health: it resists no puncture), the Rock is untouched (10), and the bullet ends", () => {
   const r = plain(run(FIRST_SCENE(95, 76)));
-  assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] });
+  assert.deepStrictEqual(r.frames[0], { targets: ["biter 0,0"], biter: 20, rock: 10, bullets: [] });
 });
 
 test("215 a bullet with pierce 1 that touches two things in one frame hits only the first in that frame, and the second in the next frame because it still touches it: in the scene of test 213 with pierce 1, frame 1 hits the Rock only (the Biter still 30; the bullet goes on at x 86 with pierce 0 left and the Rock struck), frame 2 (x 94, still 20.9 px from the Biter's center, under 26) hits the Biter (20) and the bullet ends; a third frame changes nothing", () => {
   const r = plain(run(FIRST_SCENE(100, 78, { pierce: 1, frames: 3 })));
   assert.deepStrictEqual(r.frames[0], { targets: ["rock small:0,1"], biter: 30, rock: 0, bullets: [{ x: 86, pierceLeft: 0, struck: ["rock small:0,1"] }] });
-  assert.deepStrictEqual(r.frames[1], { targets: ["rock small:0,1", "biter_0"], biter: 20, rock: 0, bullets: [] });
+  assert.deepStrictEqual(r.frames[1], { targets: ["rock small:0,1", "biter 0,0"], biter: 20, rock: 0, bullets: [] });
   assert.deepStrictEqual(r.frames[2], r.frames[1]);
 });
 
 test("216 what the bullet cannot hit never counts as first, and it passes it: in the scene of test 213 (the Rock first on the path), with the Rock already struck by this bullet, or with object in its ignored tags, the Biter behind it takes the hit (20) and the bullet ends, the Rock untouched (10); and a Biter at 0 health first on a path (at x 129, met at x 111) is passed for the living Biter met after it (at x 117.03, in the same frame from x 110 to 118): only the living one has a journal line", () => {
   for (const options of [{ struck: ["rock " + ROCK.key] }, { ignores: ["self", "ally", "object"] }]) {
     const r = plain(run(FIRST_SCENE(100, 78, options)));
-    assert.deepStrictEqual(r.frames[0], { targets: ["biter_0"], biter: 20, rock: 10, bullets: [] }, JSON.stringify(options));
+    assert.deepStrictEqual(r.frames[0], { targets: ["biter 0,0"], biter: 20, rock: 10, bullets: [] }, JSON.stringify(options));
   }
   const dead = plain(run(`
     ${ARMED}
@@ -4892,14 +4919,14 @@ test("216 what the bullet cannot hit never counts as first, and it passes it: in
     resolveHitboxes(s, journal);
     return { targets: journal.map((line) => JSON.parse(line).target), alive: alive.health.now, corpse: corpse.health.now, bullets: s.hitboxes.length };
   `));
-  assert.deepStrictEqual(dead, { targets: ["biter_0"], alive: 20, corpse: 0, bullets: 0 });
+  assert.deepStrictEqual(dead, { targets: ["biter 0,0"], alive: 20, corpse: 0, bullets: 0 });
 });
 
 test("217 a sword's cone hits all it touches (hits all): the cone of the sword-arm of the combat blueprint, born at the avatar at 39,456 pointing right (reach 90, 90 degrees), over two Biters (radius 10, at 60,440 and 60,472) and the Rock of seed 1 at 99,456, writes three journal lines, one for each (the Biters in list order, then the Rock), each hit once", () => {
   const r = plain(run(`
     const run = createRun(1, DEFINITIONS.combatBlueprint);
-    const s = createChamber2State(1, 1, run.blueprint);
-    s.actors = [s.actors[0], s.actors.find((a) => a.id === "biter_0"), s.actors.find((a) => a.id === "biter_1")];
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+    s.actors = [s.actors[0], s.actors.find((a) => a.id === "biter 0,0"), s.actors.find((a) => a.id === "biter 0,1")];
     const [avatar, a, b] = s.actors;
     avatar.position.x = 39; avatar.position.y = 456;
     a.radius = 10; a.position.x = 60; a.position.y = 440;
@@ -4912,7 +4939,7 @@ test("217 a sword's cone hits all it touches (hits all): the cone of the sword-a
     resolveHitboxes(s, journal); // the cone is gone after its one frame: nothing more
     return { hits, targets: journal.map((line) => JSON.parse(line).target) };
   `));
-  assert.deepStrictEqual(r, { hits: "all", targets: ["biter_0", "biter_1", "rock small:0,1"] });
+  assert.deepStrictEqual(r, { hits: "all", targets: ["biter 0,0", "biter 0,1", "rock small:0,1"] });
 });
 
 test("218 a hitbox that hits first and did not move in the frame met everything at the same moment, so the list order decides (the actors, then the objects): the bullet of the repeater with speed 0 placed at 80,428, touching both the Rock of seed 1 and a Biter of radius 20 at 85,408, hits the Biter and ends; with the Biter left out of its reach the Rock is hit", () => {
@@ -4927,7 +4954,7 @@ test("218 a hitbox that hits first and did not move in the frame met everything 
     resolveHitboxes(s, journal);
     return journal.map((line) => JSON.parse(line).target);
   `));
-  assert.deepStrictEqual(still(85), ["biter_0"]);
+  assert.deepStrictEqual(still(85), ["biter 0,0"]);
   assert.deepStrictEqual(still(500), ["rock small:0,1"]);
 });
 
@@ -5142,8 +5169,8 @@ test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the us
   const result = plain(run(`
     const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
     const branch = objects.find((object) => object.type === "branch" && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
-    const s = createChamber2State(1, 1);
-    const biter = s.actors.find((actor) => actor.id === "biter_0");
+    const s = firstBirths(createChamber2State(1, 1));
+    const biter = s.actors.find((actor) => actor.id === "biter 0,0");
     s.actors = [s.actors[0], biter];
     const lines = createJournal();
     biter.position.x = branch.position.x - (biter.radius + branch.radius) + 1; biter.position.y = branch.position.y;
@@ -5159,7 +5186,7 @@ test("226 a Biter breaks a weightless Branch and walks on (issue 47, I27; the us
   assert.strictEqual(result.health, 0);
   assert.strictEqual(result.lines.length, 1, "one line: the Biter's hit of 0 on the Branch");
   const line = JSON.parse(result.lines[0]);
-  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.total], ["hit", "biter_0", "bodySlam", "branch " + result.name, 0]);
+  assert.deepStrictEqual([line.event, line.source, line.attack, line.target, line.total], ["hit", "biter 0,0", "bodySlam", "branch " + result.name, 0]);
   assert.strictEqual(result.vx, 3, "the Biter keeps its speed and goes through");
   assert.deepStrictEqual(result.moved, [0, 0], "and is not pushed out");
   assert.strictEqual(result.biterHealth, result.biterMax, "the Biter loses nothing");
@@ -5337,7 +5364,7 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
   const DUMMIED = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 1 }"), { branches: true });
   const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
   assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
-  const ids = { avatar: "avatar_1", dummy: "dummy_0", biter: "biter_0" };
+  const ids = { avatar: "avatar_1", dummy: "dummy_0", biter: "biter 0,0" };
   for (const kind of kinds) {
     for (const speed of [3, 0]) {
       const result = plain(run(`
@@ -5345,7 +5372,7 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
         const isolated = (type) => objects.find((object) => object.type === type && objects.every((other) => other === object || Math.hypot(other.position.x - object.position.x, other.position.y - object.position.y) > 300));
         const branch = isolated("branch");
         const rock = isolated("rock");
-        const s = createChamber2State(1, 1);
+        const s = firstBirths(createChamber2State(1, 1));
         const actor = [...s.actors, ...createChamber1State().actors].find((a) => a.id === "${ids[kind]}");
         if (!actor) throw new Error("no actor ${ids[kind]} in the scenes");
         s.actors = [s.actors[0], actor].filter((a, i, all) => all.indexOf(a) === i); // the avatar must be in the state (worldStops)
@@ -5440,4 +5467,230 @@ test("237 the totals of the journal read the kind from the id of a spawned actor
   `));
   assert.deepStrictEqual(result.keys, ["biter:bite"]);
   assert.strictEqual(result.hits, 3);
+});
+
+// ---- The spawn events and the spawn step (issue 61) ----
+// A game whose map chamber2 has the spawn events given (a list of [initialFrame, count, type]) in place of the real array, with no objects
+// on the ground, so the births can be read alone.
+function spawnGame(events) {
+  const array = "spawns: [" + events.map(([frame, count, type]) => "{ initialFrame: " + frame + ", count: " + count + ", type: " + JSON.stringify(type) + " }").join(", ") + "],";
+  return loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace(CHAMBER2_SPAWNS, array));
+}
+
+test("238 Chamber 2 has 40 Biters from frame 1 and 5 more every 300 frames up to frame 3000 (issue 61, \"Done when\"): the state of frame 0 has only the avatar; over 3002 steps of the real game (the avatar standing, its health set very high) new ids appear only at frame 1 (biter 0,0 to biter 0,39, exactly 40 Biters then) and at frames 301, 601, ... 3001 (biter k,0 to biter k,4 for the event k = 1 to 10), 90 in all; the journal has one birth line per newborn with the frame it is first seen in and the place it has in that state; and the same run with no journal ends in the same state", () => {
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const play = (journal) => {
+      const s = createChamber2State(1, 1);
+      const atZero = s.actors.map((actor) => actor.id);
+      s.actors[0].health.now = 1e9; // so the mission is not aborted on the way (test 190)
+      const seen = new Set(["avatar_1"]);
+      const newIds = {}; // frame -> the ids first seen in the state of that frame
+      const born = {}; // id -> its place in the state of the frame it was first seen in
+      let atOne = null;
+      for (let i = 0; i < 3002; i++) {
+        step(s, still, undefined, null, journal);
+        if (s.frame === 1) atOne = s.actors.filter((actor) => actor.type === "biter").length;
+        for (const actor of s.actors) {
+          if (seen.has(actor.id)) continue;
+          seen.add(actor.id);
+          (newIds[s.frame] ??= []).push(actor.id);
+          born[actor.id] = { frame: s.frame, x: actor.position.x, y: actor.position.y };
+        }
+      }
+      return { atZero, atOne, newIds, born, state: JSON.stringify(s) };
+    };
+    const journal = createJournal();
+    const a = play(journal);
+    const b = play(null);
+    const births = journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth");
+    return { atZero: a.atZero, atOne: a.atOne, newIds: a.newIds, born: a.born, births, same: a.state === b.state };
+  `));
+  assert.deepStrictEqual(result.atZero, ["avatar_1"], "frame 0 has no Biter: spawn is the last thing of a step");
+  assert.strictEqual(result.atOne, 40);
+  const expected = { 1: Array.from({ length: 40 }, (_, nth) => "biter 0," + nth) };
+  for (let event = 1; event <= 10; event++) expected[300 * event + 1] = Array.from({ length: 5 }, (_, nth) => "biter " + event + "," + nth);
+  assert.deepStrictEqual(result.newIds, expected);
+  assert.strictEqual(result.births.length, 90);
+  for (const line of result.births) {
+    const seen = result.born[line.id];
+    assert.deepStrictEqual([line.frame, line.type, line.position.x, line.position.y], [seen.frame, "biter", seen.x, seen.y], line.id);
+    assert.strictEqual(line.id, "biter " + line.spawn + "," + line.id.split(",")[1], "the line names the index of its event");
+  }
+  assert.strictEqual(result.same, true, "the rules never read the journal");
+});
+
+test("239 the same seed gives the same births: two runs of 302 steps of Chamber 2 on seed 1, the avatar walking right, write the same birth lines and end in the same state; each newborn has the radius, health and place of drawBirth for its pair (event, nth), the place counted from where the avatar is at the end of the step of its birth; another seed gives the same ids at other places", () => {
+  const result = plain(run(`
+    const right = { move: { x: 1, y: 0 } };
+    const play = (seed) => {
+      const s = createChamber2State(1, seed);
+      s.actors[0].health.now = 1e9;
+      const journal = createJournal();
+      const checks = [];
+      for (let i = 0; i < 302; i++) {
+        const frame = s.frame;
+        const before = s.actors.length;
+        step(s, right, undefined, null, journal);
+        const avatar = s.actors[0].position;
+        for (const actor of s.actors.slice(before)) {
+          const [event, nth] = actor.id.split(" ")[1].split(",").map(Number);
+          const draw = drawBirth(seed, "biter", event, nth, s.grid);
+          checks.push(actor.radius === draw.radius && actor.health.now === draw.health && actor.health.max === draw.health
+            && actor.position.x === avatar.x + draw.offset.x && actor.position.y === avatar.y + draw.offset.y && frame === DEFINITIONS.maps.chamber2.spawns[event].initialFrame);
+        }
+      }
+      return { state: JSON.stringify(s), births: journal.filter((line) => JSON.parse(line).event === "birth"), checks, avatarX: s.actors[0].position.x };
+    };
+    const a = play(1), b = play(1), c = play(2);
+    const ids = (p) => p.births.map((line) => JSON.parse(line).id);
+    const places = (p) => p.births.map((line) => JSON.stringify(JSON.parse(line).position));
+    return { sameState: a.state === b.state, sameBirths: JSON.stringify(a.births) === JSON.stringify(b.births), count: a.births.length, checks: a.checks, avatarX: a.avatarX,
+      sameIdsOtherSeed: JSON.stringify(ids(a)) === JSON.stringify(ids(c)), samePlacesOtherSeed: places(a).filter((place, i) => place === places(c)[i]).length };
+  `));
+  assert.strictEqual(result.sameState, true);
+  assert.strictEqual(result.sameBirths, true);
+  assert.strictEqual(result.count, 45, "40 in the step of frame 0 and 5 in the step of frame 300");
+  assert.strictEqual(result.checks.length, 45);
+  assert.ok(result.checks.every(Boolean), "a newborn does not have the draws of its pair around the avatar's place: " + JSON.stringify(result.checks));
+  assert.ok(result.avatarX > 100, "the avatar must have walked, so the births at 300 are counted from a place that is not the start: " + result.avatarX);
+  assert.strictEqual(result.sameIdsOtherSeed, true);
+  assert.ok(result.samePlacesOtherSeed < 3, "another seed must give other places: " + result.samePlacesOtherSeed + " of 45 the same");
+});
+
+test("240 going back in time and playing gives the same births and nobody twice (issue 61: decided by state.frame alone, no state of the spawn): Chamber 2 played to frame 310 with the history; back to the snap of frame 295, cut, and 15 steps with another input give the wave of frame 300 again (biter 1,0 to biter 1,4, each id once in the state); back to the snap of frame 305 (after the wave), cut, and 5 steps give no birth; every id in every state is unique; the cross-check of each history is null; and the same inputs from frame 295 give the very state of frame 310", () => {
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const left = { move: { x: -1, y: 0 } };
+    const run = createRun(1);
+    const s = createChamber2State(1, 1, run.blueprint);
+    s.actors[0].health.now = 1e9;
+    const history = createHistory(s, run.blueprint);
+    for (let i = 0; i < 310; i++) { step(s, still, run.blueprint); recordFrame(history, s, still); }
+    const original = JSON.stringify(s);
+    const indexOf = (frame) => history.snaps.findIndex((snap) => snap.frame === frame);
+    const unique = (state) => new Set(state.actors.map((actor) => actor.id)).size === state.actors.length;
+    const wave = (state) => state.actors.filter((actor) => actor.id.startsWith("biter 1,")).map((actor) => actor.id);
+
+    // the same inputs from frame 295: the same state at 310
+    const same = stateFromSnap(history, indexOf(295));
+    for (let i = 0; i < 15; i++) step(same, still, run.blueprint);
+
+    // another input from frame 295: the wave is born again, once
+    const back = createHistory(s, run.blueprint);
+    back.snaps = history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))); back.inputs = history.inputs.map((input) => input && { ...input }); back.visuals = history.visuals.slice();
+    discardAfter(back, indexOf(295));
+    const t = stateFromSnap(back, back.snaps.length - 1);
+    const journal = createJournal();
+    for (let i = 0; i < 15; i++) { step(t, left, run.blueprint, null, journal); recordFrame(back, t, left); }
+
+    // from frame 305, after the wave: nobody is born
+    const after = createHistory(s, run.blueprint);
+    after.snaps = history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))); after.inputs = history.inputs.map((input) => input && { ...input }); after.visuals = history.visuals.slice();
+    discardAfter(after, indexOf(305));
+    const u = stateFromSnap(after, after.snaps.length - 1);
+    const lines = createJournal();
+    const countBefore = u.actors.length;
+    for (let i = 0; i < 5; i++) { step(u, left, run.blueprint, null, lines); recordFrame(after, u, left); }
+
+    return {
+      sameState: JSON.stringify(same) === original,
+      waveOriginal: wave(s), waveAgain: wave(t), waveAfter: wave(u),
+      bornAgain: journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth").map((entry) => entry.frame + " " + entry.id),
+      bornAfter: lines.filter((line) => JSON.parse(line).event === "birth").length,
+      grewAfter: u.actors.length - countBefore,
+      unique: [s, t, u, same].every(unique),
+      checks: [crossCheck(history), crossCheck(back), crossCheck(after)],
+      different: JSON.stringify(t) !== original,
+    };
+  `));
+  const wave = ["biter 1,0", "biter 1,1", "biter 1,2", "biter 1,3", "biter 1,4"];
+  assert.strictEqual(result.sameState, true);
+  assert.deepStrictEqual(result.waveOriginal, wave);
+  assert.deepStrictEqual(result.waveAgain, wave);
+  assert.deepStrictEqual(result.waveAfter, wave);
+  assert.deepStrictEqual(result.bornAgain, wave.map((id) => "301 " + id));
+  assert.strictEqual(result.bornAfter, 0);
+  assert.ok(result.grewAfter <= 0, "nobody may be born after the wave: " + result.grewAfter);
+  assert.strictEqual(result.unique, true);
+  assert.deepStrictEqual(result.checks, [null, null, null]);
+  assert.strictEqual(result.different, true, "the other input must give another state");
+});
+
+test("241 spawn events of the same frame resolve together in the order of the array, which may be written in any order, and new actors go to the end of state.actors, never reordered: with the events [frame 2: 1], [frame 0: 2], [frame 2: 2], [frame 1: 1], three steps give the actors avatar, biter 1,0, biter 1,1 (frame 0), biter 3,0 (frame 1), biter 0,0, biter 2,0, biter 2,1 (frame 2), each step keeping the list before it as its start, the birth lines in that order with the frames 1, 1, 2, 3, 3, 3, and the cells of every newborn already right at the end of the step that made it (as tests 100 and 110 ask of every actor)", () => {
+  const result = plain(run(`
+    const s = createChamber2State(1, 1);
+    const journal = createJournal();
+    const lists = [];
+    let wrongCells = 0;
+    for (let i = 0; i < 3; i++) {
+      step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+      lists.push(s.actors.map((actor) => actor.id));
+      for (const actor of s.actors) {
+        const copy = JSON.parse(JSON.stringify(actor));
+        setCells(copy, s.grid);
+        if (JSON.stringify(copy.cells) !== JSON.stringify(actor.cells)) wrongCells++;
+      }
+    }
+    return { wrongCells, lists, births: journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth").map((entry) => entry.frame + " " + entry.spawn + " " + entry.id) };
+  `, spawnGame([[2, 1, "biter"], [0, 2, "biter"], [2, 2, "biter"], [1, 1, "biter"]])));
+  assert.deepStrictEqual(result.lists[2], ["avatar_1", "biter 1,0", "biter 1,1", "biter 3,0", "biter 0,0", "biter 2,0", "biter 2,1"]);
+  assert.deepStrictEqual(result.lists[0], result.lists[2].slice(0, 3));
+  assert.deepStrictEqual(result.lists[1], result.lists[2].slice(0, 4));
+  assert.deepStrictEqual(result.births, ["1 1 biter 1,0", "1 1 biter 1,1", "2 3 biter 3,0", "3 0 biter 0,0", "3 2 biter 2,0", "3 2 biter 2,1"]);
+  assert.strictEqual(result.wrongCells, 0, "a newborn must have its cells at the end of the step that made it");
+});
+
+test("242 a spawn event whose type does not exist is skipped and the journal says where (the user, 2026-11-15: a reference to content that does not exist never breaks the game), and the other events still spawn: with the events [0: 2 biter], [0: 1 banan], [0: 1 toString], [0: 1 biter] the data loads, one step gives biter 0,0, biter 0,1 and biter 3,0 and nothing for banan or toString, and the journal has the births and two error lines (frame 1, map chamber2, spawn 1 banan and spawn 2 toString), in the order of the array; what poisons the arithmetic still stops the game on load: an initialFrame of -1 or 1.5, a count of -1 or 1.5", () => {
+  const result = plain(run(`
+    const s = createChamber2State(1, 1);
+    const journal = createJournal();
+    step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+    return { ids: s.actors.map((actor) => actor.id), types: s.actors.map((actor) => actor.type), lines: journal.map((line) => JSON.parse(line)) };
+  `, spawnGame([[0, 2, "biter"], [0, 1, "banan"], [0, 1, "toString"], [0, 1, "biter"]])));
+  assert.deepStrictEqual(result.ids, ["avatar_1", "biter 0,0", "biter 0,1", "biter 3,0"]);
+  assert.deepStrictEqual(result.types, ["avatar", "biter", "biter", "biter"]);
+  assert.deepStrictEqual(result.lines.map((line) => line.event + " " + line.spawn), ["birth 0", "birth 0", "error 1", "error 2", "birth 3"]);
+  assert.deepStrictEqual(result.lines[2], { frame: 1, event: "error", error: "unknown type", map: "chamber2", spawn: 1, type: "banan" });
+  assert.deepStrictEqual(result.lines[3], { frame: 1, event: "error", error: "unknown type", map: "chamber2", spawn: 2, type: "toString" });
+  for (const [frame, count] of [[-1, 1], [1.5, 1], [0, -1], [0, 1.5]]) {
+    assert.throws(() => spawnGame([[frame, count, "biter"]]), /The (initialFrame|count) of the spawn event 0 of the map chamber2 must be a whole number, 0 or more/, frame + " " + count);
+  }
+});
+
+test("243 nothing is born after the avatar's death (issue 28: the world stops; stage 7b is skipped): with one event of 3 Biters at frame 1, the avatar at 0 health in the step of frame 1 gives no birth (only the avatar, no birth line, the mission aborted on frame 2) and the steps after it change nothing; the same step with the avatar at 1 health gives the 3 births", () => {
+  const result = plain(run(`
+    const play = (health) => {
+      const s = createChamber2State(1, 1);
+      const journal = createJournal();
+      step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+      s.actors[0].health.now = health;
+      step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+      const frozen = JSON.stringify(s);
+      for (let i = 0; i < 3; i++) step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+      return { ids: s.actors.map((actor) => actor.id), births: journal.filter((line) => JSON.parse(line).event === "birth").length, mission: s.mission, frame: s.frame, same: JSON.stringify(s) === frozen };
+    };
+    return { dead: play(0), alive: play(1) };
+  `, spawnGame([[1, 3, "biter"]])));
+  assert.deepStrictEqual(result.dead, { ids: ["avatar_1"], births: 0, mission: "aborted", frame: 2, same: true });
+  assert.deepStrictEqual(result.alive.ids, ["avatar_1", "biter 0,0", "biter 0,1", "biter 0,2"]);
+  assert.strictEqual(result.alive.births, 3);
+  assert.strictEqual(result.alive.mission, "running");
+});
+
+test("244 docs/step-order.md and the comments of step change together: the stages of its table (0, 1, 1b, 2, 3, 4, 4b, 5, 6, 7, 7b, 8) are the numbered comments of playStages and then of step, in the same order, and every function the table names for a stage is called in the code under that stage's comment", () => {
+  const doc = fs.readFileSync(path.join(__dirname, "..", "..", "docs", "step-order.md"), "utf8");
+  const rows = [...doc.matchAll(/^\| (\d+b?) \| ([^|]*) \|/gm)].map((match) => ({ label: match[1], names: [...match[2].matchAll(/`([A-Za-z_][A-Za-z0-9_]*)`/g)].map((name) => name[1]) }));
+  const code = readSource("sim.js");
+  const body = (name) => { const start = code.indexOf("\nfunction " + name + "("); return code.slice(start, code.indexOf("\n}\n", start)); };
+  const sections = [];
+  for (const text of [body("playStages"), body("step")]) {
+    const marks = [...text.matchAll(/^ *\/\/ (\d+b?)\. /gm)];
+    marks.forEach((mark, i) => sections.push({ label: mark[1], code: text.slice(mark.index, i + 1 < marks.length ? marks[i + 1].index : text.length).split("\n").filter((line) => !line.trim().startsWith("//")).join("\n") }));
+  }
+  assert.deepStrictEqual(sections.map((section) => section.label), ["0", "1", "1b", "2", "3", "4", "4b", "5", "6", "7", "7b", "8"]);
+  assert.deepStrictEqual(rows.map((row) => row.label), sections.map((section) => section.label), "the table of docs/step-order.md and the comments of step differ");
+  for (const [i, row] of rows.entries()) {
+    for (const name of row.names) assert.ok(new RegExp("\\b" + name + "\\(").test(sections[i].code), "stage " + row.label + " of the table names " + name + ", which the code of that stage does not call");
+  }
 });

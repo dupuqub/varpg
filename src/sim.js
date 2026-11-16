@@ -474,6 +474,18 @@ function assertValidDefinitions() {
     }
     squareSizes.push(layer.cellSize);
   }
+  // The spawn events of every map (issue 61). The numbers of an event are arithmetic (a frame that is not whole is never reached, a count that
+  // is not whole makes a part of an actor), so they are refused here, as what poisons the arithmetic always was. The TYPE is not checked:
+  // the user (2026-11-15) wants a reference to content that does not exist skipped while playing, with a line in the journal (spawnEvents).
+  for (const [id, map] of Object.entries(DEFINITIONS.maps)) {
+    if (!Array.isArray(map.spawns)) throw new Error("The map " + id + " needs spawns, a list of spawn events (it may be empty)");
+    map.spawns.forEach((event, index) => {
+      const where = "the spawn event " + index + " of the map " + id;
+      if (!(Number.isInteger(event.initialFrame) && event.initialFrame >= 0)) throw new Error("The initialFrame of " + where + " must be a whole number, 0 or more, and it is " + event.initialFrame);
+      if (!(Number.isInteger(event.count) && event.count >= 0)) throw new Error("The count of " + where + " must be a whole number, 0 or more, and it is " + event.count);
+      if (typeof event.type !== "string") throw new Error("The type of " + where + " must be a name, and it is " + event.type);
+    });
+  }
 }
 
 // The top speed of an actor in the current frame, in pixels per frame.
@@ -1245,7 +1257,8 @@ function spawnedActorId(type, event, nth) {
   return type + " " + event + "," + nth;
 }
 
-// Makes the actors of one crowd of a new state, by the seed: `count` actors of one type, numbered from 0. For each one
+// Makes the actors of one crowd of a new state (today only the Dummies of Chamber 1; the Biters come from spawn events since issue 61),
+// by the seed: `count` actors of one type, numbered from 0. For each one
 // the seed rolls (SALTS.crowdRadius and SALTS.crowdHealth, with the number of the actor) radius and health, and birthOffset says where it is born
 // (the user's birth rule, see "Birth" in AGENTS.md). `rollsFor(index)` gives what is its own to the type (the Dummy's first
 // angle). Ids are the type and the number ("dummy_0", "biter_0"). Returns the new actors, in order.
@@ -1272,9 +1285,43 @@ function createDummies(state) {
   for (const dummy of dummies) setHeading(dummy);
 }
 
-// The Biters of Chamber 2: they have nothing to roll besides what every actor of a crowd rolls.
-function createBiters(state) {
-  createCrowd(state, "biter", DEFINITIONS.terrain.biters.count, () => ({}));
+// ---- Spawn (issue 61) ----
+// One actor born from a spawn event: the draws and the id of its pair (event, nth) (drawBirth, spawnedActorId, issue 60), the place
+// around the avatar where it is now, and its static and dynamic values and its cells at once, as createCrowd does, so a newborn is
+// complete at the end of the step that made it (its cells are right: tests 100 and 110). It goes to the END of state.actors (the user:
+// the list is never reordered). Only what every actor of a crowd rolls: a type that also rolls something of its own (the Dummy's angle)
+// is not in any map yet.
+function spawnActor(state, type, event, nth) {
+  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
+  const { radius, health, offset } = drawBirth(state.seed, type, event, nth, state.grid);
+  const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
+  const actor = finalizeObject(type, { position, radius, health: { now: health, max: health } }, undefined, spawnedActorId(type, event, nth));
+  finalizeStatic(actor);
+  finalizeDynamic(actor);
+  setCells(actor, state.grid);
+  state.actors.push(actor);
+  return actor;
+}
+
+// Stage 7b of step, the last thing of a step (the user, 2026-11-15, issue 61): the spawn events of the state's map whose initialFrame is
+// the frame of this step (state.frame, before the counter goes up) make their actors now, so they exist from the next frame. Decided by
+// state.frame alone, with no state of its own: going back in time and playing again gives the same births, and nobody is born twice.
+// Events of the same frame resolve in the order of the array. Each birth writes a journal line; an event whose type is not an actor of
+// the definitions is skipped and writes an error line saying where (the user's rule: a reference to content that does not exist never
+// breaks the game), and the other events still spawn. The journal is only written, never read. Not called after the avatar's death (step).
+function spawnEvents(state, journal) {
+  const map = state.map;
+  DEFINITIONS.maps[map].spawns.forEach((event, index) => {
+    if (event.initialFrame !== state.frame) return;
+    if (!Object.hasOwn(DEFINITIONS.actors, event.type)) {
+      if (journal !== null) journal.push(combatJournalSpawnErrorLine(state.frame + 1, map, index, event.type));
+      return;
+    }
+    for (let nth = 0; nth < event.count; nth++) {
+      const actor = spawnActor(state, event.type, index, nth);
+      if (journal !== null) journal.push(combatJournalBirthLine(state.frame + 1, index, actor.id, actor.type, actor.position));
+    }
+  });
 }
 
 // The part of the overlap that "a" takes when the actors a and b are pushed apart (the user's decision, 2026-11-11:
@@ -1701,7 +1748,7 @@ function fireWeapons(state, player, byTag) {
 // A log outside everything: someone in the stands watching the simulation and writing it down. It never interferes with the
 // gameplay (the rules write lines into it and never read it), it is tied to nothing (not the history either), and it only
 // grows. One line per damage calculation (one attack on one target), clear and minimal, as one JSON object per line, so a
-// person can read it and a script can parse it. Every line starts with the frame and the kind of event. The three kinds:
+// person can read it and a script can parse it. Every line starts with the frame and the kind of event. The kinds:
 //   hit     what came into effect in one damage calculation, with the ids of the two sides (an object is named by its type and
 //           place, see nameOf): { frame, event, source, attack, target, parts, total, shield, health }, plus overflow when the hit
 //           broke a live shield (the share of the packet that did not fit, its second calculation against the body, and the
@@ -1713,6 +1760,8 @@ function fireWeapons(state, player, byTag) {
 //           line says which run and chamber the lines after it belong to.
 //   aborted the mission is aborted: { frame, event }. The user (2026-11-15, issue 58) asked for it, like start and resume; the screen
 //           writes it once, right after the step in which the mission became aborted.
+//   birth   an actor born from a spawn event (issue 61), written by the rules: { frame, event, spawn, id, type, position }.
+//   error   a spawn event skipped because its type does not exist (issue 61), written by the rules: { frame, event, error, map, spawn, type }.
 function combatJournalHitLine(frame, source, attack, target, resolved, taken) {
   return JSON.stringify({
     frame,
@@ -1742,8 +1791,20 @@ function combatJournalAbortedLine(frame) {
   return JSON.stringify({ frame, event: "aborted" });
 }
 
+// A birth from a spawn event (issue 61; the agent's default for the content, which the issue named): the frame the newborn is seen in,
+// the index of the event in the map's array (`spawn`), the id, the type and the place it was born at.
+function combatJournalBirthLine(frame, spawn, id, type, position) {
+  return JSON.stringify({ frame, event: "birth", spawn, id, type, position: { x: position.x, y: position.y } });
+}
+
+// A spawn event skipped because its type is not an actor of the definitions (issue 61, the user's rule: it never breaks the game, and the
+// journal says where): the frame, the map, the index of the event in its array and the type as written.
+function combatJournalSpawnErrorLine(frame, map, spawn, type) {
+  return JSON.stringify({ frame, event: "error", error: "unknown type", map, spawn, type });
+}
+
 // The totals of a log (build step 2): read FROM the lines, never stored beside them. Only the "hit" lines count; the others (start,
-// resume) are skipped. Totals are by "kind:attack" (the kind is the source without its number or place: "biter_3" is "biter",
+// resume, aborted, birth, error) are skipped. Totals are by "kind:attack" (the kind is the source without its number or place: "biter_3" is "biter",
 // "rock 12,4" is "rock"): { hits, total, shield, health } added up over every line given.
 function combatJournalTotals(lines) {
   const totals = {};
@@ -2009,12 +2070,14 @@ function createRun(id, source = DEFINITIONS.starterBlueprint) {
 }
 
 // Initial state of a chamber: the avatar at the center of the world, with the full health of its blueprint, and the crowd
-// of the chamber born around it (`populate` makes it). The objects come from the seed and are not in the state.
+// of the chamber born around it (`populate` makes it; the actors of the map's spawn events are not here: they are born at the end of
+// the step of their frame, so the state at frame 0 has none of them, issue 61). The objects come from the seed and are not in the state.
+// map: the id of the map in DEFINITIONS.maps, whose spawn events the step reads (state.map).
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
 // blueprint: the blueprint of the run, used only to make the avatar (createAvatar).
-function createChamberState(populate, runId, seed, blueprint) {
+function createChamberState(map, populate, runId, seed, blueprint) {
   const avatar = createAvatar(blueprint);
 
   const state = {
@@ -2025,6 +2088,11 @@ function createChamberState(populate, runId, seed, blueprint) {
     // so a snap alone is enough to replay: the rules read it from here.
     // It must be a whole number.
     seed,
+
+    // The map this state plays (issue 61): the id of its entry in DEFINITIONS.maps, whose spawn events the step reads. It never changes in
+    // a run; it is in the state, like the seed, so a snap alone says which births come next (the agent's reading: the issue asks for no
+    // new state of the spawn, and this is not one: no counter, no list of who was born, only which schedule).
+    map,
 
     // The objects that were hurt: "layer:squareX,squareY" -> current health (see "Objects that are hurt").
     // Empty at the start: every object has its full health, which comes from the seed.
@@ -2059,12 +2127,13 @@ function createChamberState(populate, runId, seed, blueprint) {
 
 // Chamber 1: the Dummies, which only walk and collide.
 function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
-  return createChamberState(createDummies, runId, seed, blueprint);
+  return createChamberState("chamber1", createDummies, runId, seed, blueprint);
 }
 
-// Chamber 2 (COMBAT): the same world, with the Biters, which chase the avatar and strike.
+// Chamber 2 (COMBAT): the same world, with the Biters, which chase the avatar and strike. None exists at frame 0: they come from the
+// spawn events of the map chamber2 (issue 61), the first ones at the end of the first step.
 function createChamber2State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
-  return createChamberState(createBiters, runId, seed, blueprint);
+  return createChamberState("chamber2", () => {}, runId, seed, blueprint);
 }
 
 // Fails loudly if the grid settings make no sense.
@@ -2113,6 +2182,13 @@ function step(state, input, blueprint, visual = null, journal = null) {
   // frame; it gives nothing back (no Generator: nothing to give; with one, the wait is at least one frame), except with a wait
   // of exactly one frame, which no part has today.
   for (const actor of state.actors) if (actor.shield) regenerateShield(actor);
+
+  // 7b. Actors are born (spawnEvents; the user, 2026-11-15, issue 61: spawn is the last thing of a step): the spawn events of the map
+  // whose initialFrame is this frame make their actors at the end of state.actors, with their cells, so they exist from the next frame
+  // (an initialFrame of 0 too: the state at frame 0 has none of them). It reads state.frame before the counter goes up, and its journal
+  // lines carry the frame the birth is seen in (state.frame + 1), as recordHit does. After the avatar's death nothing is born (issue 28:
+  // the world stops), so it is skipped when worldStops says so.
+  if (!worldStops(state)) spawnEvents(state, journal);
 
   state.frame += 1;
 

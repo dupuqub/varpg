@@ -1,7 +1,7 @@
 // Definitions: what the game is. The "db". Nothing in here changes during a run.
 // There are five things in it: three actors, the avatar, the Dummy and the Biter, and two objects, the Rock and the Shroom.
 // The avatar is the only thing that is created by hand: its numbers are fixed here, or come from its parts.
-// The Dummy and the Biter are actors made by the seed from the ranges of their entries, like an object (see "terrain" below).
+// The Dummy and the Biter are actors made by the seed from the ranges of their entries, like an object (see "terrain" and "maps" below).
 // Every object is created by the seed (see "terrain" below), from the ranges of its entry: nothing about an object
 // is a single fixed value, and nothing is placed by hand. A value that is not used by anything does not belong here:
 // it is deleted, and it comes back when something uses it.
@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 61;
+const DEFINITIONS_VERSION = 62;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -444,10 +444,35 @@ const DEFINITIONS = {
     // search for a free place, and they wrap around the edges of the window (see wrapIntoWindow).
     // count: the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot").
     dummies: { count: 1000 },
+  },
 
-    // The Biters of Chamber 2 (COMBAT), made by the seed and born like the Dummies.
-    // count: guess, 40: enough to be chased from every side, few enough to count the hits and to see each one.
-    biters: { count: 40 },
+  // The maps (issue 61). The user (2026-11-15): every map has an array of hand-written spawn events, each { initialFrame, count, type },
+  // one type per event and no repetition field. The step of frame initialFrame makes `count` actors of `type` at its very end (stage 7b
+  // of step, spawnEvents in src/sim.js), so they exist from frame initialFrame + 1; events of the same frame resolve together, in the
+  // order of the array, which may be written in any order. Each actor is born off the screen and inside the window (birthOffset), with
+  // the draws and id of its pair (event index, nth). A type that is not an actor of DEFINITIONS.actors is skipped with an error line in
+  // the journal (the user: a reference to content that does not exist never breaks the game). The state names its map (state.map).
+  // Where the array lives is the agent's reading: there was no chamber entry before, and a map is not terrain (the ground comes from the
+  // seed, the spawns are a schedule).
+  maps: {
+    // Chamber 1 (Movement): its Dummies are made with the state (terrain.dummies above), so it has no spawn event.
+    chamber1: { spawns: [] },
+    // Chamber 2 (COMBAT): guesses, to tune by playing (the PLAN desk's table in issue 61).
+    chamber2: {
+      spawns: [
+        { initialFrame: 0, count: 40, type: "biter" }, // guess: 40 from the start (the old count): enough to be chased from every side, few enough to count the hits and to see each one
+        { initialFrame: 300, count: 5, type: "biter" }, // guess: 5 more every 5 seconds (300 frames), so the crowd keeps coming and the avatar can die
+        { initialFrame: 600, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 900, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 1200, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 1500, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 1800, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 2100, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 2400, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 2700, count: 5, type: "biter" }, // guess: the same wave
+        { initialFrame: 3000, count: 5, type: "biter" }, // guess: the last wave, at 50 seconds; after it the crowd is what is left
+      ],
+    },
   },
 };
 
