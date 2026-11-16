@@ -58,6 +58,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
   - "of what issue 61 left to the Rules desk" (from the heading of the agent's readings)
   - "a new entry" (from the agent's reading 5: "The array lives in a new entry `DEFINITIONS.maps`")
 
+## 2026-11-15: a weightless thing breaks with any actor, in the section "Collision with still things" too (section "Collision with still things", the exception of weight 0)
+
+- **Who decided:** the user, after I24 (issue 47; issues plan I27, commit c5d8da9, and I28, commit 5dfc0b2). See the entry "a weightless thing breaks with the body of any actor" of the same day, section "Damage", whose "Weight 0" paragraph is the reference wording.
+- **His words:** "the Branch has to break with anything" (I27) and "we have to know why projectiles were lost" (I28).
+- **What it replaced:** the I24 reading, the same day (commit 9ba204b): a weightless thing broke only at the first contact with a body that hurts objects, and a Biter stood against it like against a Rock. Today the body of any actor breaks it (`breakWeightless` does not ask `bodyHurts`; tests 226 and 233), a body that does not hurt objects lands a hit of total 0 on it (`landHit`, the journal line of tests 226 and 233), and any hit that lands breaks it, a hit of 0 included, with a bullet spending its pierce or stopping on it (tests 232 and 234). The rule that an actor never breaks an object (2026-11-10) stays for things with weight.
+- **Moved from AGENTS.md** (section "Collision with still things", issue 66 parcel 24):
+  - "a body that hurts objects breaks it at the first contact, with no minimum impact, no push and no bounce (see "Weight 0"); a Biter still stands against it like against a Rock." (from "**An object of weight 0 is the exception (the user, 2026-11-15, issue 47):** a body that hurts objects breaks it at the first contact, with no minimum impact, no push and no bounce (see "Weight 0"); a Biter still stands against it like against a Rock.", which is now "**An object of weight 0 is the exception (the user, 2026-11-15, issue 47: "the Branch has to break with anything"):** the body of any actor (the avatar, a Dummy, a Biter) breaks it at the first contact, with no minimum impact, no push and no bounce, and the actor keeps its speed (`breakWeightless`, asked right after `crushObject`; tests 226 and 233); a body that does not hurt objects writes a hit of total 0 on it in the journal. Any hit that lands on it breaks it too, a hit of 0 included, and a bullet spends its pierce or stops on it (tests 232 and 234; see "Weight 0").")
+
 ## 2026-11-15: a weightless thing breaks with the body of any actor (section "Damage", "Weight 0")
 
 - **Who decided:** the user, after I24 (issue 47; issues plan I27, commit c5d8da9).
@@ -247,6 +255,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "The user first asked whether the ring was the real collision box or only visual; his answer was the real one, with the continuous radius."
 
+## 2026-11-11: one routine meets the objects for every actor; the Dummy's own meeting is gone (section "Collision with still things")
+
+- **Who decided:** the user (2026-11-11: "a Shroom bounces everyone, it only does not hurt everyone"; commit acec94c, "One routine for every actor that meets an object", test 115).
+- **What it replaced:** the Dummy's own, simpler meeting with objects (its first day, 2026-11-10), with no bounce and no change of velocity, a difference nobody had decided. Today `collideWithObjects` serves every actor that has `move`, and the rule stays in `AGENTS.md`.
+- **Moved from AGENTS.md** (section "Collision with still things", issue 66 parcel 24):
+  - "(History: the Dummy had its own, simpler meeting with objects, with no bounce and no change of velocity; nobody had decided that difference.)"
+
 ## 2026-11-11: the diagnostics bench is Chamber 0, no longer Chamber 2 (section "Screens", "Chamber 0: Diagnostics")
 
 - **Who decided:** the user (commit 4e63e8f, "Chamber 2 becomes Chamber 0").
@@ -320,6 +335,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** nothing; a past check. The rule of today (only `Math.imul`, xor and shifts; the known answer fixed by a test; DATA prints the same objects) stays in `AGENTS.md`.
 - **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
   - "; the user compared them in his Chrome and they were identical" (from "A **known answer** for one seed is fixed by a test, and DATA in Chamber 0 prints the same objects; the user compared them in his Chrome and they were identical.", which is now "A **known answer** for one seed is fixed by a test, and DATA in Chamber 0 prints the same objects.")
+
+## 2026-11-10: a bounce is never above 1; the user dropped his first idea of a bounce from 1 up (section "Collision with still things", "Bounce")
+
+- **Who decided:** the user (2026-11-10, commit 3564510, "only the Shroom has bounce"; `assertValidDefinitions` fails above 1).
+- **What it replaced:** his first idea, a bounce from 1 up, which he dropped because it ejects whoever hits the thing. The rule of today (never above 1, "or the thing would eject whoever hits it, like a spring"; the Shroom's bounce in a straight line with its radius, `finalBounce`) stays in `AGENTS.md`.
+- **Moved from AGENTS.md** (section "Collision with still things", issue 66 parcel 24):
+  - "The user's first idea was a bounce from 1 up, and he dropped it: it ejects."
 
 ## 2026-11-10: the recharge of the dash comes from the Booster too (section "The kit of parts", "Open")
 
