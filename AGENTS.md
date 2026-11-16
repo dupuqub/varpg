@@ -278,11 +278,11 @@ Agreed with the user. Implemented in `src/history.js` and recorded by the loop o
 
 - **Vocabulary:** a **snap** is a saved copy of the state at one frame (the user's word). "State" is the live one.
 - Each snap carries `run` and `frame`, so a snap exported to disk can be identified. The rules never read `state.run`.
-- The game keeps the last `HISTORY_SIZE` snaps and inputs, in two lists where index 0 is the oldest. The lists are **aligned**: same index = same frame, and `inputs[i]` is the input of the step that produced `snaps[i]`. The first snap has no input. Snaps and inputs are saved as copies. The history also keeps the blueprint of the run.
-- **Cross-check** (`crossCheck(history)`): take the oldest snap, apply the saved inputs with `step`, and compare each result with the snap of the same frame. It returns `null` or the first difference (`{ frame, path, expected, actual }`). A difference means something is not deterministic. Planned: run it continuously.
+- The game keeps the last `HISTORY_SIZE` snaps and inputs, in two lists where index 0 is the oldest. The lists are **aligned**: same index = same frame, and `inputs[i]` is the input of the step that produced `snaps[i]`. The first snap has no input. Snaps and inputs are saved as copies. The history also keeps the blueprint of the run (tests 20 and 21).
+- **Cross-check** (`crossCheck(history)`): take the oldest snap, apply the saved inputs with `step`, and compare each result with the snap of the same frame. It returns `null` or the first difference (`{ frame, path, expected, actual }`). A difference means something is not deterministic (tests 22 to 24). Planned: run it continuously.
 - It proves **consistency**, not **correctness**: a wrong rule replays equally wrong. Correctness is the job of the tests and of the damage audit.
 - No hashes: the comparison is state against state, and the states stay readable JSON.
-- **Going back while paused (planned):** the user can walk back through the saved frames. Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed). Going back must load a **copy** (`stateFromSnap`), because `step` changes the state in place.
+- **Going back while paused (built, `src/main.js`: `stepBack`, `stepForward`, `playGame`):** the user can walk back through the saved frames. Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`, test 25; confirmed by the user on 2026-11-14, issue 42, for as long as the history is a debugger). Going back must load a **copy** (`stateFromSnap`), because `step` changes the state in place.
 
 ### Spawn
 

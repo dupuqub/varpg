@@ -48,6 +48,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "the curve already guarantees it, since it never takes everything off, so `minDamage` and `minimumApplied` were removed (data version 58)."
 
+## 2026-11-14: play on a past frame discards what came after, confirmed (section "Run history (two logs)", "Going back while paused")
+
+- **Who decided:** the user (issue 42, comment of 2026-11-14; written into `src/main.js` and the section "Frame debug" of `AGENTS.md` on 2026-11-15, commit a36dfb9).
+- **His words:** "A morte é desfeita, é só um debugger por enquanto. No jogo a morte não será passível de retorno no tempo." (the death is undone, it is only a debugger for now; in the game the death will not be undoable by going back in time).
+- **What it replaced:** the agent's default of 2026-11-09 (commit 6ab62cc; the wording of today from 2026-11-10, commit 6761b25), not yet confirmed by the user: pressing play on a past frame discards the snaps and inputs after it (`discardAfter`). The rule is the same; only its status changed. Test 25 keeps `discardAfter`; tests 223 to 225 keep playing on from a snap before the death.
+- **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
+  - "Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed)."
+
 ## 2026-11-13: the combat journal built in pieces (section "Damage", "The combat journal")
 
 - **Who:** the Rules desk, on the user's request of 2026-11-13 (commit 247ebac and the ones before it).
@@ -68,6 +76,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** nothing; a past measurement. The touch controls still have no Node test, and the numbers are still guesses to tune on a phone (both stay in `AGENTS.md`).
 - **Moved from AGENTS.md** (section "Movement and input", issue 66 parcel 2):
   - "it was checked in Chromium with real touch events (half stick = 0.5, beyond the radius = 1, dead zone = 0, a second finger dashes in the movement direction and spends a charge, the top bar still takes taps)."
+
+## 2026-11-12: going back while paused is built (section "Run history (two logs)", "Going back while paused")
+
+- **Who decided:** the user asked for the frame debug buttons (2026-11-12, commit 1ee9b93: pause and play, one frame back, one frame forward).
+- **What it replaced:** the plan of 2026-11-09 (commit 192bc6f, when the history was written; marked "(planned)" on 2026-11-10, commit 6761b25): going back while paused was planned, not built. Today `stepBack`, `stepForward` and `playGame` in `src/main.js` walk the snaps with `stateFromSnap` and cut with `discardAfter`.
+- **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
+  - "**Going back while paused (planned):** the user can walk back through the saved frames."
 
 ## 2026-11-12: the shield's ring is the real collision box (section "Damage", "Shield")
 
