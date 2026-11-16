@@ -147,6 +147,14 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
   - "Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed)."
 
+## 2026-11-14: the Branch is a third kind of object, picked through `rareKinds` (section "The world: seed and objects", the kinds and the layers)
+
+- **Who decided:** the user (issue 51: "weightless branches in combat and in the movement test, 10% of the seed, just to have it running"; commit e189203). See the entry of the same day for the section "State, definitions, blueprint and rules".
+- **What it replaced:** the two kinds of 2026-11-10, the rock and the Shroom, both picked from `kinds` of the layer (commit 79843ad, the layers). Today `DEFINITIONS.objects` holds the rock, the Shroom and the Branch (test 73), and `kindInSquare` first rolls `rareKinds` (the Branch, `SALTS.objectRare`) and otherwise picks from `kinds`.
+- **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
+  - "(the **rock** and the **Shroom**)" (from "The kinds are entries of `DEFINITIONS.objects` (the **rock** and the **Shroom**), each an independent set of ranges.", which is now "The kinds are entries of `DEFINITIONS.objects` (the **rock**, the **Shroom** and the **Branch**), each an independent set of ranges.")
+  - "The type is picked from `kinds` of the layer," (from "The type is picked from `kinds` of the layer, and the radius and the health are rolled inside the `size` and the `healthRange` of that type (`rollInRange`; every roll has its own salt, listed in `objectInSquare`).", which now begins "The type is picked from `rareKinds` and `kinds` of the layer (`kindInSquare`),")
+
 ## 2026-11-14: the Branch is a third object of the definitions (section "State, definitions, blueprint and rules", "Definitions")
 
 - **Who decided:** the user (issue 51: "weightless branches in combat and in the movement test, 10% of the seed, just to have it running"; written into `src/data.js` on 2026-11-14, commit e189203).
@@ -203,6 +211,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** the note of 2026-11-09 (commit 88536c0, when the manual aim was removed) that a weapon's target would be data of the weapon later; today it is the key `target`, `{ pick, tag }`, of the attack, read by `pickTarget`.
 - **Moved from AGENTS.md** (section "Movement and input", issue 66 parcel 2):
   - "a weapon's target will be data of the weapon, later."
+
+## 2026-11-12: the push by weight reads the weight the avatar carries now (section "The world: seed and objects", "Push between actors by weight")
+
+- **Who decided:** the user (2026-11-11: "the ammunition costs weight, so the mecha gets lighter and faster as it fights"; built with the repeater on 2026-11-12, commit 120dd45, `carriedWeight` in `src/sim.js`).
+- **What it replaced:** the push of 2026-11-11 (commit 4efa571), written when the avatar's weight was the total weight of its blueprint. Today `finalWeight` gives the avatar `carriedWeight` (the parts of the blueprint plus the rounds in its own weapon state), calculated again every frame in `finalizeDynamic`, and `pushShare` reads `actor.weight`; tests 136 and 143 keep it, and the section "Weapons and equipment" already says "the push by weight follows the current weight".
+- **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
+  - "(the avatar's weight is the total weight of its blueprint)" (now "(the avatar's weight is what it carries now, `carriedWeight`: the parts of its blueprint and the rounds it still holds)")
 
 ## 2026-11-12: the touch controls checked in Chromium (section "Movement and input", "Touch")
 
@@ -284,6 +299,27 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** the cells were counted relative to the avatar (it was always in cell zero), an agent's choice the user never confirmed, and `isInWindow` said whether a cell was inside the window (only the tests called it). Today the cells are counted in the world (`cellIndex`, `setCells`), so the cells of an actor change only when it moves; `isInWindow` was removed.
 - **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
   - "(History: they were first counted relative to the avatar, an agent's choice the user never confirmed; when the avatar became pushable by other actors, 2026-11-11, that choice would have moved everyone's cells at every push, so the agent changed it. `isInWindow`, which read a relative cell, was called by nothing in the game and died with it.)"
+
+## 2026-11-10 (evening): the first layer kept its salts when the layers came (section "The world: seed and objects", the layers)
+
+- **Who decided:** the user's idea of the layers (2026-11-10, commit 79843ad, "Layers of the ground"); keeping the salts of the first layer was how the agent built it, so the objects of the one existing layer did not change.
+- **What it replaced:** nothing; the story of the parcel. The rule of today (`100 x place + salt`, `objectInSquare`) stays in `AGENTS.md`; the first layer is at place 0, so its salts are the plain salts, and the known answer of test 39 holds.
+- **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
+  - ", and the first layer keeps the salts it always had" (from "The place of the layer in the list goes into the salts (`100 x place + salt`), so layers do not roll the same numbers, and the first layer keeps the salts it always had.", which is now "The place of the layer in the list goes into the salts (`100 x place + salt`), so layers do not roll the same numbers.")
+
+## 2026-11-10: the agent's invented objects removed; no object by hand, no fixed value (section "The world: seed and objects", the kinds)
+
+- **Who decided:** the user (his rule: no leftovers, no placeholders). The stone, the boulder, the rubber rock and the first "training dummy" were the agent's inventions (commits 4c1abca and a225558, 2026-11-09 and 2026-11-10); they were removed on 2026-11-10 (commits 21e6b34, 3564510 and 5ab433f, "Keep only three definitions: avatar, rock and shroom"), with every hand-placed object and every fixed value of an object.
+- **What it replaced:** those definitions and the hand-placed objects. Today every object comes from the seed, inside the ranges of its entry (`src/data.js`: "so no object has a fixed number"); the rule stays in `AGENTS.md` as "No object is placed by hand and no value of an object is fixed (the user's rule: no leftovers, no placeholders)."
+- **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
+  - "Stone, boulder, rubber rock and a first "training dummy" were the agent's inventions and were **removed**, and so was every hand-placed object and every fixed value of an object (the user's rule: no leftovers, no placeholders)."
+
+## 2026-11-10: the known answer of the seed compared in the user's Chrome (section "The world: seed and objects", `hashInts`)
+
+- **Who:** the user, on 2026-11-10 (before commit 6761b25): he compared the rocks of the first screen in his Chrome with the DATA text of the diagnostics bench (then Chamber 2, today Chamber 0), and they were identical to the known answer of the test (today test 39).
+- **What it replaced:** nothing; a past check. The rule of today (only `Math.imul`, xor and shifts; the known answer fixed by a test; DATA prints the same objects) stays in `AGENTS.md`.
+- **Moved from AGENTS.md** (section "The world: seed and objects", issue 66 parcel 23):
+  - "; the user compared them in his Chrome and they were identical" (from "A **known answer** for one seed is fixed by a test, and DATA in Chamber 0 prints the same objects; the user compared them in his Chrome and they were identical.", which is now "A **known answer** for one seed is fixed by a test, and DATA in Chamber 0 prints the same objects.")
 
 ## 2026-11-10: the recharge of the dash comes from the Booster too (section "The kit of parts", "Open")
 
