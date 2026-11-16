@@ -1,6 +1,6 @@
 # The world, collision and the grid
 
-#### The world: seed and objects
+## The world: seed and objects
 
 **Objects (rocks, Shrooms) are made by the seed and the formula, and are not stored in the state** (the user's decisions). They are not actors in the code (the actors are the avatar, `createAvatar`, the Dummies and the Biters, born from the spawn events of their map by `spawnEvents`). **One function makes everything that exists in a run (the user's idea, 2026-11-10):** `finalizeObject(type, rolls, blueprint, id)` takes the recipe (the entry of `src/data.js`), what the seed rolled and the blueprint, and returns the complete object; the avatar and every object from the seed come out of it.
 
@@ -11,7 +11,7 @@
 - **Objects have health (the user's decision):** each object rolls a whole number inside the `healthRange` of its type from the seed. An object comes from the formula at full health and carries it as `health: { now, max }` (the user's mold: everything with a variable amount has a now and a max: health, shield, ammunition...), both equal at creation; only a **hurt** object is in the state, in `state.damagedObjects`, a plain object from `"layer:squareX,squareY"` to its current health (the `now` of a hurt object; the object itself is made again from the seed and so keeps its full values). An object at zero is **broken** (the agent's choice; the user did not say what happens at zero): it is not drawn and nothing collides with it. The hit that breaks it has no collision response (the actor is not pushed or bounced and keeps its speed), but still hurts the actor. Health numbers are drawn above any hurt object.
 - **Push between actors by weight (the user's decision, 2026-11-11, `pushShare` in `src/sim.js`):** when two actors overlap (the avatar included), each is pushed back by the other's weight over the sum of the two, so the heavier moves less: the heavy mecha pushes light enemies and heavy enemies push it (the avatar's weight is what it carries now, `carriedWeight`: the parts of its blueprint and the rounds it still holds). Two actors of weight 0 move half each. An object never moves: the actor takes the whole push. The avatar's cells are written again when it is pushed, like a Dummy's. A consequence: a Dummy can push the avatar into an object at the end of a step; the next step's collision with objects pushes it out (a standing avatar is pushed with no hit). Planned (the user's ideas, **not implemented**): the user wants the **dash force to push enemies a little and open space** when surrounded, and he wants the tension of being surrounded (the push by weight is the base of it); later three kinds of dash: normal, **blink** (goes through rocks) and **charge** (breaks rocks; `crushes` is the mechanism). Agent's cautions: pushes in a chain need a fixed order (they have one: list order) and the result of a step depends on it; the rock formula must be reviewed if rocks are ever generated outside the collision window.
 
-#### Collision with still things
+## Collision with still things
 
 `collideWithObjects` in `src/sim.js`, called in `step` right after the movement of each actor that has `move`: **one routine for every actor, the avatar and the Dummies alike (the user's rule, 2026-11-11: a Shroom bounces everyone, it only does not hurt everyone).** The things it tests are the objects near the actor (found by the formula, not the broken ones). It says whether the actor met an object it was not touching before, and the reaction to that is the actor's own (the Dummy picks a new angle).
 
@@ -22,7 +22,7 @@
 - When the collision happens, the **body slam** hurts both sides before the bounce (see "Damage" (docs/rules/damage.md)). **An object of weight 0 is the exception (the user, 2026-11-15, issue 47: "the Branch has to break with anything"):** the body of any actor (the avatar, a Dummy, a Biter) breaks it at the first contact, with no minimum impact, no push and no bounce, and the actor keeps its speed (`breakWeightless`, asked right after `crushObject`; tests 226 and 233); a body that does not hurt objects writes a hit of total 0 on it in the journal. Any hit that lands on it breaks it too, a hit of 0 included, and a bullet spends its pierce or stops on it (tests 232 and 234; see "Weight 0" in docs/rules/damage.md).
 - The objects are tested in the fixed order of `objectsInArea` (`objectsNear` keeps that order); a corner between two objects is resolved over the next frames. See "Relations" for the speed above which an object could be crossed in one frame.
 
-#### Collision grid
+## Collision grid
 
 - The **window** of cells around the avatar is the **whole universe of the game** (the user's decision): nothing ever exists outside these cells, and collision is tested only between actors inside it.
 - The avatar is in the center cell. The window must cover **all the ground where an actor can be**, including actors that are off screen (the user's requirement: at least twice the screen). It is a rectangle of cells, odd on each side.
