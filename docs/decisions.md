@@ -6,6 +6,18 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 
 ---
 
+## 2026-11-15: the Dummy's `wander` carries its pair (event, nth) and turns by it; the crowd maker is gone (section "The Dummy", "Made by the seed" and "How it moves")
+
+- **Who decided:** the user (issue 62; built by the Rules desk, commit 28c00f1, data version 63). The forms (the pair in `wander`, the hash of the hash for the turns, `createChamberState` without `populate`) are the agent's choices, as the issue left them open.
+- **His words:** "os dummies tbm deveriam nascer no frame 0, não quero códigos não reutilizados ou reutilizáveis no jogo" (the Dummies too should be born at frame 0; I do not want code in the game that is not reused or reusable).
+- **What it replaced:** the Dummies were made with the state by `createCrowd` and `createDummies`, from `DEFINITIONS.terrain.dummies.count`, and `createChamberState(map, populate, runId, seed, blueprint)` called `populate`. `wander` was `{ index, angle, turns }` (its number among the Dummies); the first angle was `hashInts(seed, index, 0, SALTS.dummyAngle) % 360` and a new angle `hashInts(seed, index, turns, SALTS.dummyTurn) % 360`. Today `wander` is `{ event, nth, angle, turns }`, the first angle is rolled in `OWN_ROLLS.dummy` from (seed, event, nth) and a new angle in `turnDummy` as `hashInts(hashInts(seed, event, nth, SALTS.dummyTurn), turns, 0, SALTS.dummyTurn) % 360`. Tests 83, 84, 246 and 247.
+- **Moved from AGENTS.md** (section "The Dummy", issue 66 parcel 5):
+  - "`createCrowd`, `createDummies` and `DEFINITIONS.terrain.dummies` were removed (nothing else called them)."
+  - "the pair replaces the old `index`, which would repeat across two events" (from the agent's choices: "`wander` is `{ event, nth, angle, turns }` (the pair replaces the old `index`, which would repeat across two events)")
+  - "`createChamberState` lost its `populate` argument (every chamber now starts with the avatar alone)" (from the agent's choices)
+  - "the Dummy's angle and the turns have other numbers than before, as every Dummy has the draws of the pair (0, nth) and not (index, 0)." (from the agent's choices)
+  - "`hash(seed, index, turns) % 360`" (from "How it moves": "it gets a new angle, `hash(seed, index, turns) % 360` (the user's `rand(360)`, but from the seed, so the run is reproducible)"; it had stayed after issue 62 and contradicted the agent's choices of the same section)
+
 ## 2026-11-15: the Dummies of Chamber 1 are born through the spawn array (section "Spawn", "The spawn events" and the agent's reading 8)
 
 - **Who decided:** the user (issue 62; built by the Rules desk, commit 28c00f1, data version 63).
@@ -108,6 +120,20 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** an open question: the ring as the real collision box or only visual.
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "The user first asked whether the ring was the real collision box or only visual; his answer was the real one, with the continuous radius."
+
+## 2026-11-11 (the night of 2026-11-10): the Dummy hurts and is hurt only by the avatar, and the push is split by weight (section "The Dummy", "Only the avatar hurts a Dummy")
+
+- **Who decided:** the user (his rule of 2026-11-10, commit 7e79ad8: the body slam hurts only where the avatar is one of the two sides; his decision of 2026-11-11, commit 4efa571: the push between actors is split by weight, the avatar included).
+- **What it replaced:** the Dummy's first day (commit a2d4897, 2026-11-10): the Dummy hurt and was hurt by everything it touched, and the avatar was not pushed. Today `bodyHurts` holds who hurts whom (test 90) and `pushShare` the push (tests 85 to 87, 109 and 110).
+- **Moved from AGENTS.md** (section "The Dummy", issue 66 parcel 5):
+  - "(History: on its first day the Dummy hurt and was hurt by everything it touched, and the avatar was not pushed; the user changed both the same night.)"
+
+## 2026-11-11 (the night of 2026-11-10): the Dummy is born by the birth rule, with no search for a free place (section "The Dummy", "Where")
+
+- **Who decided:** the user (his rule of 2026-11-10; commit f5f21f1, data version 26).
+- **What it replaced:** the Dummy's first day (commit a2d4897, 2026-11-10): a taken place was refused and the seed tried another, up to a number of tries (`safeRadius`, `placementTries`, `isPlaceTaken`). Today `birthOffset` places every actor (test 101 keeps the ring with room).
+- **Moved from AGENTS.md** (section "The Dummy", issue 66 parcel 5):
+  - "(History: on its first day a taken place was refused and the seed tried another, up to a number of tries; the user replaced that with the birth rule the same night, and `safeRadius` and `placementTries` of the Dummies died with it.)"
 
 ## 2026-11-11: resistance is a hyperbolic curve, not a fixed percentage (section "Damage")
 
