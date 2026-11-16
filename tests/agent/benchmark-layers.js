@@ -34,6 +34,7 @@ const result = vm.runInContext(`(() => {
     }
   }
   const state = createChamber1State(1, 1);
+  spawnEvents(state, null); state.frame += 1; // the Dummies are born at the end of the first step (issue 62): only their birth, as firstBirths in the tests
   const blueprint = createRun(1).blueprint;
   const input = { move: { x: 0, y: 0 } };
   for (let frame = 0; frame < 30; frame++) step(state, input, blueprint); // warm up

@@ -71,8 +71,10 @@ function loadGame(patchData = null, { shield = false, patchSim = null, branches 
 
 // How many Dummies a game has (the data says how many for the stress test). If the count is no longer written that way,
 // loadGame fails loudly (the patch would change nothing).
+const DUMMY_EVENT = /\{ initialFrame: 0, count: \d+, type: "dummy" \}/;
+const dummyEvent = (count) => '{ initialFrame: 0, count: ' + count + ', type: "dummy" }';
 function withDummies(count) {
-  return loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: " + count + " }"));
+  return loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(count)));
 }
 
 // The Biters of Chamber 2 as the tests written before issue 61 knew them: one crowd of `count` at the start and nobody born later. The
@@ -805,7 +807,7 @@ test("39 known answer: seed 1 gives 10 objects on the first screen, the first a 
 
 test("40 the state keeps only the seed, not the objects; the seed rolls the type, the radius and the health of every object inside its ranges", () => {
   const result = run(`
-    const s = createChamber1State(1, 5);
+    const s = firstBirths(createChamber1State(1, 5));
     const rules = DEFINITIONS.terrain.objects.layers.small;
     const seen = {};
     let outOfRange = 0;
@@ -832,7 +834,7 @@ test("40 the state keeps only the seed, not the objects; the seed rolls the type
       shroom: spread("shroom"),
       margin: objectMargin(rules),
       kinds: rules.kinds,
-      dummyCount: DEFINITIONS.terrain.dummies.count,
+      dummyCount: DEFINITIONS.maps.chamber1.spawns[0].count,
     };
   `, WITH_DUMMIES);
   assert.strictEqual(result.seed, 5);
@@ -1553,8 +1555,8 @@ const EMPTY = loadGame((text) => text.replace("chancePercent: 35", "chancePercen
 // A state with the avatar and only the Dummies of the given numbers, in the game without objects.
 const ALONE = `
   function alone(...numbers) {
-    const s = createChamber1State(1, 1);
-    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "dummy_" + n))];
+    const s = firstBirths(createChamber1State(1, 1));
+    s.actors = [s.actors[0], ...numbers.map((n) => s.actors.find((actor) => actor.id === "dummy 0," + n))];
     return s;
   }
   // Points a Dummy at an angle, already walking at its full speed (a Dummy is born still and speeds up; most tests want it cruising).
@@ -1563,9 +1565,9 @@ const ALONE = `
 
 test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8 to 16, health 100, speed from the recipe), born off the screen with the center inside the window, the same every time", () => {
   const result = run(`
-    const s = createChamber1State(1, 7);
-    const again = createChamber1State(1, 7);
-    const other = createChamber1State(1, 8);
+    const s = firstBirths(createChamber1State(1, 7));
+    const again = firstBirths(createChamber1State(1, 7));
+    const other = firstBirths(createChamber1State(1, 8));
     const dummies = s.actors.filter((actor) => actor.wander);
     const width = s.grid.windowWidth * s.grid.cellSize;
     const height = s.grid.windowHeight * s.grid.cellSize;
@@ -1600,7 +1602,7 @@ test("80 the seed makes the Dummies (100 here), each inside its ranges (radius 8
     };
   `, WITH_DUMMIES);
   assert.strictEqual(result.count, 100);
-  assert.deepStrictEqual([result.first, result.last], ["dummy_0", "dummy_99"]);
+  assert.deepStrictEqual([result.first, result.last], ["dummy 0,0", "dummy 0,99"]);
   assert.strictEqual(result.bad, 0);
   assert.ok(result.angles > 50, "the angles are not varied: " + result.angles);
   assert.ok(result.radii >= 8, "the radii are not varied: " + result.radii); // 8 to 16 has 9 values
@@ -1616,7 +1618,7 @@ test("81 birth: every point of the ring between the screen and the edge of the w
     let stillOverlapping = 0;
     const overlapping = (a, b) => Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) < a.radius + b.radius - 1e-9;
     for (let seed = 1; seed <= 20; seed++) {
-      const s = createChamber1State(1, seed);
+      const s = firstBirths(createChamber1State(1, seed));
       const dummies = s.actors.filter((actor) => actor.wander);
       for (const d of dummies) {
         const dx = d.position.x - s.actors[0].position.x;
@@ -1658,7 +1660,7 @@ test("82 without a collision a Dummy walks in a straight line at its own speed, 
   assert.ok(Math.abs(result.speed - 2) < 1e-9);
 });
 
-test("83 at a collision with an object the Dummy is pushed out and picks a new angle from the seed, hash(seed, number, turns) % 360, and nobody is hurt (the body slam only hurts against the avatar)", () => {
+test("83 at a collision with an object the Dummy is pushed out and picks a new angle from the seed, a hash of the seed, the pair and the turns, % 360, and nobody is hurt (the body slam only hurts against the avatar)", () => {
   const result = run(`
     ${ALONE}
     const s = alone(0);
@@ -1667,10 +1669,10 @@ test("83 at a collision with an object the Dummy is pushed out and picks a new a
     d.position.x = ${ROCK.x}; d.position.y = ${ROCK.y} - ${ROCK.radius} - d.radius - 30;
     let frames = 0;
     while (d.wander.turns === 0 && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
-    const hitRock = s.contacts.includes("dummy_0|rock ${ROCK.key}");
+    const hitRock = s.contacts.includes("dummy 0,0|rock ${ROCK.key}");
     const distance = Math.hypot(d.position.x - ${ROCK.x}, d.position.y - ${ROCK.y});
     return {
-      frames, hitRock, turns: d.wander.turns, angle: d.wander.angle, expected: hashInts(1, 0, 1, 16) % 360,
+      frames, hitRock, turns: d.wander.turns, angle: d.wander.angle, expected: hashInts(hashInts(1, 0, 0, 16), 1, 0, 16) % 360,
       gap: distance - (d.radius + ${ROCK.radius}), damaged: JSON.stringify(s.damagedObjects), health: d.health.now, weight: d.weight,
       length: Math.hypot(d.move.direction.x, d.move.direction.y),
     };
@@ -1686,14 +1688,14 @@ test("83 at a collision with an object the Dummy is pushed out and picks a new a
   assert.ok(Math.abs(result.length - 1) < 1e-9);
 });
 
-test("84 every new angle is rolled from hash(seed, number, turns): the same sequence for the same Dummy, whole degrees from 0 to 359, and varied", () => {
+test("84 every new angle is rolled from a hash of the seed, the pair (event, nth) and the turns: the same sequence for the same Dummy, whole degrees from 0 to 359, and varied", () => {
   const result = run(`
-    const s = createChamber1State(1, 1);
-    const d = s.actors.find((actor) => actor.id === "dummy_3");
+    const s = firstBirths(createChamber1State(1, 1));
+    const d = s.actors.find((actor) => actor.id === "dummy 0,3");
     const angles = [];
     for (let i = 0; i < 40; i++) { turnDummy(s, d); angles.push(d.wander.angle); }
     const expected = [];
-    for (let turns = 1; turns <= 40; turns++) expected.push(hashInts(1, 3, turns, 16) % 360);
+    for (let turns = 1; turns <= 40; turns++) expected.push(hashInts(hashInts(1, 0, 3, 16), turns, 0, 16) % 360);
     return { angles, expected, turns: d.wander.turns, length: Math.hypot(d.move.direction.x, d.move.direction.y), distinct: new Set(angles).size };
   `, WITH_DUMMIES);
   assert.deepStrictEqual(result.angles, result.expected);
@@ -1709,7 +1711,7 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
     const s = alone(0);
     const d = s.actors[1];
     const avatar = s.actors[0];
-    const key = "dummy_0|" + AVATAR_ID;
+    const key = "dummy 0,0|" + AVATAR_ID;
     const overlap = () => { d.position.x = avatar.position.x + 16 + d.radius - 5; d.position.y = avatar.position.y; };
     overlap();
     face(d, 180); // walking toward the avatar
@@ -1731,7 +1733,7 @@ test("85 only a NEW contact turns and hurts: a pair that was touching in the las
   assert.ok(Math.abs(result.health[0] - (100 - 5000 * 0.001 * 2 / 6)) < 1e-9 && result.health[1] > 99 && result.health[1] < 100);
   assert.ok(Math.abs(result.gap) < 1e-9, "the pair was not pushed to just touching: " + result.gap);
   assert.ok(Math.abs(result.avatarPushed - result.expectedPush) < 1e-9, "the avatar moved " + result.avatarPushed + ", not its share " + result.expectedPush);
-  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|avatar_1", "dummy_0|avatar_1"]);
+  assert.deepStrictEqual(plain(result.contacts), ["dummy 0,0|avatar_1", "dummy 0,0|avatar_1"]);
 });
 
 test("86 two Dummies that collide are pushed apart by weight (the lighter moves more), both pick a new angle, and neither is hurt", () => {
@@ -1761,7 +1763,7 @@ test("86 two Dummies that collide are pushed apart by weight (the lighter moves 
   const [wa, wb] = result.weights;
   assert.ok(wa !== wb, "the two Dummies of seed 1 should weigh differently for this test to prove the split");
   assert.ok(Math.abs(result.movedA / result.movedB + wb / wa) < 1e-9, "the push was not split by weight: " + result.movedA + " and " + result.movedB + " for weights " + wa + " and " + wb); // a moves back by wb/(wa+wb), b by wa/(wa+wb)
-  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1"]);
+  assert.deepStrictEqual(plain(result.contacts), ["dummy 0,0|dummy 0,1"]);
 });
 
 test("87 a Dummy that bumps into the avatar hurts it and is hurt by it, turns, and the two are pushed apart by weight: the heavy avatar barely moves", () => {
@@ -1843,7 +1845,7 @@ test("89 the sine and cosine of whole degrees (own series, no Math.sin): unit le
 
 test("90 after 600 frames of play every Dummy is still inside the window around the avatar, the Dummies did collide, only what touched the avatar was hurt, nobody has less than 0, and the state is still plain JSON", () => {
   const result = run(`
-    const s = createChamber1State(1, 1);
+    const s = firstBirths(createChamber1State(1, 1));
     let outside = 0;
     const touchedAvatar = new Set(); // the ids of the Dummies and the keys of the objects that were ever in contact with the avatar
     for (let frame = 0; frame < 600; frame++) {
@@ -1887,7 +1889,7 @@ test("90 after 600 frames of play every Dummy is still inside the window around 
 test("91 a run with 100 Dummies is reproducible: the same inputs give the same state, and the cross-check of the replay is clean", () => {
   const result = run(`
     const play = () => {
-      const s = createChamber1State(1, 3);
+      const s = firstBirths(createChamber1State(1, 3));
       const h = createHistory(s, createRun(1).blueprint);
       for (let frame = 0; frame < 300; frame++) {
         const input = { move: { x: frame % 120 < 60 ? 1 : 0, y: frame % 90 < 45 ? 1 : -1 } };
@@ -1910,7 +1912,7 @@ test("92 the speed of a Dummy comes from its recipe through finalSpeed (and a th
   assert.throws(() => loadGame(patch(-1)), /speed of the actor dummy/);
   const fast = loadGame(patch(3));
   const result = run(`
-    const s = createChamber1State(1, 1);
+    const s = firstBirths(createChamber1State(1, 1));
     const d = s.actors[1];
     s.actors = [s.actors[0], d];
     for (let frame = 0; frame < 24; frame++) step(s, { move: { x: 0, y: 0 } }); // 3 / 0.125 = 24 frames to its top speed
@@ -1948,7 +1950,7 @@ test("94 a Dummy cannot break an object: a rock with 1 health left keeps it, and
     let frames = 0;
     while (d.wander.turns === 0 && frames < 60) { step(s, { move: { x: 0, y: 0 } }); frames++; }
     const gap = Math.hypot(d.position.x - ${ROCK.x}, d.position.y - ${ROCK.y}) - (d.radius + ${ROCK.radius});
-    return { turns: d.wander.turns, health: d.health.now, rock: s.damagedObjects["${ROCK.key}"], gap, hitRock: s.contacts.includes("dummy_0|rock ${ROCK.key}") };
+    return { turns: d.wander.turns, health: d.health.now, rock: s.damagedObjects["${ROCK.key}"], gap, hitRock: s.contacts.includes("dummy 0,0|rock ${ROCK.key}") };
   `, WITH_DUMMIES);
   assert.ok(result.hitRock, "the first collision was not with the rock");
   assert.strictEqual(result.rock, 1); // still 1: a Dummy does not hurt an object
@@ -1991,7 +1993,7 @@ test("95 the collision grid finds the same collisions as testing every pair of D
   const result = run(`
     ${EVERY_PAIR}
     const make = (cellSize) => () => {
-      const s = createChamber1State(1, 2);
+      const s = firstBirths(createChamber1State(1, 2));
       s.grid = { cellSize, windowWidth: 3900 / cellSize, windowHeight: 2100 / cellSize };
       for (const actor of s.actors) setCells(actor, s.grid);
       return s;
@@ -2066,7 +2068,7 @@ test("98 huge Dummies (radius 128 and 256) among the others collide like everyth
   const result = run(`
     ${EVERY_PAIR}
     const make = () => {
-      const s = createChamber1State(1, 2);
+      const s = firstBirths(createChamber1State(1, 2));
       const dummies = s.actors.filter((actor) => actor.wander);
       dummies[0].radius = 256; // the code reads the radius from the actor
       dummies[1].radius = 128;
@@ -2101,13 +2103,13 @@ test("99 a Dummy pushed into a third one in the same step still finds it (its ce
     return { sharedBefore, contacts: s.contacts, turns: [a.wander.turns, b.wander.turns, c.wander.turns], bCells: b.cells };
   `, EMPTY);
   assert.strictEqual(result.sharedBefore, false);
-  assert.deepStrictEqual(plain(result.contacts), ["dummy_0|dummy_1", "dummy_1|dummy_2"]);
+  assert.deepStrictEqual(plain(result.contacts), ["dummy 0,0|dummy 0,1", "dummy 0,1|dummy 0,2"]);
   assert.deepStrictEqual(plain(result.turns), [1, 2, 1]); // b turned twice: once for each collision
 });
 
 test("100 the cells stored in the actors are right at the start and after every step, pushes and wraps included", () => {
   const result = run(`
-    const s = createChamber1State(1, 4);
+    const s = firstBirths(createChamber1State(1, 4));
     const wrong = () => {
       let count = 0;
       for (const actor of s.actors) {
@@ -2172,7 +2174,7 @@ test("101 no recipe in the definitions allows an actor larger than the space bet
 
   // The check can fail: a Dummy recipe that goes up to 581 is caught, and one that goes up to exactly 580 is not.
   const withSize = (max) => loadGame((text) => {
-    const patched = text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }").replace("size: { min: 8, max: 16 },", "size: { min: 8, max: " + max + " },");
+    const patched = text.replace(DUMMY_EVENT, dummyEvent(0)).replace("size: { min: 8, max: 16 },", "size: { min: 8, max: " + max + " },");
     assert.ok(patched.includes("max: " + max + " }"), "the patch of the Dummy size should apply");
     return patched;
   });
@@ -2191,15 +2193,15 @@ function patchOnce(text, from, to) {
   return text.replace(from, to);
 }
 
-const AFTER_SMALL = "        },\n      },\n    },\n\n    // The Dummies of Chamber 1";
-const HUGE_LAYER = (square, kind = "giant") => `        },\n        huge: { cellSize: ${square}, chancePercent: 100, safeRadius: 0, kinds: ["${kind}"] },\n      },\n    },\n\n    // The Dummies of Chamber 1`;
+const AFTER_SMALL = "        },\n      },\n    },\n  },\n\n  // The maps (issue 61)";
+const HUGE_LAYER = (square, kind = "giant") => `        },\n        huge: { cellSize: ${square}, chancePercent: 100, safeRadius: 0, kinds: ["${kind}"] },\n      },\n    },\n  },\n\n  // The maps (issue 61)`;
 const GIANT = '    giant: { tags: ["object"], bodyIgnores: ["enemy", "object"], name: "Giant", size: { min: 200, max: 256 }, weightPerRadius: 100, healthRange: { min: 10, max: 20 } },\n    rock: {';
 
 function withHugeLayer(square = 2048) {
   return loadGame((text) => {
     let patched = patchOnce(text, "    rock: {", GIANT);
     patched = patchOnce(patched, AFTER_SMALL, HUGE_LAYER(square));
-    return patchOnce(patched, "dummies: { count: 1000 }", "dummies: { count: 0 }");
+    return patchOnce(patched, dummyEvent(1000), dummyEvent(0));
   });
 }
 
@@ -2299,7 +2301,7 @@ test("105 the damage of an object is kept by its layer and its square, so two la
 
 test("106 every actor in the state carries crushes, off: the avatar and every Dummy, a plain boolean, from their recipes", () => {
   const result = run(`
-    const s = createChamber1State(1, 1);
+    const s = firstBirths(createChamber1State(1, 1));
     return { values: s.actors.map((actor) => actor.crushes), count: s.actors.length };
   `, WITH_DUMMIES);
   assert.strictEqual(result.count, 101);
@@ -2370,7 +2372,7 @@ test("108 a Dummy that crushes goes through a rock without turning, and the rock
   assert.ok(Math.abs(result.later.walked - result.later.expected) < 1e-9, "the crusher did not keep its straight line: " + result.later.walked + " vs " + result.later.expected);
   assert.deepStrictEqual(plain(result.meeting.turns), [1, 1]);
   assert.ok(Math.abs(result.meeting.gap) < 1e-9, "the two Dummies were not pushed to just touching: " + result.meeting.gap);
-  assert.deepStrictEqual(plain(result.meeting.contacts), ["dummy_0|dummy_1"]);
+  assert.deepStrictEqual(plain(result.meeting.contacts), ["dummy 0,0|dummy 0,1"]);
 });
 
 // ---- The push between actors ----
@@ -2403,12 +2405,12 @@ test("109 the push between actors is split by weight: a giant Dummy (25600 kg) m
 
   // Weight 0 on both sides (a patched Dummy with weightPerRadius 0): half each, no division by zero.
   const weightless = loadGame((text) => {
-    const patched = text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 2 }").replace("      weightPerRadius: 100,\n      healthRange: { min: 100, max: 100 },", "      weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 },");
+    const patched = text.replace("chancePercent: 35", "chancePercent: 0").replace(DUMMY_EVENT, dummyEvent(2)).replace("      weightPerRadius: 100,\n      healthRange: { min: 100, max: 100 },", "      weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 },");
     assert.ok(patched.includes("weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 }"), "the patch of the Dummy weight should apply");
     return patched;
   });
   const zero = run(`
-    const s = createChamber1State(1, 1);
+    const s = firstBirths(createChamber1State(1, 1));
     const [, a, b] = s.actors;
     a.position.x = 1000; a.position.y = 0; b.position.x = 1000 + a.radius + b.radius - 10; b.position.y = 0;
     touchActors(s, ["x"], a, b, "x", createRun(1).blueprint);
@@ -2438,7 +2440,7 @@ test("110 the avatar pushed by a Dummy has its cells written again at once (push
   const result = run(`
     ${EVERY_PAIR}
     const make = () => {
-      const s = createChamber1State(1, 5);
+      const s = firstBirths(createChamber1State(1, 5));
       const dummies = s.actors.filter((actor) => actor.wander);
       const [a, b, c] = dummies; // three heavy Dummies walk straight at the avatar from three sides
       for (const d of [a, b, c]) { d.radius = 64; d.weight = finalWeight(d); }
@@ -2544,7 +2546,7 @@ test("115 one routine for every actor that meets an object: a Shroom bounces a D
   assert.ok(Math.abs(result.shroom.vx) < 1e-9 && Math.abs(result.shroom.vy + 0.4) < 1e-9, "the Shroom did not bounce the Dummy back at 0.2 x 2: " + result.shroom.vx + ", " + result.shroom.vy);
   assert.ok(Math.abs(result.shroom.gap) < 1e-9);
   assert.deepStrictEqual([result.shroom.turns, result.shroom.health, result.shroom.damaged], [1, 100, "{}"]);
-  assert.deepStrictEqual(plain(result.shroom.contacts), ["dummy_0|shroom small:0,-2"]);
+  assert.deepStrictEqual(plain(result.shroom.contacts), ["dummy 0,0|shroom small:0,-2"]);
   assert.ok(Math.abs(result.rock.into) < 1e-9, "the rock left a speed going in, or bounced: " + result.rock.into);
   assert.ok(Math.abs(result.rock.along - result.rock.alongBefore) < 1e-9, "the part along the rock changed: " + result.rock.along + " vs " + result.rock.alongBefore);
   assert.deepStrictEqual([result.rock.turns, result.rock.health, result.rock.damaged], [1, 100, "{}"]);
@@ -2779,8 +2781,8 @@ test("124 an actor with no health left leaves the scene at the end of the step, 
     step(u, { move: { x: 1, y: 0 }, dash: true });
     const afterDash = u.actors.map((actor) => actor.id);
 
-    const d = createChamber1State(1, 1);
-    d.actors = [d.actors[0], d.actors.find((actor) => actor.id === "dummy_0"), d.actors.find((actor) => actor.id === "dummy_1")];
+    const d = firstBirths(createChamber1State(1, 1));
+    d.actors = [d.actors[0], d.actors.find((actor) => actor.id === "dummy 0,0"), d.actors.find((actor) => actor.id === "dummy 0,1")];
     d.actors[1].health.now = 0;
     step(d, { move: { x: 0, y: 0 } });
     return { order, avatarStays, afterDash, avatarHurt: u.actors[0].health.now < 100, dummies: d.actors.map((actor) => actor.id) };
@@ -2788,7 +2790,7 @@ test("124 an actor with no health left leaves the scene at the end of the step, 
   assert.deepStrictEqual(plain(result.order), ["avatar_1", "biter 0,0", "biter 0,2", "biter 0,3"]);
   assert.deepStrictEqual(plain(result.avatarStays), ["avatar_1", "biter 0,0"]); // the avatar at 0 stays: there is no death for it yet
   assert.deepStrictEqual(plain(result.afterDash), ["avatar_1"]);
-  assert.deepStrictEqual(plain(result.dummies), ["avatar_1", "dummy_1"]);
+  assert.deepStrictEqual(plain(result.dummies), ["avatar_1", "dummy 0,1"]);
 });
 
 test("125 two Biters that overlap are pushed apart by weight until they touch, nobody is hurt, and the contact is in the list like any other pair", () => {
@@ -2877,7 +2879,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 62, hash: "7be62b4b0a10c4fb" };
+const DATA_FINGERPRINT = { version: 63, hash: "0f92fdffd39e776d" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3855,7 +3857,7 @@ function brokenPromises(measured) {
   }
   return broken;
 }
-const EMPTY_SHIELDED = (patch = (text) => text) => loadGame((text) => patch(startingBiters(0)(text.replace("chancePercent: 35", "chancePercent: 0").replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }"))), { shield: true });
+const EMPTY_SHIELDED = (patch = (text) => text) => loadGame((text) => patch(startingBiters(0)(text.replace("chancePercent: 35", "chancePercent: 0").replace(DUMMY_EVENT, dummyEvent(0)))), { shield: true });
 
 test("169 the first dash cannot touch an object, for every blueprint in the data, with the shield full: the starter dashes 142.5 px and the combat 147.45 px, born at the ring (28.8), so with the largest object (32) the safe radius must be above 208.25", () => {
   const measured = firstDash(EMPTY_SHIELDED());
@@ -4679,7 +4681,7 @@ test("206 the keys every attack shares are checked by one function in three of t
 
 // ---- Weightless Branches (issue 51) ----
 // The game of the Branches: the real layer (rareKinds), no Dummies (as in the other tests), no shield.
-const BRANCHY = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 0 }"), { branches: true });
+const BRANCHY = loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(0)), { branches: true });
 
 test("207 the seed places weightless Branches: over the squares with an object from -20000 to 20000 of seed 1, about 1 in 10 is a Branch (from 8% to 12%); every square that is not a Branch is exactly the object of the world without Branches (its own roll keeps the rest as it was); every Branch has weight 0 and health 1; Branches are within the window of the grid in Chamber 1 and in Chamber 2", () => {
   const area = "objectsInArea(1, -20000, -20000, 20000, 20000)";
@@ -5361,10 +5363,10 @@ test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too
 });
 
 test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place, and (I28) the break leaves a line naming that actor and the Branch; a Rock does not break under any of them", () => {
-  const DUMMIED = loadGame((text) => text.replace(/dummies: \{ count: \d+ \}/, "dummies: { count: 1 }"), { branches: true });
+  const DUMMIED = loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(1)), { branches: true });
   const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
   assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
-  const ids = { avatar: "avatar_1", dummy: "dummy_0", biter: "biter 0,0" };
+  const ids = { avatar: "avatar_1", dummy: "dummy 0,0", biter: "biter 0,0" };
   for (const kind of kinds) {
     for (const speed of [3, 0]) {
       const result = plain(run(`
@@ -5373,7 +5375,7 @@ test("233 every kind of actor in the data breaks a weightless Branch by contact 
         const branch = isolated("branch");
         const rock = isolated("rock");
         const s = firstBirths(createChamber2State(1, 1));
-        const actor = [...s.actors, ...createChamber1State().actors].find((a) => a.id === "${ids[kind]}");
+        const actor = [...s.actors, ...firstBirths(createChamber1State()).actors].find((a) => a.id === "${ids[kind]}");
         if (!actor) throw new Error("no actor ${ids[kind]} in the scenes");
         s.actors = [s.actors[0], actor].filter((a, i, all) => all.indexOf(a) === i); // the avatar must be in the state (worldStops)
         const touch = (object) => {
@@ -5693,4 +5695,123 @@ test("244 docs/step-order.md and the comments of step change together: the stage
   for (const [i, row] of rows.entries()) {
     for (const name of row.names) assert.ok(new RegExp("\\b" + name + "\\(").test(sections[i].code), "stage " + row.label + " of the table names " + name + ", which the code of that stage does not call");
   }
+});
+
+// ---- The Dummies of Chamber 1 through the spawn array (issue 62) ----
+
+test("245 the Dummies of Chamber 1 are born through the same spawn array as every actor (issue 62): the state of frame 0 has only the avatar; the step of frame 0 makes the 1000 of DEFINITIONS.maps.chamber1.spawns, which exist from frame 1, with the ids dummy 0,0 to dummy 0,999 at the end of the list, the radius, health and place of drawBirth for their pair, their cells right at once, one birth line each in the journal, nobody more in the next steps, and the same state with no journal", () => {
+  const real = loadGame();
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const play = (journal) => {
+      const s = createChamber1State(1, 1);
+      const atZero = s.actors.map((actor) => actor.id);
+      step(s, still, undefined, null, journal);
+      const atOne = { frame: s.frame, ids: s.actors.map((actor) => actor.id), json: JSON.stringify(s) };
+      const avatar = s.actors[0].position;
+      let wrong = 0;
+      s.actors.slice(1).forEach((actor, nth) => {
+        const draw = drawBirth(1, "dummy", 0, nth, s.grid);
+        if (actor.radius !== draw.radius || actor.health.max !== draw.health) wrong++;
+        if (actor.position.x !== avatar.x + draw.offset.x || actor.position.y !== avatar.y + draw.offset.y) wrong++;
+        const cells = { from: { x: cellIndex(actor.position.x - actor.radius, s.grid.cellSize), y: cellIndex(actor.position.y - actor.radius, s.grid.cellSize) }, to: { x: cellIndex(actor.position.x + actor.radius, s.grid.cellSize), y: cellIndex(actor.position.y + actor.radius, s.grid.cellSize) } };
+        if (JSON.stringify(actor.cells) !== JSON.stringify(cells)) wrong++;
+        if (actor.move.velocity.x !== 0 || actor.move.velocity.y !== 0) wrong++; // born still, and it did not move in the step that made it
+      });
+      for (let i = 0; i < 3; i++) step(s, still, undefined, null, journal);
+      return { atZero, atOne, wrong, laterCount: s.actors.length, frame: s.frame, count: DEFINITIONS.maps.chamber1.spawns[0].count };
+    };
+    const journal = createJournal();
+    const a = play(journal);
+    const b = play(null);
+    const births = journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth");
+    return { atZero: a.atZero, atOne: { frame: a.atOne.frame, ids: a.atOne.ids }, wrong: a.wrong, laterCount: a.laterCount, frame: a.frame, count: a.count, same: a.atOne.json === b.atOne.json, births: births.length, firstBirth: births[0], lastBirth: births[births.length - 1], birthFrames: [...new Set(births.map((line) => line.frame))] };
+  `, real));
+  assert.deepStrictEqual(result.atZero, ["avatar_1"], "frame 0 has no Dummy: spawn is the last thing of a step");
+  assert.strictEqual(result.count, 1000);
+  assert.strictEqual(result.atOne.frame, 1);
+  assert.deepStrictEqual(result.atOne.ids, ["avatar_1", ...Array.from({ length: 1000 }, (_, nth) => "dummy 0," + nth)]);
+  assert.strictEqual(result.wrong, 0);
+  assert.strictEqual(result.laterCount, 1001, "nobody is born after frame 0");
+  assert.strictEqual(result.frame, 4);
+  assert.strictEqual(result.births, 1000);
+  assert.deepStrictEqual(result.birthFrames, [1]);
+  assert.deepStrictEqual([result.firstBirth.id, result.firstBirth.type, result.firstBirth.spawn], ["dummy 0,0", "dummy", 0]);
+  assert.strictEqual(result.lastBirth.id, "dummy 0,999");
+  assert.strictEqual(result.same, true, "the rules never read the journal");
+});
+
+test("246 what a type rolls for itself at birth has one place, OWN_ROLLS, usable by any type (issue 62): the Dummy's first angle is hashInts(seed, event, nth, SALTS.dummyAngle) % 360 with the pair in its wander, turns 0, and it is pointed at it (the direction is the unit vector of the angle); the Biter has no entry and no wander; an entry added for the Biter in a patched copy is called on every newborn Biter with the seed and its pair, and the Dummy still rolls its angle", () => {
+  const result = plain(run(`
+    const born = (create, seed) => firstBirths(create(1, seed));
+    const bad = [];
+    for (const seed of [1, 2]) {
+      const dummies = born(createChamber1State, seed).actors.filter((actor) => actor.type === "dummy");
+      dummies.forEach((dummy, nth) => {
+        const angle = hashInts(seed, 0, nth, SALTS.dummyAngle) % 360;
+        const w = dummy.wander;
+        if (w.angle !== angle || w.turns !== 0 || w.event !== 0 || w.nth !== nth) bad.push([seed, nth, "wander"]);
+        if (dummy.move.direction.x !== cosDegrees(angle) || dummy.move.direction.y !== sinDegrees(angle)) bad.push([seed, nth, "direction"]);
+      });
+    }
+    const first = born(createChamber1State, 1).actors.filter((actor) => actor.type === "dummy").slice(0, 30).map((actor) => actor.wander.angle);
+    const second = born(createChamber1State, 2).actors.filter((actor) => actor.type === "dummy").slice(0, 30).map((actor) => actor.wander.angle);
+    const biters = born(createChamber2State, 1).actors.filter((actor) => actor.type === "biter");
+    return { bad, count: first.length, otherSeed: JSON.stringify(first) !== JSON.stringify(second), biters: biters.length, biterRolls: biters.filter((b) => "wander" in b || "mark" in b).length, frozen: Object.isFrozen(OWN_ROLLS), keys: Object.keys(OWN_ROLLS) };
+  `, WITH_DUMMIES));
+  assert.deepStrictEqual(result.bad, []);
+  assert.strictEqual(result.count, 30);
+  assert.strictEqual(result.otherSeed, true);
+  assert.deepStrictEqual([result.biters, result.biterRolls], [40, 0]);
+  assert.strictEqual(result.frozen, true);
+  assert.deepStrictEqual(result.keys, ["dummy"]);
+
+  // Any type can use the same place: a patched copy gives the Biter an entry, and nothing else of the birth changes.
+  const withEntry = loadGame(undefined, { patchSim: (text) => text.replace("  dummy: (actor, seed, event, nth) => {", "  biter: (actor, seed, event, nth) => { actor.mark = [seed, event, nth]; },\n  dummy: (actor, seed, event, nth) => {") });
+  const marked = plain(run(`
+    const s = firstBirths(createChamber2State(1, 3));
+    const biters = s.actors.filter((actor) => actor.type === "biter");
+    const d = firstBirths(createChamber1State(1, 3)).actors.filter((actor) => actor.type === "dummy");
+    return { marks: biters.map((b) => b.mark), count: biters.length, dummyAngle: d[0].wander.angle, expected: hashInts(3, 0, 0, SALTS.dummyAngle) % 360 };
+  `, withEntry));
+  assert.strictEqual(marked.count, 40);
+  assert.deepStrictEqual(marked.marks, Array.from({ length: 40 }, (_, nth) => [3, 0, nth]));
+  assert.strictEqual(marked.dummyAngle, marked.expected);
+});
+
+test("247 going back in time and playing gives the same Dummies and nobody twice (issue 62, as test 240 for the Biters): Chamber 1 played 5 steps with the history; back to the snap of frame 0 (the avatar alone) and one step give the very state of frame 1 with each id once; from the snap of frame 1 a step gives no birth; the cross-check is null; a Dummy turns by the pair, so two Dummies of two events (a patched array with the Dummies at frames 0 and 2) have different sequences of angles", () => {
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const run = createRun(1);
+    const s = createChamber1State(1, 1, run.blueprint);
+    const history = createHistory(s, run.blueprint);
+    const states = [JSON.stringify(s)];
+    for (let i = 0; i < 5; i++) { step(s, still, run.blueprint); recordFrame(history, s, still); states.push(JSON.stringify(s)); }
+    const indexOf = (frame) => history.snaps.findIndex((snap) => snap.frame === frame);
+    const unique = (state) => new Set(state.actors.map((actor) => actor.id)).size === state.actors.length;
+    const back = stateFromSnap(history, indexOf(0));
+    const atBack = back.actors.length;
+    step(back, still, run.blueprint);
+    const again = stateFromSnap(history, indexOf(1));
+    const before = again.actors.length;
+    const lines = createJournal();
+    step(again, still, run.blueprint, null, lines);
+    return { atBack, sameAtOne: JSON.stringify(back) === states[1], unique: unique(back) && unique(again), count: back.actors.length, grew: again.actors.length - before, births: lines.filter((line) => JSON.parse(line).event === "birth").length, check: crossCheck(history) };
+  `, WITH_DUMMIES));
+  assert.deepStrictEqual([result.atBack, result.count], [1, 101]);
+  assert.strictEqual(result.sameAtOne, true);
+  assert.strictEqual(result.unique, true);
+  assert.deepStrictEqual([result.grew, result.births], [0, 0]);
+  assert.strictEqual(result.check, null);
+
+  const twoEvents = loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(2) + ', { initialFrame: 2, count: 2, type: "dummy" }'));
+  const turned = plain(run(`
+    const s = createChamber1State(1, 1);
+    for (let i = 0; i < 3; i++) step(s, { move: { x: 0, y: 0 } });
+    const [a, b] = [s.actors.find((actor) => actor.id === "dummy 0,0"), s.actors.find((actor) => actor.id === "dummy 1,0")];
+    const sequence = (dummy) => { const angles = []; for (let i = 0; i < 12; i++) { turnDummy(s, dummy); angles.push(dummy.wander.angle); } return angles; };
+    return { ids: s.actors.map((actor) => actor.id), a: sequence(a), b: sequence(b) };
+  `, twoEvents));
+  assert.deepStrictEqual(turned.ids, ["avatar_1", "dummy 0,0", "dummy 0,1", "dummy 1,0", "dummy 1,1"]);
+  assert.notDeepStrictEqual(turned.a, turned.b, "two Dummies with the same nth of two events must not share their turns");
 });

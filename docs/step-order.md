@@ -2,7 +2,7 @@
 
 One frame of the game is one call of `step(state, input, blueprint, visual)` in `src/sim.js`. **The order below is a contract:** many rules depend on it, and changing it changes what a run is. This file says what each stage does and why it sits where it sits. It has no game values (those are in `src/data.js`).
 
-The code carries the same numbers in the comments of `step` and of `playStages` (stages 0 to 5, which `step` calls). If one of the two changes, change the other in the same commit; test 244 fails when the stages of the table below and the numbered comments of `step` and `playStages` differ. Test 157 proves the one rule below that is easiest to break (things are born after everyone has moved); tests 209 to 211 prove the early end; tests 238 to 243 prove the spawn (7b).
+The code carries the same numbers in the comments of `step` and of `playStages` (stages 0 to 5, which `step` calls). If one of the two changes, change the other in the same commit; test 244 fails when the stages of the table below and the numbered comments of `step` and `playStages` differ. Test 157 proves the one rule below that is easiest to break (things are born after everyone has moved); tests 209 to 211 prove the early end; tests 238 to 243 prove the spawn (7b), and tests 245 to 247 that the Dummies of Chamber 1 are born through it.
 
 ## The stages
 

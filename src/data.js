@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 62;
+const DEFINITIONS_VERSION = 63;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -69,7 +69,7 @@ const DEFINITIONS = {
     },
 
     // The Dummy (the user's idea, a test actor): it does not attack, it only walks toward an angle and, at every
-    // collision, picks a new random angle (see createDummies and collideActors in src/sim.js). Like an object, it is
+    // collision, picks a new random angle (see OWN_ROLLS and collideActors in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
     // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
     // weightPerRadius: guess, the same number as the objects', written here on their own. The weight is the attack of
@@ -438,12 +438,6 @@ const DEFINITIONS = {
         },
       },
     },
-
-    // The Dummies of Chamber 1: the seed makes them, and they are born like any actor (see birthOffset in src/sim.js):
-    // anywhere off the screen and inside the window of the collision grid around the avatar (state.grid), with no
-    // search for a free place, and they wrap around the edges of the window (see wrapIntoWindow).
-    // count: the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot").
-    dummies: { count: 1000 },
   },
 
   // The maps (issue 61). The user (2026-11-15): every map has an array of hand-written spawn events, each { initialFrame, count, type },
@@ -455,8 +449,12 @@ const DEFINITIONS = {
   // Where the array lives is the agent's reading: there was no chamber entry before, and a map is not terrain (the ground comes from the
   // seed, the spawns are a schedule).
   maps: {
-    // Chamber 1 (Movement): its Dummies are made with the state (terrain.dummies above), so it has no spawn event.
-    chamber1: { spawns: [] },
+    // Chamber 1 (Movement), issue 62: the Dummies are born through the same array, at the end of the step of frame 0.
+    chamber1: {
+      spawns: [
+        { initialFrame: 0, count: 1000, type: "dummy" }, // the user's number for the stress test, 1000 (it was 100, "to see them colliding a lot"); they wander and wrap around the window (wrapIntoWindow)
+      ],
+    },
     // Chamber 2 (COMBAT): guesses, to tune by playing (the PLAN desk's table in issue 61).
     chamber2: {
       spawns: [

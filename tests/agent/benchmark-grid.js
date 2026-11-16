@@ -46,6 +46,7 @@ const makeGame = () => new Function(source + `
 
   return {
     createChamber1State, createRun, step,
+    born(state) { spawnEvents(state, null); state.frame += 1; }, // the Dummies are born at the end of the first step (issue 62): here only their birth, as firstBirths in the tests
     writeCells(state) { for (const actor of state.actors) setCells(actor, state.grid); },
     useGrid() { collideActors = withGrid; },
     useEveryPair() { collideActors = everyPair; },
@@ -69,6 +70,7 @@ if (name !== "still" && name !== "giants") {
 
 function newState(game, cellSize) {
   const state = game.createChamber1State(1, 1);
+  game.born(state); // with the grid of the game: the window, then the cell size changes
   state.grid = { cellSize, windowWidth: WINDOW.width / cellSize, windowHeight: WINDOW.height / cellSize };
   if (name === "giants") {
     const dummies = state.actors.filter((actor) => actor.wander);

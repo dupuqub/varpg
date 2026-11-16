@@ -1152,10 +1152,10 @@ function collideWithObjects(state, actor, lastContacts, journal = null) {
 
 // ---- Dummies ----
 // A Dummy is an actor made by the seed (like an object, from the ranges of its entry), but it lives in the
-// state, because it moves. It has `wander: { index, angle, turns }`: its number among the Dummies, the angle it
-// wants to walk at (whole degrees, 0 to 359) and how many times it has turned. It moves like any actor (its
-// velocity goes to its wanted direction times its speed, by its acceleration), and at every new collision it picks
-// another angle: hash(seed, index, turns), so the same run always turns the same way (nothing here is Math.random).
+// state, because it moves. It has `wander: { event, nth, angle, turns }`: its pair (the spawn event that made it and its place among
+// that event's actors, issue 60), the angle it wants to walk at (whole degrees, 0 to 359) and how many times it has turned. It moves
+// like any actor (its velocity goes to its wanted direction times its speed, by its acceleration), and at every new collision it
+// picks another angle: a hash of the seed, its pair and `turns`, so the same run always turns the same way (nothing here is Math.random).
 
 // The sine of a whole number of degrees, from additions and multiplications only (a series), so it is the same in
 // every browser (Math.sin is allowed to differ in the last digits). The error is below 1e-11.
@@ -1189,7 +1189,8 @@ function setHeading(dummy) {
 // A new random angle, from 0 to 359, for the next stretch of the walk.
 function turnDummy(state, dummy) {
   dummy.wander.turns += 1;
-  dummy.wander.angle = hashInts(state.seed, dummy.wander.index, dummy.wander.turns, SALTS.dummyTurn) % 360;
+  const { event, nth, turns } = dummy.wander;
+  dummy.wander.angle = hashInts(hashInts(state.seed, event, nth, SALTS.dummyTurn), turns, 0, SALTS.dummyTurn) % 360; // the pair first, then the turn: two Dummies of different events never share a sequence
   setHeading(dummy);
 }
 
@@ -1215,7 +1216,7 @@ function wrapIntoWindow(actor, player, grid) {
 // next steps (like an actor that wraps onto another). The numbers come from the seed, so a run is reproducible.
 // Returns the offset from the avatar, in whole pixels. Fails loudly if the ring has no room (it cannot, see test 101).
 // An actor is named by the pair (event, nth): the number of the spawn event in the map's array and the place of the actor among those that
-// event makes (issue 60). The starting crowds are event `index`, nth 0, which is what they always rolled.
+// event makes (issue 60).
 function birthOffset(seed, event, nth, radius, grid) {
   const halfWidth = (grid.windowWidth * grid.cellSize) / 2;
   const halfHeight = (grid.windowHeight * grid.cellSize) / 2;
@@ -1239,7 +1240,7 @@ function birthOffset(seed, event, nth, radius, grid) {
   return { x: -innerX + (pick % Math.floor(2 * innerX)), y: innerY + (along % capHeight) }; // below
 }
 
-// The draws of an actor born from a spawn event (issue 60; nothing calls it for spawn events yet): radius, health and the birth place, all
+// The draws of an actor born from a spawn event (issue 60): radius, health and the birth place, all
 // from the seed and the pair (event, nth), one draw each, no retry (the user: if it lands on something, the collision pushes it out).
 // The same seed and pair always give the same three; the radius is drawn first because the birth ring depends on it.
 function drawBirth(seed, type, event, nth, grid) {
@@ -1257,40 +1258,24 @@ function spawnedActorId(type, event, nth) {
   return type + " " + event + "," + nth;
 }
 
-// Makes the actors of one crowd of a new state (today only the Dummies of Chamber 1; the Biters come from spawn events since issue 61),
-// by the seed: `count` actors of one type, numbered from 0. For each one
-// the seed rolls (SALTS.crowdRadius and SALTS.crowdHealth, with the number of the actor) radius and health, and birthOffset says where it is born
-// (the user's birth rule, see "Birth" in AGENTS.md). `rollsFor(index)` gives what is its own to the type (the Dummy's first
-// angle). Ids are the type and the number ("dummy_0", "biter_0"). Returns the new actors, in order.
-function createCrowd(state, type, count, rollsFor) {
-  const recipe = DEFINITIONS.actors[type];
-  const player = state.actors.find((actor) => actor.id === AVATAR_ID);
-  const made = [];
-
-  for (let index = 0; index < count; index++) {
-    const { radius, health, offset } = drawBirth(state.seed, type, index, 0, state.grid);
-    const position = { x: player.position.x + offset.x, y: player.position.y + offset.y };
-    const actor = finalizeObject(type, { position, radius, health: { now: health, max: health }, ...rollsFor(index) }, undefined, type + "_" + index);
-    finalizeStatic(actor);
-    finalizeDynamic(actor);
-    state.actors.push(actor);
-    made.push(actor);
-  }
-  return made;
-}
-
-// The Dummies of Chamber 1: each also rolls its first angle (SALTS.dummyAngle) and is pointed at it.
-function createDummies(state) {
-  const dummies = createCrowd(state, "dummy", DEFINITIONS.terrain.dummies.count, (index) => ({ wander: { index, angle: hashInts(state.seed, index, 0, SALTS.dummyAngle) % 360, turns: 0 } }));
-  for (const dummy of dummies) setHeading(dummy);
-}
+// What a type rolls for itself at birth (the user, issue 62: the Dummies are born through the same spawn array, and no code is left
+// unused). The draws every actor has (radius, health, place) are drawBirth's; this table is the ONE place for the rest: a type that
+// has an entry here gets it called on its newborn, with the seed and the pair (event, nth), and writes into the actor what is its own.
+// A type with no entry rolls nothing of its own (the Biter). The Dummy rolls its first angle (SALTS.dummyAngle) and is pointed at it.
+// A future type adds one line here and touches no other code (the agent's form: a table of functions by type, in code because a function
+// cannot be in the frozen data).
+const OWN_ROLLS = Object.freeze({
+  dummy: (actor, seed, event, nth) => {
+    actor.wander = { event, nth, angle: hashInts(seed, event, nth, SALTS.dummyAngle) % 360, turns: 0 };
+    setHeading(actor);
+  },
+});
 
 // ---- Spawn (issue 61) ----
 // One actor born from a spawn event: the draws and the id of its pair (event, nth) (drawBirth, spawnedActorId, issue 60), the place
-// around the avatar where it is now, and its static and dynamic values and its cells at once, as createCrowd does, so a newborn is
+// around the avatar where it is now, and its static and dynamic values and its cells at once, so a newborn is
 // complete at the end of the step that made it (its cells are right: tests 100 and 110). It goes to the END of state.actors (the user:
-// the list is never reordered). Only what every actor of a crowd rolls: a type that also rolls something of its own (the Dummy's angle)
-// is not in any map yet.
+// the list is never reordered). What the type rolls for itself comes from OWN_ROLLS.
 function spawnActor(state, type, event, nth) {
   const player = state.actors.find((actor) => actor.id === AVATAR_ID);
   const { radius, health, offset } = drawBirth(state.seed, type, event, nth, state.grid);
@@ -1298,6 +1283,7 @@ function spawnActor(state, type, event, nth) {
   const actor = finalizeObject(type, { position, radius, health: { now: health, max: health } }, undefined, spawnedActorId(type, event, nth));
   finalizeStatic(actor);
   finalizeDynamic(actor);
+  if (Object.hasOwn(OWN_ROLLS, type)) OWN_ROLLS[type](actor, state.seed, event, nth);
   setCells(actor, state.grid);
   state.actors.push(actor);
   return actor;
@@ -2069,15 +2055,15 @@ function createRun(id, source = DEFINITIONS.starterBlueprint) {
   return { id, blueprint };
 }
 
-// Initial state of a chamber: the avatar at the center of the world, with the full health of its blueprint, and the crowd
-// of the chamber born around it (`populate` makes it; the actors of the map's spawn events are not here: they are born at the end of
-// the step of their frame, so the state at frame 0 has none of them, issue 61). The objects come from the seed and are not in the state.
+// Initial state of a chamber: the avatar at the center of the world, with the full health of its blueprint, alone. Every other actor
+// comes from the spawn events of the map and is born at the end of the step of its frame, so the state at frame 0 has none of them
+// (issues 61 and 62: the Dummies too). The objects come from the seed and are not in the state.
 // map: the id of the map in DEFINITIONS.maps, whose spawn events the step reads (state.map).
 // The state is a single plain JSON object (no functions, Map, NaN, etc.).
 // runId: the id of the run this state belongs to. The rules never read it; it
 // only identifies the snap (two runs both have a "frame 300").
 // blueprint: the blueprint of the run, used only to make the avatar (createAvatar).
-function createChamberState(map, populate, runId, seed, blueprint) {
+function createChamberState(map, runId, seed, blueprint) {
   const avatar = createAvatar(blueprint);
 
   const state = {
@@ -2120,20 +2106,20 @@ function createChamberState(map, populate, runId, seed, blueprint) {
   };
 
   assertValidGrid(state.grid);
-  populate(state);
   for (const actor of state.actors) setCells(actor, state.grid);
   return state;
 }
 
-// Chamber 1: the Dummies, which only walk and collide.
+// Chamber 1 (MOVEMENT): the Dummies, which only walk and collide. None exists at frame 0: they come from the spawn event of the map
+// chamber1 (issue 62), at the end of the first step.
 function createChamber1State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
-  return createChamberState("chamber1", createDummies, runId, seed, blueprint);
+  return createChamberState("chamber1", runId, seed, blueprint);
 }
 
 // Chamber 2 (COMBAT): the same world, with the Biters, which chase the avatar and strike. None exists at frame 0: they come from the
 // spawn events of the map chamber2 (issue 61), the first ones at the end of the first step.
 function createChamber2State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
-  return createChamberState("chamber2", () => {}, runId, seed, blueprint);
+  return createChamberState("chamber2", runId, seed, blueprint);
 }
 
 // Fails loudly if the grid settings make no sense.
