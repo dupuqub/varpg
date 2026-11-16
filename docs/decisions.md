@@ -147,6 +147,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Run history (two logs)", issue 66 parcel 3):
   - "Pressing play on a past frame discards the snaps **and inputs** after it (`discardAfter`; the agent's default, not yet confirmed)."
 
+## 2026-11-13: the Radar is read by `pickTarget`, no longer by `closestTarget` (section "Theme: mechas", "Head")
+
+- **Who:** the Rules desk, on the user's direction of 2026-11-13 (issue 13, step 1b, commit 13eb13f). The rule of the Radar is the user's (2026-11-13, commit 8a37a4b) and did not change.
+- **What it replaced:** `closestTarget`, the function that picked the closest target within the Radar, was replaced by `pickTarget(state, from, target, range)`, which the avatar's weapons and swords call with `player.radar` as the range (src/sim.js). The section "Theme: mechas" still named the old function.
+- **Moved from AGENTS.md** (section "Theme: mechas", issue 66 parcel 15):
+  - "`closestTarget` uses it (a Radar of 0 sees nothing)" (from "The spec `radar` (px) is summed from the parts into `avatar.radar` (static), `closestTarget` uses it (a Radar of 0 sees nothing), and the screen draws it as a white circle with no fill.", which is now "The spec `radar` (px) is summed from the parts into `avatar.radar` (static), `pickTarget` uses it as the range of the avatar's weapons (a Radar of 0 sees nothing; test 154), and the screen draws it as a white circle with no fill.")
+
 ## 2026-11-13: the visual state, decided in discussion and built the same day (section "Weapons and equipment", "Decided in discussion")
 
 - **Who decided:** the user (commit 33cf014, the discussion; commit bff1cb5, the build; tests 155 and 156).
