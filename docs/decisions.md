@@ -83,6 +83,15 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "(History: until issue 47 was answered a Branch broke only when a hit was at least its health, so a slow walk could leave it with a little health and stop the avatar; that was the agent's stand-in and is gone.)"
 
+## 2026-11-14 (built 2026-11-15): a hitbox says by a tag how it hits, the first on its path or all it touches (section "Shots and objects", "How a hitbox hits")
+
+- **Who decided:** the user (issues 43 and 44; issues plan I19, commit 92dab86, data version 61, tests 213 to 219). The name of the key, `hits`, is the coordinator's proposal.
+- **His words:** "a TAG to say how the hitbox works"; "bullets hit only the first"; "the sword hits everyone in the list" (as the comments of `HITS` in `src/sim.js` and of the attacks in `src/data.js` quote them).
+- **What it replaced:** every hitbox hurt everything it touched, each once, in list order (the actors, then the objects), until its pierce was spent; a hitbox kept only its ignored tags. Today the key `hits` of each attack is copied into the hitbox (`HITBOX_ATTACK_KEYS`) and read by `hitsThisFrame`: the bite and the sword are `"all"` (the bite does what every hitbox did before), the bullets of the repeater `"first"` (`firstTouchAt`).
+- **Moved from AGENTS.md** (section "Shots and objects", issue 66 parcel 8):
+  - "data version 61, " (from "**How a hitbox hits (the user, 2026-11-14, issues 43 and 44; built, data version 61, tests 213 to 219).**", which is now "**How a hitbox hits (the user, 2026-11-14, issues 43 and 44; built, tests 213 to 219).**")
+  - ", which keeps what it did" (from "**`"all"`** (the sword, and the bite, which keeps what it did):", which is now "**`"all"`** (the sword, and the bite):")
+
 ## 2026-11-14 (built 2026-11-15): the world stops at the test of the avatar's death (section "Weapons and equipment", the action model, "The avatar's death")
 
 - **Who decided:** the user (issue 28; issues plan I17, commit 5d75574, tests 209 to 211).
