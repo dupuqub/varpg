@@ -241,6 +241,20 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "The user first thought of a fixed percentage and chose the curve; the numbers are to be seen in play." (the second half, "the numbers are to be seen in play", stays in `AGENTS.md`: it is still a guess today)
 
+## 2026-11-11: the cells are counted in the world, not around the avatar (section "Collision grid", "Cells are counted in the world")
+
+- **Who decided:** the agent, as a change forced by a rule of the user (the avatar became pushable by other actors, 2026-11-11); commit dbdccda.
+- **What it replaced:** the cells were counted relative to the avatar (it was always in cell zero), an agent's choice the user never confirmed, and `isInWindow` said whether a cell was inside the window (only the tests called it). Today the cells are counted in the world (`cellIndex`, `setCells`), so the cells of an actor change only when it moves; `isInWindow` was removed.
+- **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
+  - "(History: they were first counted relative to the avatar, an agent's choice the user never confirmed; when the avatar became pushable by other actors, 2026-11-11, that choice would have moved everyone's cells at every push, so the agent changed it. `isInWindow`, which read a relative cell, was called by nothing in the game and died with it.)"
+
+## 2026-11-10 (for every actor but the avatar, 2026-11-12): the wrap is built (section "Collision grid", "Consequences" and the wrap)
+
+- **Who decided:** the user decided that the window is the whole universe and the real area of the game (first bullet of the section); the wrap is point 2 of the agent's reading of that decision. Built for the Dummies with the Dummy (commit a2d4897, 2026-11-10), then for every actor but the avatar (commit f5d7824, 2026-11-12).
+- **What it replaced:** the state of 2026-11-09 (commit 5951fd6), when nothing moved actors back. Today `wrapIntoWindow` (called by `step` for every actor that moves except the avatar) brings an actor that leaves the window back on the opposite side; the invariant of point 1 is still not checked.
+- **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
+  - "nothing enforces the invariant or moves actors back today." (from "**Not implemented:** nothing enforces the invariant or moves actors back today.", which is now "**Not implemented:** nothing enforces the invariant (point 1) today; point 2 is built (`wrapIntoWindow`, see below)."; it had stayed after the wrap was built and contradicted the last bullet of the same section)
+
 ## 2026-11-10: the weight of an object follows its radius, not its area (section "Damage", "The list of objects")
 
 - **Who decided:** the user, on his idea (commit 5d48448).
@@ -254,3 +268,10 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 - **What it replaced:** the agent had given the rock and the Shroom a shared size.
 - **Moved from AGENTS.md** (section "Damage", issue 66 parcel 1):
   - "so no value may come from a constant that serves two entries (the agent once did that with a shared size and the user rejected it)."
+
+## 2026-11-09: the collision window is no longer drawn (section "Collision grid", "Consequences", point 5)
+
+- **Who decided:** the user (he no longer wanted to see the collision boxes); commit 4758557.
+- **What it replaced:** Chamber 1 drew the window as an amber overlay fixed on the player (`drawCollisionWindow` in `src/render.js`), which was removed.
+- **Moved from AGENTS.md** (section "Collision grid", issue 66 parcel 11):
+  - ", and the overlay was removed" (from "(The user no longer wants to see the collision boxes, and the overlay was removed.)", which is now "(The user no longer wants to see the collision boxes.)")
