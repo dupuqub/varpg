@@ -4080,7 +4080,7 @@ test("177 a list of ignored tags covers a target when the target has any of them
 });
 
 // ---- Tags of exclusion: the hitboxes (step D) ----
-test("178 a hitbox carries a copy of its owner's ignored tags from its birth and hurts only what has none of them: a bite born over a neighbor Biter hurts nobody (enemies ignore enemy), the same hitbox with the tag taken out of its list hurts that Biter (so the tag is what protected it), and the copy is its own list, not the recipe's", () => {
+test("178 a hitbox carries a copy of its attack's list of ignored tags from its birth and hurts only what has none of them: a bite born over a neighbor Biter hurts nobody (enemies ignore enemy), the same hitbox with the tag taken out of its list hurts that Biter (so the tag is what protected it), and the copy is its own list, not the recipe's", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0, 1);
