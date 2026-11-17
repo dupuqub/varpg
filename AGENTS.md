@@ -202,15 +202,16 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 
 ## Ideas (agent proposals, not decided)
 
-Moved to docs/notes/handoff.md (summary pending).
+- Proposals, decided only when the user approves: a damage pipeline whose stages note what they did, the step as named phases, a read-only export for machine learning, later a bot and a small model (docs/notes/handoff.md).
 
 ## Open items
 
-Moved to docs/notes/handoff.md (summary pending).
+- Open: an on-screen trace of real hits as arithmetic; the Magnet; whether a dash pushes more; huge actors; a minimum time between hits of a pair; more Biter and hitbox behaviors; the library; an automatic cross-check (docs/notes/handoff.md).
 
 ## Handoff (rewritten 2026-11-12, by one agent for the next; stale statements fixed 2026-11-16, issue 69)
 
-Moved to docs/notes/handoff.md (summary pending).
+- Open issues are on GitHub; when the user writes after something that needed testing, he tested it; the agent's choices are confirmed one at a time (docs/notes/handoff.md).
+- Keep: the grid gives exactly the result of every pair in order, and an actor's cells are right at the end of each step (docs/notes/handoff.md).
 
 ## Working with several agents
 
@@ -230,7 +231,7 @@ What this cannot guarantee (said plainly, because the user asked what can be gua
 
 ## Publishing (2026-11-12, written by one agent for the next)
 
-Moved to docs/notes/handoff.md (summary pending).
+- Every push to main runs the tests, then publishes the game to GitHub Pages, public; commits keep the noreply address, the history is not rewritten unasked, and no license is chosen (docs/notes/handoff.md).
 
 ## How to run
 
@@ -258,4 +259,6 @@ From the root of the repository: `node --test` (no path; Node finds the `*.test.
 
 ### Patterns that work here (written by one agent for the next, 2026-11-11)
 
-Moved to docs/notes/handoff.md (summary pending).
+- The agent's experience, not the user's rules: "try" or "see" is not a request to build; say a decision back as one rule; one blocking question per reply (docs/notes/handoff.md).
+- A rule is one named function under the user's sentence; what must not exist is refused at load or by a test on the definitions; an unknown spawn type is skipped with a journal line (docs/notes/handoff.md).
+- Rule, tests, README row and note go in one commit; break each guard once to see its test fail (docs/notes/handoff.md).
