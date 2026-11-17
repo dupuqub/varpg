@@ -6246,7 +6246,7 @@ const withDashLegs = (dashSpecs) => (text) => text.replace(BITER_LEGS_PART, BITE
 // One Biter (biter 0,0) on a ground with no objects, with the parts of `list`, and Legs that give a dash.
 const oneDashingBiter = (list) => loadGame((text) => withDashLegs("dashSpeed: 12, dashCharges: 1, rechargeFrames: 90")(startingBiters(1)(withBiterParts(list)(text.replace("chancePercent: 35", "chancePercent: 0")))));
 
-test("268 a creature with a dash part dashes like the avatar (issue 76, parcel 1): in a patched copy where the Biter's Legs give dashSpeed 12, dashCharges 1 and rechargeFrames 90 (and it has no Mouth, so it stands still), a born Biter has the dash { recharge 0, charges 1 of 1, rechargeFrames 90, speed 12 }; asked to dash with a half-tilted direction to the left it dashes at the full strength, velocity (-12, 0), and spends its charge; asked again at once it does not dash and the velocity stays; its charge is still spent 89 frames after the dash (the try counts as one) and back at the 90th", () => {
+test("268 a creature with a dash part dashes like the avatar (issue 76, parcel 1): in a patched copy where the Biter's Legs give dashSpeed 12, dashCharges 1 and rechargeFrames 90 (and it has no Mouth, so it stands still), a born Biter has the dash { recharge 0, charges 1 of 1, active false, rechargeFrames 90, speed 12 }; asked to dash with a half-tilted direction to the left it dashes at the full strength, velocity (-12, 0), and spends its charge; asked again at once it does not dash and the velocity stays; its charge is still spent 89 frames after the dash (the try counts as one) and back at the 90th", () => {
   const r = plain(run(`
     const s = firstBirths(createChamber2State(1, 1));
     const b = s.actors[1];
@@ -6261,7 +6261,7 @@ test("268 a creature with a dash part dashes like the avatar (issue 76, parcel 1
     updateDash(b, false);
     return { id: b.id, born, first, afterFirst, second, afterSecond, before90, after90: b.dash.charges.now };`, oneDashingBiter('["biter-shell", "biter-legs"]')));
   assert.strictEqual(r.id, "biter 0,0");
-  assert.deepStrictEqual(r.born, { recharge: 0, charges: { now: 1, max: 1 }, rechargeFrames: 90, speed: 12 });
+  assert.deepStrictEqual(r.born, { recharge: 0, charges: { now: 1, max: 1 }, active: false, rechargeFrames: 90, speed: 12 }); // active: the key of the jump, born off (issue 81)
   assert.strictEqual(r.first, true, "the Biter with a dash part should dash");
   assert.deepStrictEqual(r.afterFirst, { velocity: { x: -12, y: 0 }, now: 0 });
   assert.strictEqual(r.second, false, "with no charge left it should not dash");
@@ -6351,10 +6351,10 @@ test("272 the Jumper's recipe is in the data with the Review desk's numbers (iss
   assert.strictEqual(r.weightSum, 100);
 });
 
-test("273 the Spring legs alone give the Jumper its dash (issue 76, parcel 2): a Jumper made with radius 22 and one with radius 28 are born with the dash { recharge 0, charges 1 of 1, rechargeFrames 90, speed 12 } (made the way spawnActor makes an actor), their dash numbers are 12, 1 and 90 and their speed, acceleration and deceleration 0, they are enemy and vermin, and they weigh 100 kg per radius (2200 and 2800 kg); in a copy where the Jumper has only the Spring legs, the dash numbers are the same", () => {
+test("273 the Spring legs alone give the Jumper its dash (issue 76, parcel 2): a Jumper made with radius 22 and one with radius 28 are born with the dash { recharge 0, charges 1 of 1, active false, rechargeFrames 90, speed 12 } (made the way spawnActor makes an actor), their dash numbers are 12, 1 and 90 and their speed, acceleration and deceleration 0, they are enemy and vermin, and they weigh 100 kg per radius (2200 and 2800 kg); in a copy where the Jumper has only the Spring legs, the dash numbers are the same", () => {
   for (const radius of [22, 28]) {
     const r = plain(run(JUMPER_LOOK(radius)));
-    assert.deepStrictEqual(r.dash, { recharge: 0, charges: { now: 1, max: 1 }, rechargeFrames: 90, speed: 12 });
+    assert.deepStrictEqual(r.dash, { recharge: 0, charges: { now: 1, max: 1 }, active: false, rechargeFrames: 90, speed: 12 }); // active: the key of the jump, born off (issue 81)
     assert.deepStrictEqual(r.numbers, [12, 1, 90, 0, 0, 0]);
     assert.deepStrictEqual(r.tags, ["enemy", "vermin"]);
     assert.strictEqual(r.weight, 100 * radius);
@@ -6663,4 +6663,91 @@ test("285 a run of Chamber 3 is reproducible as a whole state (issue 77): 700 fr
   assert.strictEqual(r.again, true, "back to frame 620 and the same inputs again");
   assert.strictEqual(r.jumpers, 6, "4 at frame 0 and one with each of the waves of 300 and 600 (none is killed: nothing hurts them here)");
   assert.ok(r.jumps > 10, "the Jumpers jumped: " + r.jumps);
+});
+
+// ---- The key of the jump (issue 81, parcel A): dash.active ----
+// The user (2026-11-17): "o pulo vira uma chave bool quando inicia, essa chave só vira 0 quando a velocidade atual é igual ou menor que a
+// máxima." The tests read the key against the speed of each frame and never count frames.
+
+// The speed of an actor after a step, its top speed of that frame and its key.
+const KEY_ROW = (name) => `{ speed: Math.sqrt(${name}.move.velocity.x ** 2 + ${name}.move.velocity.y ** 2), top: ${name}.speed, active: ${name}.dash.active }`;
+
+test("286 the key of the jump of a Jumper alone, not pushed (issue 81): a Jumper 520 px right of a still avatar jumps three times in 210 frames and touches nobody; its key is on in every frame where its speed is above its top speed and off in every other one, so it is off in the first frame where the speed is back at or below the top speed (found from the speed, never by a count)", () => {
+  const r = plain(run(`${JUMPER_SCENE(520)}
+    const rows = [];
+    for (let i = 0; i < 210; i++) { step(s, still, run.blueprint); rows.push(${KEY_ROW("jumper")}); }
+    return { rows, born: true, health: [avatar.health.now, jumper.health.now] };`, ONE_JUMPER));
+  assert.deepStrictEqual(r.health, [100, 60], "nobody was touched: no push");
+  const above = r.rows.map((row) => row.speed > row.top);
+  assert.ok(above.includes(true) && above.includes(false), "it jumped and it stopped");
+  r.rows.forEach((row, i) => assert.strictEqual(row.active, above[i], "frame " + i + ": speed " + row.speed + ", top speed " + row.top));
+  // The first frames at or below the top speed after a jump: the key is off in each of them.
+  const falls = above.map((value, i) => i > 0 && above[i - 1] && !value).flatMap((fell, i) => (fell ? [i] : []));
+  assert.ok(falls.length >= 2, "at least two jumps ended: " + JSON.stringify(falls));
+  for (const i of falls) assert.strictEqual(r.rows[i].active, false, "the first frame back at the top speed, " + i);
+});
+
+test("287 a push alone never turns the key of the jump on (issue 81): with the avatar's tags emptied the Jumper does not jump; the avatar dashes into it and walks on, so the Jumper is slammed and pushed away along x; in each of the 120 frames its key stays off and its speed stays 0", () => {
+  const r = plain(run(`${JUMPER_SCENE(100)}
+    avatar.tags = [];
+    const journal = createJournal();
+    const rows = [];
+    for (let i = 0; i < 120; i++) { step(s, { move: { x: 1, y: 0 }, dash: i === 0 }, run.blueprint, null, journal); rows.push(${KEY_ROW("jumper")}); }
+    return { rows, x: jumper.position.x, hits: journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit" && line.target === jumper.id).length };`, ONE_JUMPER));
+  assert.ok(r.hits >= 1, "the avatar slammed the Jumper");
+  assert.ok(r.x > 100, "the Jumper was pushed: x " + r.x);
+  r.rows.forEach((row, i) => {
+    assert.strictEqual(row.active, false, "frame " + i + ": a push never turns the key on");
+    assert.strictEqual(row.speed, 0, "frame " + i);
+  });
+});
+
+test("288 a push during a jump keeps the key of the jump on until the speed is back at the top speed (issue 81): a Jumper 100 px from a still avatar jumps into it and is pushed back while it touches it; its key is on in every frame where its speed is above its top speed, in the frames it touches the avatar too, and off from the first frame where its speed is at or below it", () => {
+  const r = plain(run(`${JUMPER_SCENE(100)}
+    const rows = [];
+    for (let i = 0; i < 80; i++) {
+      step(s, still, run.blueprint);
+      rows.push({ ...${KEY_ROW("jumper")}, touching: s.contacts.some((key) => key.includes(jumper.id)) });
+    }
+    return { rows, slid: 100 - jumper.position.x };`, ONE_JUMPER));
+  const pushedInJump = r.rows.filter((row) => row.touching && row.speed > row.top);
+  assert.ok(pushedInJump.length > 1, "pushed in more than one frame of the jump");
+  assert.ok(r.slid < JUMP_LENGTH, "the avatar held it back: it slid " + r.slid + " of " + JUMP_LENGTH);
+  r.rows.forEach((row, i) => assert.strictEqual(row.active, row.speed > row.top, "frame " + i + ": speed " + row.speed + ", top speed " + row.top + ", touching " + row.touching));
+  const back = r.rows.findIndex((row, i) => i > 0 && r.rows[i - 1].speed > r.rows[i - 1].top && row.speed <= row.top);
+  assert.ok(back > 0, "the speed came back to the top speed");
+  assert.strictEqual(r.rows[back].active, false);
+});
+
+// The game of test 289: Chamber 1 with 100 Dummies, and the same game in a copy of src/sim.js with no key at all.
+const KEY_DUMMIES = (text) => text.replace(DUMMY_EVENT, dummyEvent(100));
+const WITHOUT_KEY = (text) => {
+  const born = "  if (object.dash) object.dash.active = false;\n";
+  const start = "  dash.active = true; // the key of the jump turns on (issue 81): only the start of a dash does this, never a push\n";
+  assert.ok(text.includes(born) && text.includes(start), "the key is no longer written as the test expects");
+  return text.replace(born, "").replace(start, "");
+};
+
+test("289 the avatar's dash sets its key of the jump too, and nothing else of the avatar changes (issue 81): 600 frames of Chamber 1 with 100 Dummies, walking and dashing every 50 frames; the avatar's key is on exactly in the frames where its speed is above its top speed (with the tolerance of the decay), it was on in some, and every snap, the avatar's included, is the same as in a copy of src/sim.js with no key, once the key is taken out", () => {
+  const code = `
+    const run = createRun(1);
+    const s = createChamber1State(1, 1, run.blueprint);
+    const snaps = [], rows = [];
+    for (let i = 0; i < 600; i++) {
+      step(s, { move: { x: (i % 120) < 60 ? 0.8 : -0.8, y: (i % 90) < 45 ? 0.6 : -0.6 }, dash: i % 50 === 3 }, run.blueprint);
+      snaps.push(JSON.stringify(s));
+      if (s.actors[0].dash.active !== undefined) rows.push(${KEY_ROW("s.actors[0]")});
+    }
+    return { snaps, rows };`;
+  const real = run(code, loadGame(KEY_DUMMIES));
+  const without = run(code, loadGame(KEY_DUMMIES, { patchSim: WITHOUT_KEY }));
+  assert.strictEqual(real.rows.length, 600, "the avatar has a key in every frame");
+  assert.ok(real.rows.some((row) => row.active), "the avatar's dash turned its key on");
+  real.rows.forEach((row, i) => assert.strictEqual(row.active, row.speed > row.top + 1e-9, "frame " + i + ": speed " + row.speed + ", top speed " + row.top));
+  assert.strictEqual(without.rows.length, 0, "the copy has no key");
+  real.snaps.forEach((snap, i) => {
+    const state = JSON.parse(snap);
+    for (const actor of state.actors) if (actor.dash) delete actor.dash.active;
+    assert.strictEqual(JSON.stringify(state), without.snaps[i], "frame " + i);
+  });
 });

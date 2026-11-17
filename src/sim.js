@@ -40,6 +40,11 @@ function finalizeObject(type, rolls, blueprint, id) {
   // A creature whose parts give a dash (issue 76) carries the dash state of the avatar (its initial dash plus the charges createAvatar
   // writes); the charges are filled when it is born (spawnActor). No actor of the data has one yet, so no state changes today.
   if (createsDash(recipe)) object.dash = { recharge: 0, charges: { now: 0, max: 0 } };
+  // The key of the jump (the user, 2026-11-17, issue 81): "o pulo vira uma chave bool quando inicia, essa chave só vira 0 quando a
+  // velocidade atual é igual ou menor que a máxima." dash.active is true from the frame a dash starts (updateDash) until the end of the
+  // movement of a frame in which the speed is at or below the top speed (releaseDashKey). Every actor with a dash has it, the avatar too;
+  // it is born off. "A chave não afeta a velocidade": it only records, nothing of the movement reads it. There is no number of frames.
+  if (object.dash) object.dash.active = false;
   // A creature whose parts give a jump (issue 76, parcel 3: the Jumper's Spring legs) is born with the mind of the jump: ai.jump, a copy of
   // the part's jump (its target), read by thinkJump. Only the Jumper has one, and no map spawns it yet, so no state changes today.
   const jump = recipeJump(recipe);
@@ -955,7 +960,20 @@ function updateDash(actor, wantsDash) {
   velocity.x = (direction.x / length) * strength;
   velocity.y = (direction.y / length) * strength;
   dash.charges.now -= 1;
+  dash.active = true; // the key of the jump turns on (issue 81): only the start of a dash does this, never a push
   return true;
+}
+
+// The key of the jump turns off (the user, 2026-11-17, issue 81: "essa chave só vira 0 quando a velocidade atual é igual ou menor que a
+// máxima"): called where the movement of an actor ends in a step (stage 2, after the objects; a push between actors moves only the
+// positions, never the velocity), it sets dash.active to false when the speed is at or below the top speed of this frame, with the same
+// tolerance the decay above the top speed uses. A push during a jump leaves it on until the speed is back at the top speed. It only
+// writes the key: the movement never reads it.
+function releaseDashKey(actor) {
+  if (!actor.dash || !actor.dash.active) return;
+  const { velocity } = actor.move;
+  const currentSpeed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+  if (currentSpeed <= actor.speed + OVERSPEED_TOLERANCE) actor.dash.active = false;
 }
 
 // Moves a velocity toward a target velocity by at most "rate" (pixels per frame),
@@ -2460,6 +2478,7 @@ function playStages(state, input, blueprint, visual, journal) {
 
     // The objects: pushed out, bounced, hurt if the pair hurts. A Dummy picks a new angle when it meets a new one.
     const metSomethingNew = collideWithObjects(state, actor, lastContacts, journal);
+    releaseDashKey(actor); // the movement of this actor ends here: the key of the jump turns off if the speed is back (issue 81)
     if (worldStops(state)) return; // a contact killed the avatar: the world stops (the actors after it do not move)
     if (metSomethingNew) reactToNewContact(state, actor);
   }
