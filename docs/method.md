@@ -28,6 +28,7 @@ A big change is cut into **parcels**: small pieces, each one closed on its own (
 9. **Each parcel leaves a note.** The commit message says what the parcel is and which tests it adds; the issue for the desk that owns the work gets a one-line comment. Both carry the line `Fails without the change: tests <n> (<what was broken>)`, or `No src change.` (issue 35). Writing the line is a mechanical check any model can run; judging a reason given for a new test that passes on the old code stays with a stronger model.
 10. **A stale file outside the Files line is carried forward.** When the report or the commit names a file that the parcel did not list (R7.5, the base plan's P1 left out `docs/step-order.md`), the coordinator adds a line under the parcel, or a new parcel, before going on.
 11. **Every recipe is read against the code before the loop starts.** A model of the band of the recipe's writer reads it against the code, and leaves one line per recipe: "read against the code at commit X". Reading the recipe is the part a weaker coordinator cannot do alone (R7.8, opinion).
+12. **A recipe names the topic files its helper must read** (issue 71), besides `AGENTS.md`: the files under `docs/rules/` and `docs/notes/handoff.md`. A change of a rule edits its topic file; the sentence in `AGENTS.md` changes only if the rule itself changes, and `docs/decisions.md` gets what it replaced. No detail goes back into `AGENTS.md`.
 
 ## The models
 

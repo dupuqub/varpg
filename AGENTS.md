@@ -250,6 +250,9 @@ From the root of the repository: `node --test` (no path; Node finds the `*.test.
 - Code prioritizes readability and transparency: clear names, no unnecessary cleverness.
 - Language: chat with the user in Brazilian Portuguese (he is fluent in English). Everything else is en-US: code, identifiers, comments, docs and commit messages.
 - Record in this file every new decision that affects the direction of the project, **without values** (see the top of this file).
+- **Every issue and parcel names the topic files its helper must read**, besides this guide (the files under `docs/rules/` and `docs/notes/handoff.md`). A helper reads this guide and only those topics.
+- **A change of a rule edits its topic file.** The sentence in this guide changes only if the rule itself changes, and `docs/decisions.md` gets what it replaced.
+- **No detail goes back into this file**: functions, tests, the reasons of the numbers and the user's words live in the topic files. A test will guard the size of this file and its pointers.
 - **Gameplay formulas are the user's.** He cannot verify code or tests, but he needs full control of the formulas of the game. Present them as plain arithmetic with example numbers (in the chat, not in this file), and ask before choosing one for him.
 - Always say briefly whether something the user proposes, or something the agent did, looks sound (sound / sound with a cost / fragile or premature / not sure), with the reason and what would change the agent's mind. No agreement for its own sake. The agent can judge the soundness of a design, but not the feel of the game: the user describes what he sees.
 - **Every number that is chosen needs a reason, and the agent suggests one** (see "Where the numbers are" in docs/rules/numbers.md).

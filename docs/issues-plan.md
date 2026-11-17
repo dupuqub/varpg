@@ -22,6 +22,8 @@ The loop of `docs/base-plan.md`, with three checks the review asked for (issues 
 6. Comment on the parcel's issue in one line: the parcel, the commit, the tests, the "Fails without the change" line (`gh api repos/dupuqub/varpg/issues/<n>/comments -f body="..."`). If the parcel finishes the issue, close it (`gh api -X PATCH repos/dupuqub/varpg/issues/<n> -f state=closed`). Never close an issue that is only partly done.
 7. Tell the user in one or two lines, in Brazilian Portuguese, and go to the next parcel.
 
+**Topic files (issue 71).** The brief of every parcel names the topic files its helper must read, besides `AGENTS.md` (files under `docs/rules/` and `docs/notes/handoff.md`). A parcel that changes a rule edits its topic file; the sentence in `AGENTS.md` changes only if the rule itself changes, and `docs/decisions.md` gets what it replaced. No detail goes back into `AGENTS.md`.
+
 **Stop and call the user** in the cases of `docs/base-plan.md` ("When to stop and call the user"), and when the next parcel is under "Waiting for the user".
 
 ## The parcels (Rules desk)
