@@ -2881,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 70, hash: "5b4697d8b7bf6a3d" };
+const DATA_FINGERPRINT = { version: 71, hash: "131fca8b5b083f96" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -6534,4 +6534,133 @@ test("281 a run with Jumpers is reproducible as a whole state (issue 76, parcel 
   assert.strictEqual(r.check, null, "the cross-check of the history");
   assert.strictEqual(r.again, true, "back to frame 220 and the same inputs again");
   assert.ok(r.jumpers > 0 && r.jumps > 10 && r.slams > 0, "the Jumpers were there and jumped and slammed: " + JSON.stringify(r));
+});
+
+// ---- Chamber 3: Chamber 2 plus Jumpers (issue 77) ----
+// The guess in src/data.js: 4 Jumpers at frame 0 and 1 Jumper with each wave of Chamber 2. The events of chamber2 come first, as they
+// are (indexes 0 to 10), so the Jumper events are 11 (frame 0) and 12 to 21 (the waves of frames 300 to 3000): the ids are "jumper 11,0..3" and "jumper 12,0" ... "jumper 21,0".
+
+test("283 the births of Chamber 3 (issue 77): the state of frame 0 has only the avatar; over 3002 steps the new ids appear at frame 1 (biter 0,0 to 0,66 and jumper 11,0 to 11,3: 67 Biters and 4 Jumpers) and at frames 301, 601, ... 3001 (biter k,0 to k,7 and one jumper 11+k,0, for k = 1 to 10), 147 Biters and 14 Jumpers in all, each born once, with one birth line each; Chamber 2 still has no Jumper, and the map chamber3 is read only by the state that names it (Chamber 0, 1 and 2 name theirs)", () => {
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const s = createChamber3State(1, 1);
+    const atZero = s.actors.map((actor) => actor.id);
+    s.actors[0].health.now = 1e9;
+    const seen = new Set(["avatar_1"]);
+    const newIds = {};
+    const journal = createJournal();
+    for (let i = 0; i < 3002; i++) {
+      step(s, still, undefined, null, journal);
+      for (const actor of s.actors) {
+        if (seen.has(actor.id)) continue;
+        seen.add(actor.id);
+        (newIds[s.frame] ??= []).push(actor.id);
+      }
+    }
+    const births = journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth");
+    const two = createChamber2State(1, 1);
+    for (let i = 0; i < 301; i++) step(two, still);
+    return { atZero, newIds, births: births.map((b) => b.frame + " " + b.id + " " + b.type), maps: [createChamber1State().map, createChamber2State().map, s.map],
+      chamber2Types: [...new Set(two.actors.map((actor) => actor.type))], chamber2Events: JSON.stringify(DEFINITIONS.maps.chamber2.spawns.length),
+      chamber3Head: JSON.stringify(DEFINITIONS.maps.chamber3.spawns.slice(0, 11)) === JSON.stringify(DEFINITIONS.maps.chamber2.spawns) };
+  `));
+  assert.deepStrictEqual(result.atZero, ["avatar_1"]);
+  const biters = (event) => Array.from({ length: event === 0 ? 67 : 8 }, (_, nth) => "biter " + event + "," + nth);
+  const expected = { 1: [...biters(0), ...Array.from({ length: 4 }, (_, nth) => "jumper 11," + nth)] };
+  for (let k = 1; k <= 10; k++) expected[300 * k + 1] = [...biters(k), "jumper " + (11 + k) + ",0"];
+  // the newborns of a frame are listed in the order of the schedule: all Chamber 2 events first, then the Jumper events
+  assert.deepStrictEqual(result.newIds, expected);
+  assert.strictEqual(result.births.length, 161);
+  assert.strictEqual(result.births.filter((line) => line.endsWith(" biter")).length, 147);
+  assert.strictEqual(result.births.filter((line) => line.endsWith(" jumper")).length, 14);
+  assert.deepStrictEqual(result.maps, ["chamber1", "chamber2", "chamber3"]);
+  assert.deepStrictEqual(result.chamber2Types.sort(), ["avatar", "biter"], "Chamber 2 has no Jumper");
+  assert.strictEqual(result.chamber3Head, true, "the first events of chamber3 are the events of chamber2, as they are");
+});
+
+test("284 going back in time across a wave with a Jumper in Chamber 3 gives the same births and nobody twice (issue 77): Chamber 3 played to frame 310 with the history; back to the snap of frame 295, cut, and 15 steps with another input give the wave of frame 300 again (biter 1,0 to 1,7 and jumper 12,0, each id once, born in frame 301); back to the snap of frame 305 (after the wave), cut, and 5 steps give no birth; every id is unique, the cross-check of each history is null, and the same inputs from frame 295 give the very state of frame 310", () => {
+  const result = plain(run(`
+    const still = { move: { x: 0, y: 0 } };
+    const left = { move: { x: -1, y: 0 } };
+    const run = createRun(1);
+    const s = createChamber3State(1, 1, run.blueprint);
+    s.actors[0].health.now = 1e9;
+    const history = createHistory(s, run.blueprint);
+    for (let i = 0; i < 310; i++) { step(s, still, run.blueprint); recordFrame(history, s, still); }
+    const original = JSON.stringify(s);
+    const indexOf = (frame) => history.snaps.findIndex((snap) => snap.frame === frame);
+    const unique = (state) => new Set(state.actors.map((actor) => actor.id)).size === state.actors.length;
+    const wave = (state) => state.actors.filter((actor) => actor.id.startsWith("biter 1,") || actor.id.startsWith("jumper 12,")).map((actor) => actor.id);
+    const copyOf = () => { const h = createHistory(s, run.blueprint); h.snaps = history.snaps.map((snap) => JSON.parse(JSON.stringify(snap))); h.inputs = history.inputs.map((input) => input && { ...input }); h.visuals = history.visuals.slice(); return h; };
+
+    const same = stateFromSnap(history, indexOf(295));
+    for (let i = 0; i < 15; i++) step(same, still, run.blueprint);
+
+    const back = copyOf();
+    discardAfter(back, indexOf(295));
+    const t = stateFromSnap(back, back.snaps.length - 1);
+    const journal = createJournal();
+    for (let i = 0; i < 15; i++) { step(t, left, run.blueprint, null, journal); recordFrame(back, t, left); }
+
+    const after = copyOf();
+    discardAfter(after, indexOf(305));
+    const u = stateFromSnap(after, after.snaps.length - 1);
+    const lines = createJournal();
+    const countBefore = u.actors.length;
+    for (let i = 0; i < 5; i++) { step(u, left, run.blueprint, null, lines); recordFrame(after, u, left); }
+
+    return {
+      sameState: JSON.stringify(same) === original,
+      waveOriginal: wave(s), waveAgain: wave(t), waveAfter: wave(u),
+      bornAgain: journal.map((line) => JSON.parse(line)).filter((entry) => entry.event === "birth").map((entry) => entry.frame + " " + entry.id),
+      bornAfter: lines.filter((line) => JSON.parse(line).event === "birth").length,
+      grewAfter: u.actors.length - countBefore,
+      unique: [s, t, u, same].every(unique),
+      checks: [crossCheck(history), crossCheck(back), crossCheck(after)],
+      different: JSON.stringify(t) !== original,
+    };
+  `));
+  const wave = ["biter 1,0", "biter 1,1", "biter 1,2", "biter 1,3", "biter 1,4", "biter 1,5", "biter 1,6", "biter 1,7", "jumper 12,0"];
+  assert.strictEqual(result.sameState, true);
+  assert.deepStrictEqual(result.waveOriginal, wave);
+  assert.deepStrictEqual(result.waveAgain, wave);
+  assert.deepStrictEqual(result.waveAfter, wave);
+  assert.deepStrictEqual(result.bornAgain, wave.map((id) => "301 " + id));
+  assert.strictEqual(result.bornAfter, 0);
+  assert.ok(result.grewAfter <= 0, "nobody may be born after the wave: " + result.grewAfter);
+  assert.strictEqual(result.unique, true);
+  assert.deepStrictEqual(result.checks, [null, null, null]);
+  assert.strictEqual(result.different, true, "the other input must give another state");
+});
+
+test("285 a run of Chamber 3 is reproducible as a whole state (issue 77): 700 frames of moves and dashes (the avatar mostly still, so the Jumpers reach it) on the real map with its objects, across the waves of frames 300 and 600 (each with a Jumper), end in the same state when played twice, the history's cross-check finds nothing, going back to frame 620 and playing the same inputs gives the same state; at the end there are 6 Jumpers (4 + 2) and they jumped", () => {
+  const r = plain(run(`
+    const run = createRun(1);
+    const inputs = [];
+    for (let i = 0; i < 700; i++) inputs.push({ move: (i % 60) < 12 ? { x: (i % 120) < 60 ? 1 : -1, y: 0.5 } : { x: 0, y: 0 }, dash: i % 97 === 5 });
+    function play(withHistory) {
+      const s = createChamber3State(1, 1, run.blueprint);
+      s.actors[0].health.now = 1e9;
+      const history = withHistory ? createHistory(s, run.blueprint) : null;
+      let jumps = 0;
+      for (const input of inputs) {
+        step(s, input, run.blueprint);
+        jumps += s.actors.filter((actor) => actor.type === "jumper" && Math.abs(Math.sqrt(actor.move.velocity.x ** 2 + actor.move.velocity.y ** 2) - 12) < 1e-9).length;
+        if (history) recordFrame(history, s, input);
+      }
+      return { s, history, jumps };
+    }
+    const first = play(true), second = play(false);
+    const index = first.history.snaps.findIndex((snap) => snap.frame === 620);
+    const back = stateFromSnap(first.history, index);
+    for (let i = 620; i < 700; i++) step(back, inputs[i], run.blueprint);
+    return { same: JSON.stringify(first.s) === JSON.stringify(second.s), again: JSON.stringify(back) === JSON.stringify(first.s), check: crossCheck(first.history),
+      jumpers: first.s.actors.filter((actor) => actor.type === "jumper").length, jumps: first.jumps, frame: first.s.frame, map: first.s.map };`));
+  assert.strictEqual(r.frame, 700);
+  assert.strictEqual(r.map, "chamber3");
+  assert.strictEqual(r.same, true, "two plays of the same inputs");
+  assert.strictEqual(r.check, null, "the cross-check of the history");
+  assert.strictEqual(r.again, true, "back to frame 620 and the same inputs again");
+  assert.strictEqual(r.jumpers, 6, "4 at frame 0 and one with each of the waves of 300 and 600 (none is killed: nothing hurts them here)");
+  assert.ok(r.jumps > 10, "the Jumpers jumped: " + r.jumps);
 });

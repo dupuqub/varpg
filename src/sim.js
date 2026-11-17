@@ -2331,6 +2331,12 @@ function createChamber2State(runId = 1, seed = 1, blueprint = DEFINITIONS.starte
   return createChamberState("chamber2", runId, seed, blueprint);
 }
 
+// Chamber 3 (issue 77): Chamber 2 plus Jumpers. Same world and same Biters as Chamber 2 (the first events of its map are Chamber 2's),
+// with the Jumpers of the map chamber3 born at frame 0 and with each wave. Built like Chamber 2, through createChamberState.
+function createChamber3State(runId = 1, seed = 1, blueprint = DEFINITIONS.starterBlueprint) {
+  return createChamberState("chamber3", runId, seed, blueprint);
+}
+
 // Fails loudly if the grid settings make no sense.
 function assertValidGrid(grid) {
   if (!(grid.cellSize > 0)) {

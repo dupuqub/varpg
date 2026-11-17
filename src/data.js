@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 70;
+const DEFINITIONS_VERSION = 71;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -554,6 +554,21 @@ const DEFINITIONS = {
       ],
     },
   },
+};
+
+// Chamber 3 (issue 77): "identical to Chamber 2, but with Jumpers" (the user, 2026-11-17; more weapons will come to balance it, so it is
+// not balanced on purpose). Its spawn events are every event of chamber2, AS THEY ARE and at the same indexes (so the Biters keep the
+// ids they have in Chamber 2), followed by the Jumper events. It is written after the literal above so that it copies chamber2 and
+// cannot drift from it. The Jumper numbers are GUESSES, to tune by playing: the issue says "4 Jumpers at frame 0 and 1 with each wave",
+// read here as 4 Jumpers at frame 0 plus 1 Jumper at every frame where Chamber 2 has a wave after frame 0 (300, 600, ... 3000), the
+// frames taken from chamber2 itself. Chamber 0, 1 and 2 never read this map.
+const CHAMBER2_EVENTS = DEFINITIONS.maps.chamber2.spawns;
+DEFINITIONS.maps.chamber3 = {
+  spawns: [
+    ...CHAMBER2_EVENTS,
+    { initialFrame: 0, count: 4, type: "jumper" }, // guess: 4 Jumpers from the start
+    ...CHAMBER2_EVENTS.filter((event) => event.initialFrame > 0).map((event) => ({ initialFrame: event.initialFrame, count: 1, type: "jumper" })), // guess: 1 Jumper with each wave of Chamber 2
+  ],
 };
 
 // Freezes an object and everything inside it.
