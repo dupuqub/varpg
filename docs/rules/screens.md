@@ -1,5 +1,17 @@
 # Theme, screens and stack
 
+## In short
+
+- The character is a mecha of parts, not armor; the starter kit (shoulders, arms, head, torso, legs, generator, booster) grows only when the user asks (docs/rules/screens.md).
+- Legs give speed, the booster the dash, the generator the shield, arms and shoulders the automatic weapons, the head the Radar (the weapons' only range), the torso the capacity and later the Magnet (docs/rules/screens.md).
+- A processor holds the skill tree and is a build; swapping it keeps the parts (not built). A part's old armor is its share of health, the name the code keeps (docs/rules/screens.md).
+- One HTML and CSS screen at a time: the entry screen (new game and continue disabled) leads to the test chambers, each named after its number (docs/rules/screens.md).
+- The Movement chamber is a full-window view with Dummies and the seed's objects; the Combat chamber is that world with Biters, a plain-text HUD and its own canvas (docs/rules/screens.md).
+- On a death the frames stop and play is disabled, but saved frames can be walked and playing an earlier one undoes it; Combat shows an ABORT MISSION alert, Movement only an aborted status (docs/rules/screens.md).
+- The Diagnostics chamber's buttons run checks in the browser and print text to copy (docs/rules/screens.md).
+- Plain JavaScript, HTML and CSS, the canvas only draws; no engine, library or TypeScript (docs/rules/screens.md).
+- Own collision, everything a circle; no walls, and scenery would be still circle actors (docs/rules/screens.md).
+
 ## Theme: mechas
 
 - The game is about mechas. Instead of armor, as in Path of Exile and Diablo, the character has parts.

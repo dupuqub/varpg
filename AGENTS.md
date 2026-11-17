@@ -15,7 +15,6 @@ The full text of each, with its reason:
 
 - **2. How to break a big feature into steps (the method that built the sword, 2026-11-13).** Split it into small steps, each one finished on its own: the smallest pure piece first (a helper with tests), then the data, then the rules, then the drawing, then the docs. Each step ends with the tests at `fail 0`, a row per test in the README, a commit, a push, and a line in `AGENTS.md` saying what is done and what comes next, so the work can stop after any step and anyone can resume. The user's usage can end at any moment, and a half-finished step is what makes work hard to resume. Do one step, close it, then the next; do not carry two open at once.
 
-
 **This file has no game values (the user's rule).** It says what was decided, why, and **where each number lives**. The values, each with its reason and who chose it, are in `src/data.js` (and in the few named constants listed in "Where the numbers are" (docs/rules/numbers.md)). Do not copy a value into this file: write the rule with the **name** of the number (for example `weight = weightPerRadius x radius`). The only numbers allowed here are the fixed decisions of the concept (steps per second, the canvas size, the length of a map). Worked examples with numbers belong in `tests/agent/README.md`, where a test fails if they drift.
 
 ## What this is
@@ -72,148 +71,6 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 - There must be a page that shows in detail how each hit of damage was calculated: an annotated formula that says where and when each buff is applied, and in what order.
 - It is not didactic. It is an audit: the player needs full awareness of the build's real performance, to improve it effectively and to give feedback on the game's logic.
 
-## Where the numbers are
-
-- The values of the game live in the definitions in src/data.js; only a few named constants sit in the code (steps per second, the length of the history, the stick dead zone, a speed tolerance), the canvas size in the page, and worked examples with known answers beside the tests (docs/rules/numbers.md).
-- Every number has its reason written next to it, of one of four kinds (target, anchor, rule, guess), and says when it is the user's own; a constant is never fitted only to keep an old result (docs/rules/numbers.md).
-- Numbers are tied: top speed is the parts' speed minus a cost per unit of weight carried; the times to reach it and to stop follow from acceleration and deceleration; a dash lasts while its extra speed decays at a fixed rate, and it hurts like any contact at that speed (docs/rules/numbers.md).
-- A dash must move less in one frame than the avatar radius plus the smallest object radius, and the safe circle of every layer must keep the first dash of every blueprint, born with the shield ring, off every object (docs/rules/numbers.md).
-- The cell size of the collision grid is only a performance setting: an actor covers every cell its circle reaches, whatever its size (docs/rules/numbers.md).
-- A blueprint weighs no more than its capacity, an object weighs in proportion to its radius, and a layer whose square is not larger than twice its largest object radius is refused when the definitions load (docs/rules/numbers.md).
-
-## Decisions
-
-### Theme: mechas
-
-- The character is a mecha of parts, not armor; the starter kit (shoulders, arms, head, torso, legs, generator, booster) grows only when the user asks (docs/rules/screens.md).
-- Legs give speed, the booster the dash, the generator the shield, arms and shoulders the automatic weapons, the head the Radar (the weapons' only range), the torso the capacity and later the Magnet (docs/rules/screens.md).
-- A processor holds the skill tree and is a build; swapping it keeps the parts (not built). A part's old armor is its share of health, the name the code keeps (docs/rules/screens.md).
-
-### Screens
-
-- One HTML and CSS screen at a time: the entry screen (new game and continue disabled) leads to the test chambers, each named after its number (docs/rules/screens.md).
-- The Movement chamber is a full-window view with Dummies and the seed's objects; the Combat chamber is that world with Biters, a plain-text HUD and its own canvas (docs/rules/screens.md).
-- On a death the frames stop and play is disabled, but saved frames can be walked and playing an earlier one undoes it; Combat shows an ABORT MISSION alert, Movement only an aborted status (docs/rules/screens.md).
-- The Diagnostics chamber's buttons run checks in the browser and print text to copy (docs/rules/screens.md).
-
-### Stack
-
-- Plain JavaScript, HTML and CSS, the canvas only draws; no engine, library or TypeScript (docs/rules/screens.md).
-- Own collision, everything a circle; no walls, and scenery would be still circle actors (docs/rules/screens.md).
-
-### Simulation
-
-- The same initial state, blueprint and inputs always give the same run (docs/rules/state.md).
-- One step per frame shown, at a fixed rate: no step is skipped and nothing unseen is calculated, so a slow machine plays in slow motion (docs/rules/state.md).
-- Buttons and keys pause, play and walk one frame back or forward through the saved frames; play on a past frame, even one before the death, discards what came after and goes on with new inputs (docs/rules/state.md).
-
-### State, definitions, blueprint and rules
-
-- The state is a single JSON object, a photo of the game now: what can change in a run is state, what never changes is a definition, and what the player chose before the run is the blueprint (docs/rules/state.md).
-- The definitions are frozen and never change in a run; the blueprint is an input of the run, kept outside the saved frames (docs/rules/state.md).
-- What the rules calculate is written into its actor, the dynamic values again every frame (docs/rules/state.md).
-- The state carries the version of the definitions, and a saved frame of another version is refused (docs/rules/state.md).
-
-### The kit of parts
-
-- The avatar's values are the sums of the specs of the parts of its blueprint: health, resistance by type of damage (in points, may be negative), dash strength, charges and recharge, capacity, the Radar of the Head and the shield; a spec no rule reads, or a resistance that would make damage grow without end, is refused (docs/rules/parts.md).
-- Top speed is the sum of the parts' speed minus a fixed amount per unit of weight carried, never below zero, so the effect of weight is direct and shown in the audit (docs/rules/parts.md).
-- Capacity, from the torso, is a hard limit on what the blueprint weighs, not a speed penalty: a blueprint above it is refused (docs/rules/parts.md).
-- The avatar starts with full health and full dash charges; with no part giving a dash there is none (docs/rules/parts.md).
-- The values of the parts copy the avatar from before parts, not a goal of play, and are the first to redo (docs/rules/parts.md).
-
-### Parts made by seed (the user's idea, not implemented)
-
-- Not built: a part would be an instance rolled by seed inside the ranges of its model, deterministic, and kept as rolled (with its seed and library version), never derived again; today the blueprint names part models (docs/rules/parts.md).
-
-### The library (names agreed with the user)
-
-- Not built: content would live in a library of shelves (one per pack), books (one per kind of content) and entries, addressed shelf:book:entry, versioned per shelf, frozen once, with pack effects as data, not code; today the definitions are one flat object with one version (docs/rules/parts.md).
-
-### The world: seed and objects
-
-- Objects (rocks, Shrooms, Branches) are made again from the seed whenever they are needed and are not stored; only a hurt object's health is kept, and an object at zero is broken: not drawn and met by nothing (docs/rules/world.md).
-- The ground is layers of squares with at most one object each, none near the start; where two layers overlap, the one with the larger square wins, and looking at a bigger area never changes an object (docs/rules/world.md).
-- Every actor meets the objects the same way: it is pushed out, the speed going in turns into the object's bounce (only the Shroom has one, larger with its size, never above full) and the speed along it is kept, so it slides (docs/rules/world.md).
-- A contact too slow does nothing but stop the actor; an object of no weight breaks at the first touch of any body, with no push (docs/rules/world.md).
-- Two actors that overlap are pushed apart by weight: the heavier moves less, and an object never moves (docs/rules/world.md).
-- The window of cells around the avatar is the whole universe; any other actor that leaves it comes back on the opposite side (docs/rules/world.md).
-- Actors are tested against each other only when they share a cell, with exactly the result of testing every pair in order (docs/rules/world.md).
-
-### Damage
-
-- A hit is a packet with one amount per damage type, and the target resists each type on its own with its points, on a curve that never takes everything off; there is no minimum damage, and negative points amplify the hit (docs/rules/damage.md).
-- The shield takes damage before health and adds its own resistance while it has something left; it refills after a wait with no damage, and its ring is the avatar's radius (docs/rules/damage.md).
-- Health stops at zero: an actor at zero leaves the scene at the end of the step, but the avatar at zero ends the mission (docs/rules/damage.md).
-- A target with no health takes no hit, a hitbox hurts each thing at most once, and a hit of zero is still a hit (docs/rules/damage.md).
-- Every hit writes one line in the combat journal, which lives outside the state and which the rules never read (docs/rules/damage.md).
-- The body slam is a blunt hit on both sides at the moment of a new collision, each side with its own weight scaled by the impact; with today's tags it hurts only where the avatar is one of the two (docs/rules/damage.md).
-- Only melee attacks may grow with the weight, and a thing of weight zero breaks at the first contact with any actor or any hit (docs/rules/damage.md).
-
-### Movement and input
-
-- The game view fills the whole window, keeping its shape, and the camera follows the avatar, which stays at the center of the screen (docs/rules/movement.md).
-- The player only moves (keys, the left stick or a finger) and dashes; there is no manual aim, because the weapons aim by themselves (docs/rules/movement.md).
-- Movement has inertia: the avatar speeds up toward where it wants to go and slides to a stop, and its top speed is worked out again every frame from its parts and the weight it carries (docs/rules/movement.md).
-- A dash spends a charge and throws the avatar in the direction of its movement at full strength, even with a half-tilted stick; above the top speed it slows by a constant amount, so a stronger dash is also a longer one (docs/rules/movement.md).
-- The charges and their recharge come from the parts; a dash with no direction does nothing and keeps the charge, a stand-in for a planned blast that destroys projectiles (docs/rules/movement.md).
-- On a touch screen, one half is a floating stick and the whole other half is the dash; the gamepad stick wins over touch, and touch over the keys (docs/rules/movement.md).
-- The input of each frame is the movement and whether the dash was pressed in that frame, and it is saved in the history (docs/rules/movement.md).
-- The game runs at most one step per frame of the browser: a faster monitor does not speed it up, and a slow machine plays it in slow motion (docs/rules/movement.md).
-
-### Run history (two logs)
-
-- The history keeps the last saved frames (snaps) and the input that made each, in two aligned lists, plus the blueprint (docs/rules/state.md).
-- The cross-check replays the saved inputs from the oldest snap and reports the first difference; it proves the run repeats, not that the rules are right (docs/rules/state.md).
-- Going back loads a copy of a snap, so playing on never rewrites the history (docs/rules/state.md).
-
-### Spawn
-
-- Every map has a hand-written schedule of spawn events, each saying on which frame how many actors of one type appear, so what appears and when is known in advance (docs/rules/spawn.md).
-- The births of a frame are the last thing of its step, in the order of the schedule, and the newborns exist from the next frame, at the end of the list of actors (docs/rules/spawn.md).
-- Each actor is born off the screen but inside the window around the avatar, at a place drawn from the seed with no search for a free spot; if it lands on something, the collision pushes them apart (docs/rules/spawn.md).
-- The births depend on the frame alone, with no memory of the spawn, so going back in time and playing again gives the same births and nobody is born twice (docs/rules/spawn.md).
-- Every birth writes a line in the journal; an event of an unknown type is skipped with an error line while the others still spawn, and after the avatar's death nothing is born (docs/rules/spawn.md).
-- An actor goes after whatever the target of its attack names in the data: the Biter chases and bites the closest "ally" (today only the avatar), while the Dummy has no attack, chases nobody and only wanders (docs/rules/spawn.md).
-- An actor that leaves the window comes back on the opposite side, so a limited crowd is always around, almost all of it on screen; the avatar never wraps (docs/rules/spawn.md).
-
-### Actor
-
-- An actor is anything that acts in combat (the avatar, the Dummy, the Biter); it holds its own value of everything it uses, and the code reads the actor (docs/rules/actor.md).
-- What never changes in a run is calculated once, at birth; the top speed, the resistance, the attacks of the moment, the dash speed and the avatar's weight, every frame (docs/rules/actor.md).
-- The Biter chases the avatar, stands still to wind up once within reach, bites, stands still again and chases again (docs/rules/actor.md).
-- What can be a target is an actor; what only hurts is a hitbox, born at its attack's exit (the avatar's center, one body ahead of a Biter) with the attack it had then (docs/rules/actor.md).
-- An actor with no health leaves at the end of the step and is never a target; the avatar at zero ends the mission, and the world stops after the killing contact (docs/rules/actor.md).
-- An actor of a spawn event is drawn and named from the seed, the event and its place in it, off the screen and inside the window, with no search for a free place (docs/rules/actor.md).
-- Any actor may crush, breaking the objects it touches with no damage or push; it is off for everyone (docs/rules/actor.md).
-- The Dummy, a test actor with no attack but the body slam, walks with inertia toward an angle from the seed and takes a new one at every new contact (docs/rules/actor.md).
-- A Dummy that leaves the window comes back on the opposite side; only the avatar hurts a Dummy, and a Dummy hurts only the avatar (docs/rules/actor.md).
-
-### Weapons and equipment (the user, 2026-11-11; the full reference is `docs/weapons.md`)
-
-- A weapon is a part with a recipe in data, so a new weapon needs no new code; it aims on its own at the closest enemy the Radar of the Head sees (docs/rules/weapons.md).
-- The repeater fires at a cadence and reloads when the magazine is empty; every round weighs, so the avatar gets lighter and faster as it fires, and its push and body slam follow its weight of the moment (docs/rules/weapons.md).
-- A bullet is a moving hitbox that lives until it leaves the window of the grid around the avatar or its pierce, the number of things it crosses, is spent (docs/rules/weapons.md).
-- The sword winds up toward the closest enemy within reach, turning its aim partway toward it each frame, then strikes a fixed cone of slash damage, even if the target is gone (docs/rules/weapons.md).
-- Every hitbox is born after everyone has moved; a bite or a blow lives one frame, and its fading trace is visual state, which the rules never read (docs/rules/weapons.md).
-- A target is the closest actor with a given tag that still has health; an enemy with no target stands still (docs/rules/weapons.md).
-- Bodies and attacks ignore a list of tags, and a hit lands unless the target has one: no enemy hurts an enemy, the avatar hurts no ally, attacks spare their maker (docs/rules/weapons.md).
-- Shots and blows hurt and break Rocks and Shrooms, once per hitbox; the bite ignores objects (docs/rules/weapons.md).
-- A bite or a blow hits all it touches, each once; a bullet hits only the first thing its path meets in a frame (docs/rules/weapons.md).
-
-## Ideas (agent proposals, not decided)
-
-- Proposals, decided only when the user approves: a damage pipeline whose stages note what they did, the step as named phases, a read-only export for machine learning, later a bot and a small model (docs/notes/handoff.md).
-
-## Open items
-
-- Open: an on-screen trace of real hits as arithmetic; the Magnet; whether a dash pushes more; huge actors; a minimum time between hits of a pair; more Biter and hitbox behaviors; the library; an automatic cross-check (docs/notes/handoff.md).
-
-## Handoff (rewritten 2026-11-12, by one agent for the next; stale statements fixed 2026-11-16, issue 69)
-
-- Open issues are on GitHub; when the user writes after something that needed testing, he tested it; the agent's choices are confirmed one at a time (docs/notes/handoff.md).
-- Keep: the grid gives exactly the result of every pair in order, and an actor's cells are right at the end of each step (docs/notes/handoff.md).
-
 ## Working with several agents
 
 The user may open more than one conversation, each one a **desk** with its own job; `docs/desks.md` says which desks exist, what each may touch and how to open one. Agents do not share memory: **the repository is the only thing all of them see**, so what is not written here (or in the docs it points to) does not exist for the next one. The rules that make it work:
@@ -229,10 +86,6 @@ The user may open more than one conversation, each one a **desk** with its own j
 - **Say who you are in the commit message** when it helps the next desk (for example "Screen desk: ..."); the attribution lines at the end are added as usual.
 
 What this cannot guarantee (said plainly, because the user asked what can be guaranteed): an agent can ignore this file, misread it, or lose part of a long conversation when it is summarized. The tests catch a broken rule and a stale "Code layout" (docs/rules/code-layout.md); they do not catch a decision that was made in a conversation and never written down. When a decision is made, write it here before the reply that announces it.
-
-## Publishing (2026-11-12, written by one agent for the next)
-
-- Every push to main runs the tests, then publishes the game to GitHub Pages, public; commits keep the noreply address, the history is not rewritten unasked, and no license is chosen (docs/notes/handoff.md).
 
 ## How to run
 
@@ -260,9 +113,3 @@ From the root of the repository: `node --test` (no path; Node finds the `*.test.
 - **Say when a decision rests mostly on the user's preference**, briefly and plainly, and keep going: the game is his, so a preference is a valid reason, but he wants to know which decisions are preference and which are need. The same goes for the agent's own preferences. **Filter (the user's rule):** do not raise a suggestion unless it has the potential for a positive change to the game. Do not challenge a choice of taste only to offer alternatives (the user's example: "you chose cats, but what about dogs, or squirrels?"). A taste choice is worth a remark only when it carries a concrete cost or risk into the structure. The same applies to numbers: suggest a different value only if it would measurably change the experience.
 - Small corrections, not over-corrections: the user said the agent rushes, and then brakes too much when corrected.
 - After changing something visual, ask the user to open it and describe what he sees and feels. For anything that can be printed as text, add a button to Chamber 0 and ask the user to paste its output.
-
-### Patterns that work here (written by one agent for the next, 2026-11-11)
-
-- The agent's experience, not the user's rules: "try" or "see" is not a request to build; say a decision back as one rule; one blocking question per reply (docs/notes/handoff.md).
-- A rule is one named function under the user's sentence; what must not exist is refused at load or by a test on the definitions; an unknown spawn type is skipped with a journal line (docs/notes/handoff.md).
-- Rule, tests, README row and note go in one commit; break each guard once to see its test fail (docs/notes/handoff.md).

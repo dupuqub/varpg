@@ -1,5 +1,18 @@
 # State, definitions and the run history
 
+## In short
+
+- The same initial state, blueprint and inputs always give the same run (docs/rules/state.md).
+- One step per frame shown, at a fixed rate: no step is skipped and nothing unseen is calculated, so a slow machine plays in slow motion (docs/rules/state.md).
+- Buttons and keys pause, play and walk one frame back or forward through the saved frames; play on a past frame, even one before the death, discards what came after and goes on with new inputs (docs/rules/state.md).
+- The state is a single JSON object, a photo of the game now: what can change in a run is state, what never changes is a definition, and what the player chose before the run is the blueprint (docs/rules/state.md).
+- The definitions are frozen and never change in a run; the blueprint is an input of the run, kept outside the saved frames (docs/rules/state.md).
+- What the rules calculate is written into its actor, the dynamic values again every frame (docs/rules/state.md).
+- The state carries the version of the definitions, and a saved frame of another version is refused (docs/rules/state.md).
+- The history keeps the last saved frames (snaps) and the input that made each, in two aligned lists, plus the blueprint (docs/rules/state.md).
+- The cross-check replays the saved inputs from the oldest snap and reports the first difference; it proves the run repeats, not that the rules are right (docs/rules/state.md).
+- Going back loads a copy of a snap, so playing on never rewrites the history (docs/rules/state.md).
+
 ## Simulation
 
 - **Deterministic:** the same initial state, blueprint and inputs produce an identical run. One of the goals is to reproduce runs for machine learning.

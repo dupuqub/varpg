@@ -1,5 +1,15 @@
 # The world, collision and the grid
 
+## In short
+
+- Objects (rocks, Shrooms, Branches) are made again from the seed whenever they are needed and are not stored; only a hurt object's health is kept, and an object at zero is broken: not drawn and met by nothing (docs/rules/world.md).
+- The ground is layers of squares with at most one object each, none near the start; where two layers overlap, the one with the larger square wins, and looking at a bigger area never changes an object (docs/rules/world.md).
+- Every actor meets the objects the same way: it is pushed out, the speed going in turns into the object's bounce (only the Shroom has one, larger with its size, never above full) and the speed along it is kept, so it slides (docs/rules/world.md).
+- A contact too slow does nothing but stop the actor; an object of no weight breaks at the first touch of any body, with no push (docs/rules/world.md).
+- Two actors that overlap are pushed apart by weight: the heavier moves less, and an object never moves (docs/rules/world.md).
+- The window of cells around the avatar is the whole universe; any other actor that leaves it comes back on the opposite side (docs/rules/world.md).
+- Actors are tested against each other only when they share a cell, with exactly the result of testing every pair in order (docs/rules/world.md).
+
 ## The world: seed and objects
 
 **Objects (rocks, Shrooms) are made by the seed and the formula, and are not stored in the state** (the user's decisions). They are not actors in the code (the actors are the avatar, `createAvatar`, the Dummies and the Biters, born from the spawn events of their map by `spawnEvents`). **One function makes everything that exists in a run (the user's idea, 2026-11-10):** `finalizeObject(type, rolls, blueprint, id)` takes the recipe (the entry of `src/data.js`), what the seed rolled and the blueprint, and returns the complete object; the avatar and every object from the seed come out of it.

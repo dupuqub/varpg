@@ -1,5 +1,15 @@
 # Parts and the library
 
+## In short
+
+- The avatar's values are the sums of the specs of the parts of its blueprint: health, resistance by type of damage (in points, may be negative), dash strength, charges and recharge, capacity, the Radar of the Head and the shield; a spec no rule reads, or a resistance that would make damage grow without end, is refused (docs/rules/parts.md).
+- Top speed is the sum of the parts' speed minus a fixed amount per unit of weight carried, never below zero, so the effect of weight is direct and shown in the audit (docs/rules/parts.md).
+- Capacity, from the torso, is a hard limit on what the blueprint weighs, not a speed penalty: a blueprint above it is refused (docs/rules/parts.md).
+- The avatar starts with full health and full dash charges; with no part giving a dash there is none (docs/rules/parts.md).
+- The values of the parts copy the avatar from before parts, not a goal of play, and are the first to redo (docs/rules/parts.md).
+- Not built: a part would be an instance rolled by seed inside the ranges of its model, deterministic, and kept as rolled (with its seed and library version), never derived again; today the blueprint names part models (docs/rules/parts.md).
+- Not built: content would live in a library of shelves (one per pack), books (one per kind of content) and entries, addressed shelf:book:entry, versioned per shelf, frozen once, with pack effects as data, not code; today the definitions are one flat object with one version (docs/rules/parts.md).
+
 ## The kit of parts
 
 The user asked for the kit with **only what is used now**: weight, speed, health, resistance (by type of damage), the dash strength and the capacity. The Radar is in the code (the Head); the Magnet is not (the shield and the weapons are).

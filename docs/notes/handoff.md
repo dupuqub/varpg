@@ -1,5 +1,16 @@
 # Handoff, open items, ideas, publishing and patterns
 
+## In short
+
+- Proposals, decided only when the user approves: a damage pipeline whose stages note what they did, the step as named phases, a read-only export for machine learning, later a bot and a small model (docs/notes/handoff.md).
+- Open: an on-screen trace of real hits as arithmetic; the Magnet; whether a dash pushes more; huge actors; a minimum time between hits of a pair; more Biter and hitbox behaviors; the library; an automatic cross-check (docs/notes/handoff.md).
+- Open issues are on GitHub; when the user writes after something that needed testing, he tested it; the agent's choices are confirmed one at a time (docs/notes/handoff.md).
+- Keep: the grid gives exactly the result of every pair in order, and an actor's cells are right at the end of each step (docs/notes/handoff.md).
+- Every push to main runs the tests, then publishes the game to GitHub Pages, public; commits keep the noreply address, the history is not rewritten unasked, and no license is chosen (docs/notes/handoff.md).
+- The agent's experience, not the user's rules: "try" or "see" is not a request to build; say a decision back as one rule; one blocking question per reply (docs/notes/handoff.md).
+- A rule is one named function under the user's sentence; what must not exist is refused at load or by a test on the definitions; an unknown spawn type is skipped with a journal line (docs/notes/handoff.md).
+- Rule, tests, README row and note go in one commit; break each guard once to see its test fail (docs/notes/handoff.md).
+
 ## Handoff (rewritten 2026-11-12, by one agent for the next; stale statements fixed 2026-11-16, issue 69)
 
 What to keep in mind when picking the work up. Rewrite this section when it is stale; it is the first thing a new conversation reads after the top of the file.

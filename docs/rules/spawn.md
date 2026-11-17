@@ -1,5 +1,15 @@
 # Spawn
 
+## In short
+
+- Every map has a hand-written schedule of spawn events, each saying on which frame how many actors of one type appear, so what appears and when is known in advance (docs/rules/spawn.md).
+- The births of a frame are the last thing of its step, in the order of the schedule, and the newborns exist from the next frame, at the end of the list of actors (docs/rules/spawn.md).
+- Each actor is born off the screen but inside the window around the avatar, at a place drawn from the seed with no search for a free spot; if it lands on something, the collision pushes them apart (docs/rules/spawn.md).
+- The births depend on the frame alone, with no memory of the spawn, so going back in time and playing again gives the same births and nobody is born twice (docs/rules/spawn.md).
+- Every birth writes a line in the journal; an event of an unknown type is skipped with an error line while the others still spawn, and after the avatar's death nothing is born (docs/rules/spawn.md).
+- An actor goes after whatever the target of its attack names in the data: the Biter chases and bites the closest "ally" (today only the avatar), while the Dummy has no attack, chases nobody and only wanders (docs/rules/spawn.md).
+- An actor that leaves the window comes back on the opposite side, so a limited crowd is always around, almost all of it on screen; the avatar never wraps (docs/rules/spawn.md).
+
 ## Spawn
 
 - Every X time, Y spawn. For each map, exactly what appears and when is known in advance.

@@ -1,5 +1,17 @@
 # Actor and the Dummy
 
+## In short
+
+- An actor is anything that acts in combat (the avatar, the Dummy, the Biter); it holds its own value of everything it uses, and the code reads the actor (docs/rules/actor.md).
+- What never changes in a run is calculated once, at birth; the top speed, the resistance, the attacks of the moment, the dash speed and the avatar's weight, every frame (docs/rules/actor.md).
+- The Biter chases the avatar, stands still to wind up once within reach, bites, stands still again and chases again (docs/rules/actor.md).
+- What can be a target is an actor; what only hurts is a hitbox, born at its attack's exit (the avatar's center, one body ahead of a Biter) with the attack it had then (docs/rules/actor.md).
+- An actor with no health leaves at the end of the step and is never a target; the avatar at zero ends the mission, and the world stops after the killing contact (docs/rules/actor.md).
+- An actor of a spawn event is drawn and named from the seed, the event and its place in it, off the screen and inside the window, with no search for a free place (docs/rules/actor.md).
+- Any actor may crush, breaking the objects it touches with no damage or push; it is off for everyone (docs/rules/actor.md).
+- The Dummy, a test actor with no attack but the body slam, walks with inertia toward an angle from the seed and takes a new one at every new contact (docs/rules/actor.md).
+- A Dummy that leaves the window comes back on the opposite side; only the avatar hurts a Dummy, and a Dummy hurts only the avatar (docs/rules/actor.md).
+
 ## The Dummy
 
 The user's idea (2026-11-10): a test actor that does not attack, made to see many things colliding. Numbers are in `src/data.js` (`DEFINITIONS.actors.dummy`, and the count in `DEFINITIONS.maps.chamber1.spawns`), with their reasons; nothing is repeated here.

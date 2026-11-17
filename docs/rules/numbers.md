@@ -1,5 +1,14 @@
 # Where the numbers are
 
+## In short
+
+- The values of the game live in the definitions in src/data.js; only a few named constants sit in the code (steps per second, the length of the history, the stick dead zone, a speed tolerance), the canvas size in the page, and worked examples with known answers beside the tests (docs/rules/numbers.md).
+- Every number has its reason written next to it, of one of four kinds (target, anchor, rule, guess), and says when it is the user's own; a constant is never fitted only to keep an old result (docs/rules/numbers.md).
+- Numbers are tied: top speed is the parts' speed minus a cost per unit of weight carried; the times to reach it and to stop follow from acceleration and deceleration; a dash lasts while its extra speed decays at a fixed rate, and it hurts like any contact at that speed (docs/rules/numbers.md).
+- A dash must move less in one frame than the avatar radius plus the smallest object radius, and the safe circle of every layer must keep the first dash of every blueprint, born with the shield ring, off every object (docs/rules/numbers.md).
+- The cell size of the collision grid is only a performance setting: an actor covers every cell its circle reaches, whatever its size (docs/rules/numbers.md).
+- A blueprint weighs no more than its capacity, an object weighs in proportion to its radius, and a layer whose square is not larger than twice its largest object radius is refused when the definitions load (docs/rules/numbers.md).
+
 | What | Where |
 |---|---|
 | The avatar (radius, acceleration, deceleration, dash recharge) | `DEFINITIONS.actors` in `src/data.js` |

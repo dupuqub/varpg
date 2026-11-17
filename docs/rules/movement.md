@@ -1,5 +1,16 @@
 # Movement and input
 
+## In short
+
+- The game view fills the whole window, keeping its shape, and the camera follows the avatar, which stays at the center of the screen (docs/rules/movement.md).
+- The player only moves (keys, the left stick or a finger) and dashes; there is no manual aim, because the weapons aim by themselves (docs/rules/movement.md).
+- Movement has inertia: the avatar speeds up toward where it wants to go and slides to a stop, and its top speed is worked out again every frame from its parts and the weight it carries (docs/rules/movement.md).
+- A dash spends a charge and throws the avatar in the direction of its movement at full strength, even with a half-tilted stick; above the top speed it slows by a constant amount, so a stronger dash is also a longer one (docs/rules/movement.md).
+- The charges and their recharge come from the parts; a dash with no direction does nothing and keeps the charge, a stand-in for a planned blast that destroys projectiles (docs/rules/movement.md).
+- On a touch screen, one half is a floating stick and the whole other half is the dash; the gamepad stick wins over touch, and touch over the keys (docs/rules/movement.md).
+- The input of each frame is the movement and whether the dash was pressed in that frame, and it is saved in the history (docs/rules/movement.md).
+- The game runs at most one step per frame of the browser: a faster monitor does not speed it up, and a slow machine plays it in slow motion (docs/rules/movement.md).
+
 ## Movement and input
 
 The user approved this and noted that everything may change.

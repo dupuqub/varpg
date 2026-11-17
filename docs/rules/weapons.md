@@ -1,5 +1,17 @@
 # Weapons and equipment, and shots and objects
 
+## In short
+
+- A weapon is a part with a recipe in data, so a new weapon needs no new code; it aims on its own at the closest enemy the Radar of the Head sees (docs/rules/weapons.md).
+- The repeater fires at a cadence and reloads when the magazine is empty; every round weighs, so the avatar gets lighter and faster as it fires, and its push and body slam follow its weight of the moment (docs/rules/weapons.md).
+- A bullet is a moving hitbox that lives until it leaves the window of the grid around the avatar or its pierce, the number of things it crosses, is spent (docs/rules/weapons.md).
+- The sword winds up toward the closest enemy within reach, turning its aim partway toward it each frame, then strikes a fixed cone of slash damage, even if the target is gone (docs/rules/weapons.md).
+- Every hitbox is born after everyone has moved; a bite or a blow lives one frame, and its fading trace is visual state, which the rules never read (docs/rules/weapons.md).
+- A target is the closest actor with a given tag that still has health; an enemy with no target stands still (docs/rules/weapons.md).
+- Bodies and attacks ignore a list of tags, and a hit lands unless the target has one: no enemy hurts an enemy, the avatar hurts no ally, attacks spare their maker (docs/rules/weapons.md).
+- Shots and blows hurt and break Rocks and Shrooms, once per hitbox; the bite ignores objects (docs/rules/weapons.md).
+- A bite or a blow hits all it touches, each once; a bullet hits only the first thing its path meets in a frame (docs/rules/weapons.md).
+
 ## Weapons and equipment (the user, 2026-11-11; the full reference is `docs/weapons.md`)
 
 Read `docs/weapons.md` before touching anything about weapons: it keeps the user's vision (which earlier summaries had lost), the old project's model, kept only as a **relic, never as rules** (`docs/reference/`, read its `README.md`: a screenshot, `relic-old-project-hud.jpg`) and the open questions. The decisions, short:
