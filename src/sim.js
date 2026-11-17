@@ -317,6 +317,47 @@ function checkNoWeight(amount, where) {
   }
 }
 
+// The specs a part of creatures can have (issue 75): the values of a creature recipe that a part may give. Anything else is refused
+// when the definitions load, like PART_SPECS for the parts of the avatar.
+const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius"];
+
+// The parts of creatures and the recipes that name them (issue 75, parcel 1): called by assertValidDefinitions, with its check of a
+// list of tags. A recipe's `parts` is a list of ids of DEFINITIONS.creatureParts (the avatar has none: its parts are its blueprint);
+// a part has a name, optional specs of CREATURE_PART_SPECS with finite values (health is { min, max }, whole, 0 or more, min not
+// above max; weightPerRadius is whole kg, 0 or more, the weight rule; the others are numbers, 0 or more), optional tags (a list of
+// words) and optional attacks (checked with the attacks of the recipes, above in assertValidDefinitions).
+function assertValidCreatureParts(tagList) {
+  const parts = DEFINITIONS.creatureParts;
+  for (const [id, part] of Object.entries(parts)) {
+    const where = "the creature part " + id;
+    if (typeof part.name !== "string" || part.name === "") throw new Error("The name of " + where + " must be a word, and it is " + JSON.stringify(part.name));
+    for (const [name, value] of Object.entries(part.specs ?? {})) {
+      if (!CREATURE_PART_SPECS.includes(name)) throw new Error("The creature part " + id + " has the spec " + name + ", which no rule reads. The specs are: " + CREATURE_PART_SPECS.join(", "));
+      if (name === "health") {
+        const whole = (n) => Number.isInteger(n) && n >= 0;
+        if (!value || !whole(value.min) || !whole(value.max) || value.min > value.max) {
+          throw new Error("The spec health of " + where + " must be { min, max }, whole numbers, 0 or more, with min not above max: " + JSON.stringify(value));
+        }
+      } else if (name === "weightPerRadius") {
+        if (!(Number.isInteger(value) && value >= 0)) throw new Error("The spec weightPerRadius of " + where + " must be a whole number of kg, 0 or more, and it is " + value);
+      } else if (!(typeof value === "number" && Number.isFinite(value) && value >= 0)) {
+        throw new Error("The spec " + name + " of " + where + " must be a finite number, 0 or more, and it is " + value);
+      }
+    }
+    if (part.tags !== undefined) tagList(part.tags, "the tags of " + where);
+    for (const [name, attack] of Object.entries(part.attacks ?? {})) tagList(attack.ignores, "the ignores of the attack " + name + " of " + where);
+  }
+  for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
+    if (actor.parts === undefined) continue;
+    if (id === "avatar") throw new Error("The actor avatar has parts in its recipe: the avatar's parts are its blueprint");
+    if (!Array.isArray(actor.parts)) throw new Error("The parts of the actor " + id + " must be a list of ids of creatureParts: " + JSON.stringify(actor.parts));
+    for (const partId of actor.parts) {
+      // Object.hasOwn: a name found only on the prototype of an object (toString) is not a part.
+      if (typeof partId !== "string" || !Object.hasOwn(parts, partId)) throw new Error("The actor " + id + " has the part " + JSON.stringify(partId) + ", which is not a creature part. The creature parts are: " + Object.keys(parts).join(", "));
+    }
+  }
+}
+
 function assertValidDefinitions() {
   // The things made by the seed from ranges: every object, and the actors of the crowds (the Dummy and the Biter).
   for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy, biter: DEFINITIONS.actors.biter })) {
@@ -411,9 +452,14 @@ function assertValidDefinitions() {
     }
   }
   // The attacks of a recipe: each type of damage is known, with a flat part and a part per kg that are numbers, 0 or more.
-  for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
+  // The same check holds for the attacks of a part of creatures (issue 75), which are written the same way.
+  const attackOwners = [
+    ...Object.entries(DEFINITIONS.actors).map(([id, actor]) => ["the actor " + id, actor]),
+    ...Object.entries(DEFINITIONS.creatureParts).map(([id, part]) => ["the creature part " + id, part]),
+  ];
+  for (const [owner, actor] of attackOwners) {
     for (const [name, attack] of Object.entries(actor.attacks ?? {})) {
-      const where = "the attack " + name + " of the actor " + id;
+      const where = "the attack " + name + " of " + owner;
       if (name === "bodySlam") throw new Error("The name bodySlam of " + where + " is taken: every thing has the body slam");
       const types = Object.keys(attack.damage ?? {});
       if (types.length === 0) throw new Error("The damage of " + where + " is missing: { type: { flat, perWeight } }");
@@ -449,6 +495,7 @@ function assertValidDefinitions() {
     if (part.weapon) tagList(part.weapon.ignores, "the ignores of the weapon of the part " + id);
     if (part.melee) tagList(part.melee.ignores, "the ignores of the melee of the part " + id);
   }
+  assertValidCreatureParts(tagList);
   const squareSizes = [];
   for (const [id, layer] of Object.entries(DEFINITIONS.terrain.objects.layers)) {
     const where = "the layer " + id + " of terrain.objects";

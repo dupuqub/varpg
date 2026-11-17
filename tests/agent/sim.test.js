@@ -2879,7 +2879,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 65, hash: "b3db276df7abddf2" };
+const DATA_FINGERPRINT = { version: 66, hash: "7ddd49c98c84b9fb" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -5948,4 +5948,39 @@ test("252 the trace that follows its owner is visual only (issue 72): 900 frames
   assert.strictEqual(r.sameJournal, true);
   assert.ok(r.cones >= 1 && r.bites >= 1, "the run must have a blow of the sword and a bite");
   for (const key of ["traces", "trace", "offset", "traceOwner", "traceOffset"]) assert.ok(!r.keys.includes(key), "the state has a new field: " + key);
+});
+
+// ---- Actors may have parts: the shape and the validator (issue 75, parcel 1 of 5) ----
+
+// A patched copy of the data where the Dummy names creature parts: `table` is the text of DEFINITIONS.creatureParts and `list` the
+// text of the Dummy's parts. The real data has an empty table and no actor with parts, so these tests write their own.
+const CREATURE_PARTS_TABLE = /creatureParts: \{\},/;
+const withCreatureParts = (table, list) => (text) => text
+  .replace(CREATURE_PARTS_TABLE, "creatureParts: " + table + ",")
+  .replace('name: "Dummy",', 'name: "Dummy", parts: ' + list + ",");
+const VALID_CREATURE_PARTS = '{ body: { name: "Body", specs: { health: { min: 100, max: 100 } }, tags: ["test"] }, '
+  + 'legs: { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 100 } }, '
+  + 'mouth: { name: "Mouth", attacks: { bite: { damage: { puncture: { flat: 1, perWeight: 0 } }, reach: 8, windupFrames: 15, freezeFrames: 10, hitbox: { radius: 20, frames: 1 }, exit: "front", target: { pick: "closest", tag: "ally" }, ignores: ["self"], hits: "all" } } } }';
+
+test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the Dummy names the creature parts body (health, a tag), legs (speed, acceleration, deceleration, weightPerRadius) and mouth (a bite written like a recipe's), and the data loads; the real data loads too, with an empty table of creature parts and no actor that names parts", () => {
+  assert.doesNotThrow(() => loadGame(withCreatureParts(VALID_CREATURE_PARTS, '["body", "legs", "mouth"]')));
+  const real = plain(run(`return { table: DEFINITIONS.creatureParts, withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
+  assert.deepStrictEqual(real, { table: {}, withParts: [] });
+});
+
+test("254 an unknown part id in a recipe is refused when the definitions load (issue 75, parcel 1): the Dummy naming the part wings, and the part toString (found only on the prototype of an object), each stop the game with a message that names the actor and the part", () => {
+  assert.match(loadError(withCreatureParts(VALID_CREATURE_PARTS, '["body", "wings"]')) ?? "", /The actor dummy has the part "wings", which is not a creature part/);
+  assert.match(loadError(withCreatureParts(VALID_CREATURE_PARTS, '["toString"]')) ?? "", /The actor dummy has the part "toString", which is not a creature part/);
+});
+
+test("255 an unknown spec and a value that is not finite in a creature part are refused when the definitions load (issue 75, parcel 1): the part legs with the spec sped (a typo of speed), and with a speed of Infinity, each stop the game with a message that names the part and the spec", () => {
+  const typo = VALID_CREATURE_PARTS.replace("specs: { speed: 2,", "specs: { sped: 2,");
+  assert.match(loadError(withCreatureParts(typo, '["legs"]')) ?? "", /The creature part legs has the spec sped, which no rule reads/);
+  const infinite = VALID_CREATURE_PARTS.replace("specs: { speed: 2,", "specs: { speed: Infinity,");
+  assert.match(loadError(withCreatureParts(infinite, '["legs"]')) ?? "", /The spec speed of the creature part legs must be a finite number/);
+});
+
+test("256 a tag of a creature part that is not a word is refused when the definitions load (issue 75, parcel 1): the part body with the tags [7] stops the game with a message that names the tags of the part", () => {
+  const notWord = VALID_CREATURE_PARTS.replace('tags: ["test"]', "tags: [7]");
+  assert.match(loadError(withCreatureParts(notWord, '["body"]')) ?? "", /The list of the tags of the creature part body must be written/);
 });

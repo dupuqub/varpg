@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 65;
+const DEFINITIONS_VERSION = 66;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -411,6 +411,17 @@ const DEFINITIONS = {
     generator: { name: "Generator", weight: 200, specs: { shieldMax: 40, shieldDelayFrames: 180, shieldRegenPerFrame: 0.25, shieldResistance: { blunt: 11, puncture: 11 } } },
     booster: { name: "Booster", weight: 200, specs: { dashSpeed: 12, dashCharges: 1, rechargeFrames: 240 } },
   },
+
+  // The parts of creatures (the user, 2026-11-16 and 17, issue 75: "todo ator é feito de partes"). An actor recipe other than the
+  // avatar's may name a list of them in `parts` (ids of this table); the list plays for it the role the blueprint plays for the avatar,
+  // with no slots and no limit. A part may give:
+  //   specs   creature specs, each optional: health ({ min, max }, the shape of a recipe's healthRange), speed, acceleration,
+  //           deceleration and weightPerRadius (whole kg per pixel of radius, like a recipe's)
+  //   attacks attacks written like the attacks of an actor recipe ({ bite: { damage, reach, ... } }), checked by the same rule
+  //   tags    words added to the actor's own tags
+  // src/sim.js checks them when it loads, like the parts of the avatar (CREATURE_PART_SPECS). Empty for now: no actor uses it yet
+  // (issue 75, parcel 1 of 5). A number of a part that is a guess (the split of weightPerRadius among the parts) is marked "guess".
+  creatureParts: {},
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
   starterBlueprint: {
