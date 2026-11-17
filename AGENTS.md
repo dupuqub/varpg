@@ -71,22 +71,6 @@ Enter a map (Vampire Survivors style), run the build, collect resources, leave t
 - There must be a page that shows in detail how each hit of damage was calculated: an annotated formula that says where and when each buff is applied, and in what order.
 - It is not didactic. It is an audit: the player needs full awareness of the build's real performance, to improve it effectively and to give feedback on the game's logic.
 
-## Working with several agents
-
-The user may open more than one conversation, each one a **desk** with its own job; `docs/desks.md` says which desks exist, what each may touch and how to open one. Agents do not share memory: **the repository is the only thing all of them see**, so what is not written here (or in the docs it points to) does not exist for the next one. The rules that make it work:
-
-- **Desks (the user, 2026-11-13: split the work into several conversations, each one a desk of a studio; built).** The user has little experience with modern methods of building with agents and asks for help in this point. What is wanted: a consistent method so the conversations can collaborate and help each other. Decided (the user, 2026-11-13): the desks talk through the **Issues of GitHub** (labels `desk:rules`, `desk:review`, `desk:screen`, `desk:bench`, `question-for-user`); the method is in `docs/desks.md`, "How desks talk". Three desks are open today: Review, Manager (called the Rules desk until 2026-11-16; its label is still `desk:rules`) and Screen; the Planner is out for now (the user, 2026-11-16, issue 65) and the Bench and Content desks are for later. `docs/desks.md` was revised on 2026-11-16 (issue 65).
-
-- **Before the first change of a conversation, and again before every push: `git pull --rebase`.** Another desk may have pushed. Never force-push `main`, never rewrite its history.
-- **A desk changes only the files of its job** (`docs/desks.md`). If the work needs a change in another desk's files, open an issue on GitHub with that desk's label (`docs/desks.md`, "How desks talk") and tell the user; do not make the change.
-- **Only one desk writes the rules** (`src/sim.js`, `src/data.js`, `src/history.js`, the tests). Three things there exist once and collide when two agents touch them at the same time: the **numbers of the tests** (unique, test 112), **`DEFINITIONS_VERSION` with its fingerprint** (test 129), and the **order of the phases of `step`**. After a rebase that brings someone else's commits, run the tests again before pushing; if a test number or the fingerprint collided, take the next number or print the new fingerprint, never reuse or skip.
-- **`AGENTS.md` is shared:** change the section of the thing you changed, in the same commit as the change, and leave the rest. Do not reorganize the file while another desk is working.
-- **The tests decide.** `node --test` must end with `fail 0` before every push; the repository runs them again on every push and pull request (`.github/workflows/tests.yml`), and nothing is published when they fail. Test 152 fails if "Code layout" (docs/rules/code-layout.md) names a function that is not in the code.
-- **One question at a time to the user, per desk, and only the one that blocks.** He is one person answering every desk.
-- **Say who you are in the commit message** when it helps the next desk (for example "Screen desk: ..."); the attribution lines at the end are added as usual.
-
-What this cannot guarantee (said plainly, because the user asked what can be guaranteed): an agent can ignore this file, misread it, or lose part of a long conversation when it is summarized. The tests catch a broken rule and a stale "Code layout" (docs/rules/code-layout.md); they do not catch a decision that was made in a conversation and never written down. When a decision is made, write it here before the reply that announces it.
-
 ## How to run
 
 Online: `https://dupuqub.github.io/varpg/` (the last push to `main` that passed the tests). Locally: open `index.html` in the browser. The scripts are plain (no modules), so no server is needed.
