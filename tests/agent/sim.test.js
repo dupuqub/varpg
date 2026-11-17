@@ -2604,11 +2604,11 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -100 }, speed: 3.5 }")), /resistance of the part legs to blunt/); // -1 is allowed since issue 34 (negative resistance amplifies): the limit is minus the scale
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: -30, resistance: { blunt: 10 }, speed: 3.5 }")), /spec health of the part legs/);
   const bite = "damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }";
-  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 5.04, perWeight: 0.00336 } }")), /attack bite of the actor biter has fire/);
-  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.0024 } }")), /attack bite of the actor biter needs flat and perWeight/);
-  assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the actor biter/);
-  assert.throws(() => loadGame((text) => text.replace("windupFrames: 15,", "windupFrames: -1,")), /windupFrames of the attack bite of the actor biter/);
-  assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 1 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the actor biter/);
+  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 5.04, perWeight: 0.00336 } }")), /attack bite of the creature part biter-mouth has fire/);
+  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.0024 } }")), /attack bite of the creature part biter-mouth needs flat and perWeight/);
+  assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the creature part biter-mouth/);
+  assert.throws(() => loadGame((text) => text.replace("windupFrames: 15,", "windupFrames: -1,")), /windupFrames of the attack bite of the creature part biter-mouth/);
+  assert.throws(() => loadGame((text) => text.replace("hitbox: { radius: 20, frames: 1 }", "hitbox: { radius: 20, frames: 0 }")), /hitbox of the attack bite of the creature part biter-mouth/);
   assert.throws(() => loadGame((text) => text.replace("attacks: {\n        bite: {", "attacks: {\n        bodySlam: {")), /name bodySlam of the attack bodySlam/);
 });
 
@@ -2881,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 67, hash: "9463489a5de35bcf" };
+const DATA_FINGERPRINT = { version: 68, hash: "a4955f579c6ffa6a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -4180,12 +4180,12 @@ test("180 each attack has its own list of ignored tags, and a hitbox copies the 
 // ---- The tag "self" (issue 19): step 19a, a list that is missing is refused ----
 test("181 a list of tags that is missing is refused when the definitions load, with a message that names it: the tags of a thing, its bodyIgnores, the ignores of an attack (the bite), of a weapon and of a melee; an empty list is accepted (it is a choice)", () => {
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  bad('      tags: ["enemy", "vermin"], // its faction is "vermin" (the user, 2026-11-13); nothing reads it yet\n', '', /tags of biter/);
+  bad('      tags: ["enemy"], // its own tag; its faction "vermin" (the user, 2026-11-13; nothing reads it yet) comes from its Shell\n', '', /tags of biter/); // the Biter's own tags (vermin is its Shell's since issue 75, parcel 3)
   bad('      bodyIgnores: ["enemy", "object"],\n      name: "Biter",', '      name: "Biter",', /bodyIgnores of biter/);
-  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of biter/);
+  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          // the tags this attack', /ignores of the attack bite of the creature part biter-mouth/);
   bad('        ignores: ["self", "ally"], // the tags its bullets do not hurt', '        // the tags its bullets do not hurt', /ignores of the weapon of the part repeater-arm/);
   bad('        ignores: ["self", "ally"], // the tags its blows do not hurt', '        // the tags its blows do not hurt', /ignores of the melee of the part sword-arm/);
-  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          ignores: "enemy", // the tags this attack', /ignores of the attack bite of biter/);
+  bad('          ignores: ["self", "enemy", "object"], // the tags this attack', '          ignores: "enemy", // the tags this attack', /ignores of the attack bite of the creature part biter-mouth/);
   assert.doesNotThrow(() => loadGame((text) => text.replace('          ignores: ["self", "enemy", "object"], // the tags this attack', '          ignores: [], // the tags this attack')));
 });
 
@@ -4221,7 +4221,7 @@ test("183 the target of an attack is a record { pick, tag } written into the att
     ${ALONE_BITERS}
     const bite = aloneBiters(0).actors[1].attacks.bite.target;
     const avatar = createAvatar(createRun(1, DEFINITIONS.combatBlueprint).blueprint);
-    return { bite, repeater: avatar.attacks["repeater-arm"].target, sword: avatar.attacks["sword-arm"].target, copy: bite !== definitionOf({ type: "biter" }).attacks.bite.target };
+    return { bite, repeater: avatar.attacks["repeater-arm"].target, sword: avatar.attacks["sword-arm"].target, copy: bite !== DEFINITIONS.creatureParts["biter-mouth"].attacks.bite.target }; // the bite is its Mouth's since issue 75, parcel 3
   `);
   const r = plain(result);
   assert.deepStrictEqual(r.bite, { pick: "closest", tag: "ally" });
@@ -4229,9 +4229,9 @@ test("183 the target of an attack is a record { pick, tag } written into the att
   assert.deepStrictEqual(r.sword, { pick: "closest", tag: "enemy" });
   assert.strictEqual(r.copy, true);
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "closest" },', /target of the attack bite of the actor biter/);
-  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "random", tag: "ally" },', /target of the attack bite of the actor biter/);
-  bad('          target: { pick: "closest", tag: "ally" },', '          // no target', /target of the attack bite of the actor biter/);
+  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "closest" },', /target of the attack bite of the creature part biter-mouth/);
+  bad('          target: { pick: "closest", tag: "ally" },', '          target: { pick: "random", tag: "ally" },', /target of the attack bite of the creature part biter-mouth/);
+  bad('          target: { pick: "closest", tag: "ally" },', '          // no target', /target of the attack bite of the creature part biter-mouth/);
 });
 
 test("184 pickTarget picks among the things that carry the tag, whoever asks: from the avatar the closest enemy (a Biter), from a Biter the closest ally (the avatar, never another Biter, however close), nothing for a tag that nobody carries, and the dead are skipped", () => {
@@ -4313,8 +4313,8 @@ test("186 the place of exit is a key of the attack, not a rule about the avatar:
   assert.deepStrictEqual(r.bulletByDefault, { x: 0, y: 0 });
   assert.deepStrictEqual(r.bulletFromFront, { x: 24, y: 0 });
   const bad = (from, to, message) => assert.throws(() => loadGame((text) => { const patched = text.replace(from, to); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  bad('exit: "front",', 'exit: "behind",', /exit of the attack bite of the actor biter/);
-  bad('exit: "front",', '// no exit', /exit of the attack bite of the actor biter/);
+  bad('exit: "front",', 'exit: "behind",', /exit of the attack bite of the creature part biter-mouth/);
+  bad('exit: "front",', '// no exit', /exit of the attack bite of the creature part biter-mouth/);
   bad('        exit: "center", // where its hitbox is born (the user, 2026-11-13, issues 2 and 13): at the center of the avatar\n        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', '        target: { pick: "closest", tag: "enemy" },\n        intervalFrames', /exit of the weapon of the part repeater-arm/);
 });
 
@@ -4668,7 +4668,7 @@ test("206 the keys every attack shares are checked by one function in three of t
   const PART_EXIT = '\n        exit: "center", // where its hitbox is born'; // the newline keeps it from matching inside the bite's line
   const nth = (text, from, n) => { let at = -1; for (let i = 0; i <= n; i++) at = text.indexOf(from, at + 1); assert.notStrictEqual(at, -1, "the patch must apply"); return text.slice(0, at) + text.slice(at).replace(from, "\n        // no exit"); };
   const refused = (patch, message) => assert.throws(() => loadGame((text) => { const patched = patch(text); assert.notStrictEqual(patched, text, "the patch must apply"); return patched; }), message);
-  refused((text) => text.replace(EXIT, "          // no exit"), /exit of the attack bite of the actor biter/);
+  refused((text) => text.replace(EXIT, "          // no exit"), /exit of the attack bite of the creature part biter-mouth/);
   refused((text) => nth(text, PART_EXIT, 0), /exit of the weapon of the part repeater-arm/);
   refused((text) => nth(text, PART_EXIT, 1), /exit of the melee of the part sword-arm/);
   const result = run(`
@@ -4863,7 +4863,7 @@ test("211 the avatar's death by a hitbox stops the world inside stage 5: the ava
 test("212 only a melee attack may use the weight (the user, issue 45): the data as it is loads, with the body slam (0.001 per kg), the bite (0.00336) and the sword (0) written { flat, perWeight }; the sword with a perWeight of 0.001 loads too; the weapon of the repeater-arm with its damage written { flat: 0, perWeight: 0.001 } is refused on load with a message that names the part, and with a perWeight of 0 in the same form it is refused too, but by the old rule that its damage is a plain number above 0", () => {
   const patched = (from, to) => () => loadGame((text) => { const out = text.replace(from, to); assert.notStrictEqual(out, text, "the patch must apply"); return out; });
   assert.doesNotThrow(() => loadGame());
-  const numbers = run(`return { slam: DEFINITIONS.constants.bodySlam.attack.damage.blunt.perWeight, bite: DEFINITIONS.actors.biter.attacks.bite.damage.puncture.perWeight, sword: DEFINITIONS.parts["sword-arm"].melee.damage.slash.perWeight };`);
+  const numbers = run(`return { slam: DEFINITIONS.constants.bodySlam.attack.damage.blunt.perWeight, bite: DEFINITIONS.creatureParts["biter-mouth"].attacks.bite.damage.puncture.perWeight, sword: DEFINITIONS.parts["sword-arm"].melee.damage.slash.perWeight };`);
   assert.deepStrictEqual(plain(numbers), { slam: 0.001, bite: 0.00336, sword: 0 });
   assert.doesNotThrow(patched("damage: { slash: { flat: 30, perWeight: 0 } }", "damage: { slash: { flat: 30, perWeight: 0.001 } }"));
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 0, perWeight: 0.001 } }"), /damage puncture of the projectile of the weapon of the part repeater-arm uses the weight.*only a melee attack may/);
@@ -4973,7 +4973,7 @@ test("218 a hitbox that hits first and did not move in the frame met everything 
 
 test("219 how a hitbox hits is checked on load: without its hits, the bite of the Biter, the weapon of the repeater-arm and the melee of the sword-arm are each refused with a message that names the place, and a hits that is not first or all is refused too", () => {
   const refused = (from, to, message) => assert.throws(() => loadGame((text) => patchOnce(text, from, to)), message);
-  refused('          hits: "all", // how its hitbox hits', "          // how its hitbox hits", /hits of the attack bite of the actor biter must be one of first, all/);
+  refused('          hits: "all", // how its hitbox hits', "          // how its hitbox hits", /hits of the attack bite of the creature part biter-mouth must be one of first, all/);
   refused('        hits: "first", // how its bullets hit', "        // how its bullets hit", /hits of the weapon of the part repeater-arm must be one of first, all/);
   refused('        hits: "all", // how its blow hits', "        // how its blow hits", /hits of the melee of the part sword-arm must be one of first, all/);
   refused('        hits: "first", // how its bullets hit', '        hits: "some", // how its bullets hit', /hits of the weapon of the part repeater-arm must be one of first, all, and it is "some"/);
@@ -5442,7 +5442,7 @@ test("235 the draws of an actor born from a spawn event (issue 60) come from the
     for (let i = 0; i < 20; i++) { byNth.add(key(draw(7, 3, i))); byEvent.add(key(draw(7, i, 2))); }
     const spots = [];
     for (let event = 0; event < 20; event++) for (let nth = 0; nth < 20; nth++) spots.push({ draw: draw(7, event, nth), id: spawnedActorId("biter", event, nth) });
-    return { first, again, differentSeed: key(draw(8, 3, 2)) !== key(first), byNth: byNth.size, byEvent: byEvent.size, spots, size: DEFINITIONS.actors.biter.size, healthRange: DEFINITIONS.actors.biter.healthRange, grid };
+    return { first, again, differentSeed: key(draw(8, 3, 2)) !== key(first), byNth: byNth.size, byEvent: byEvent.size, spots, size: DEFINITIONS.actors.biter.size, healthRange: recipeValue(DEFINITIONS.actors.biter, "healthRange"), grid }; // its Shell's since issue 75, parcel 3
   `));
   assert.deepStrictEqual(result.again, result.first, "the same seed and pair must give the same draws");
   assert.strictEqual(result.differentSeed, true);
@@ -5954,22 +5954,23 @@ test("252 the trace that follows its owner is visual only (issue 72): 900 frames
 
 // ---- Actors may have parts: the shape and the validator (issue 75, parcel 1 of 5) ----
 
-// A patched copy of the data where the Dummy names creature parts: `table` is the text of DEFINITIONS.creatureParts and `list` the
-// text of the Dummy's parts. Both replace the real ones (since parcel 2 the real Dummy has the parts dummy-body and dummy-legs).
-const CREATURE_PARTS_TABLE = /creatureParts: \{\n[\s\S]*?\n  \},\n/;
+// A patched copy of the data where the Dummy names creature parts: `table` is the text of more entries of DEFINITIONS.creatureParts
+// ({ id: part, ... }) and `list` the text of the Dummy's parts. The entries are added before the real ones, which stay (since parcel 3
+// the real Biter names its parts biter-shell, biter-legs and biter-mouth, so they must be there), and the list replaces the Dummy's.
+const CREATURE_PARTS_TABLE = /creatureParts: \{\n/;
 const DUMMY_PARTS = 'parts: ["dummy-body", "dummy-legs"],';
 const withCreatureParts = (table, list) => (text) => text
-  .replace(CREATURE_PARTS_TABLE, "creatureParts: " + table + ",\n")
+  .replace(CREATURE_PARTS_TABLE, "creatureParts: {\n    " + table.trim().slice(1, -1).trim() + ",\n")
   .replace(DUMMY_PARTS, "parts: " + list + ",");
 const VALID_CREATURE_PARTS = '{ body: { name: "Body", specs: { health: { min: 100, max: 100 } }, tags: ["test"] }, '
   + 'legs: { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 100 } }, '
   + 'mouth: { name: "Mouth", attacks: { bite: { damage: { puncture: { flat: 1, perWeight: 0 } }, reach: 8, windupFrames: 15, freezeFrames: 10, hitbox: { radius: 20, frames: 1 }, exit: "front", target: { pick: "closest", tag: "ally" }, ignores: ["self"], hits: "all" } } } }';
 
-test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the Dummy names the creature parts body (health, a tag), legs (speed, acceleration, deceleration, weightPerRadius) and mouth (a bite written like a recipe's), and the data loads; the real data loads too, where (since parcel 2) the table holds the Dummy's two parts and the Dummy is the only actor that names parts", () => {
+test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the Dummy names the creature parts body (health, a tag), legs (speed, acceleration, deceleration, weightPerRadius) and mouth (a bite written like a recipe's), and the data loads; the real data loads too, where (since parcel 3) the table holds the Dummy's two parts and the Biter's three, and the Dummy and the Biter are the actors that name parts", () => {
   assert.doesNotThrow(() => loadGame(withCreatureParts(VALID_CREATURE_PARTS, '["body", "legs", "mouth"]')));
-  // The real data (since parcel 2): the Dummy's two parts, and the Dummy the only actor that names parts.
+  // The real data (since parcel 3): the Dummy's two parts and the Biter's three, and the two actors that name parts.
   const real = plain(run(`return { table: Object.keys(DEFINITIONS.creatureParts), withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
-  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs"], withParts: ["dummy"] });
+  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs", "biter-shell", "biter-legs", "biter-mouth"], withParts: ["dummy", "biter"] });
 });
 
 test("254 an unknown part id in a recipe is refused when the definitions load (issue 75, parcel 1): the Dummy naming the part wings, and the part toString (found only on the prototype of an object), each stop the game with a message that names the actor and the part", () => {
@@ -6046,4 +6047,109 @@ test("258 a Dummy whose Legs are taken away (a patched copy where it has only it
 test("259 a Dummy whose Body is gone is refused when the definitions load (issue 75, parcel 2): the health part is required, so a copy where the Dummy has only its Legs stops the game with a message that names the actor and its parts; and a recipe with parts that also writes one of the fields its parts give (healthRange) is refused too, one source for each value", () => {
   assert.match(loadError(withDummyParts('["dummy-legs"]')) ?? "", /The health of the actor dummy is missing: none of its parts \(dummy-legs\) gives the spec health/);
   assert.match(loadError((text) => text.replace(DUMMY_PARTS, DUMMY_PARTS + " healthRange: { min: 100, max: 100 },")) ?? "", /The actor dummy has parts and also writes healthRange in its recipe/);
+});
+
+// ---- The Biter from parts (issue 75, parcel 3 of 5) ----
+
+// The Biter's parts in the real data, and the recipe it had before parcel 3 (its own fields and its bite, with no parts; vermin among its
+// own tags), for the patched copies.
+const BITER_PARTS = 'parts: ["biter-shell", "biter-legs", "biter-mouth"],';
+const BITER_OWN_TAGS = 'tags: ["enemy"], // its own tag';
+const BITER_OLD_FIELDS = 'weightPerRadius: 100, healthRange: { min: 30, max: 30 }, speed: 2.5, acceleration: 0.125, deceleration: 0.25, '
+  + 'attacks: { bite: { damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }, reach: 8, windupFrames: 15, freezeFrames: 10, hitbox: { radius: 20, frames: 1 }, '
+  + 'exit: "front", target: { pick: "closest", tag: "ally" }, ignores: ["self", "enemy", "object"], hits: "all" } },';
+const withBiterParts = (list) => (text) => text.replace(BITER_PARTS, "parts: " + list + ",");
+// One Biter (biter 0,0) on a ground with no objects, with the parts of `list`.
+const oneBiter = (list) => loadGame((text) => startingBiters(1)(withBiterParts(list)(text.replace("chancePercent: 35", "chancePercent: 0"))));
+
+test("260 the Biter made of its parts Shell, Legs and Mouth has the numbers it had before (issue 75, parcel 3): health range 30 to 30, speed 2.5, acceleration 0.125, deceleration 0.25, weight per radius 100 (the Shell's 60 plus the Legs' 20 plus the Mouth's 20, a guess; only the sum is fixed) and its bite with the same values, in the recipe values and in a Biter that is born; and a copy where the Biter has its old fields and its bite in its recipe and no parts plays 600 frames of Chamber 2 to the same state and journal, bit for bit", () => {
+  const numbers = `
+    const recipe = DEFINITIONS.actors.biter;
+    const s = firstBirths(createChamber2State(1, 1));
+    const b = s.actors[1];
+    return {
+      recipe: { health: recipeValue(recipe, "healthRange"), speed: recipeValue(recipe, "speed"), acceleration: recipeValue(recipe, "acceleration"), deceleration: recipeValue(recipe, "deceleration"), weightPerRadius: recipeValue(recipe, "weightPerRadius"), bite: recipeAttacks(recipe).bite },
+      born: { type: b.type, health: b.health, speed: b.speed, acceleration: b.acceleration, deceleration: b.deceleration, weightPerRadius: b.weight / b.radius, attacks: Object.keys(b.attacks), bite: b.attacks.bite, weight: b.weight },
+    };`;
+  const result = plain(run(numbers));
+  const bite = { damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }, reach: 8, windupFrames: 15, freezeFrames: 10, hitbox: { radius: 20, frames: 1 }, exit: "front", target: { pick: "closest", tag: "ally" }, ignores: ["self", "enemy", "object"], hits: "all" };
+  assert.deepStrictEqual(result.recipe, { health: { min: 30, max: 30 }, speed: 2.5, acceleration: 0.125, deceleration: 0.25, weightPerRadius: 100, bite });
+  const { damage, ...notDamage } = bite;
+  const base = { puncture: 5.04 + 0.00336 * result.born.weight };
+  assert.deepStrictEqual(result.born, { type: "biter", health: { now: 30, max: 30 }, speed: 2.5, acceleration: 0.125, deceleration: 0.25, weightPerRadius: 100, attacks: ["bodySlam", "bite"], bite: { base, now: base, ...notDamage }, weight: result.born.weight });
+
+  // The Biter as it was written before parcel 3 (its own fields, its bite and vermin in its recipe), in a patched copy: the same 600 frames
+  // of the real Chamber 2 (its three waves) give the same state and journal.
+  const old = loadGame((text) => withBiterParts("[]")(text).replace("parts: [],", BITER_OLD_FIELDS).replace(BITER_OWN_TAGS, 'tags: ["enemy", "vermin"], // its own tags'));
+  const play = `
+    const run = createRun(1);
+    const s = createChamber2State(1, 1, run.blueprint);
+    const journal = [];
+    for (let frame = 0; frame < 600; frame++) step(s, { move: { x: frame % 200 < 100 ? 1 : -1, y: frame % 300 < 150 ? 0.5 : -0.5 } }, run.blueprint, null, journal);
+    return { parts: DEFINITIONS.actors.biter.parts ?? null, json: JSON.stringify(s) + JSON.stringify(journal), biters: s.actors.length - 1, bites: journal.filter((line) => JSON.parse(line).attack === "bite").length };`;
+  const before = run(play, old);
+  const now = run(play, loadGame(null));
+  assert.strictEqual(before.parts, null, "the copy should have the Biter with no parts");
+  assert.deepStrictEqual(plain(now.parts), ["biter-shell", "biter-legs", "biter-mouth"]);
+  assert.ok(now.biters > 0 && now.bites > 0, "the run should have its Biters and their bites in the journal: " + now.biters + " Biters, " + now.bites + " bites");
+  assert.strictEqual(now.json, before.json, "the Biter made of parts plays differently from the Biter of its old fields");
+});
+
+test("261 a Biter whose Mouth is taken away (a patched copy where it has only its Shell and Legs) does not bite (issue 75, parcel 3): it has no attack but its body slam, and in 200 frames next to the avatar no hitbox is ever born, no bite is in the journal and it never strikes; with nothing to aim at it stands still; the same Biter with its Mouth bites the avatar", () => {
+  const play = `
+    const s = firstBirths(createChamber2State(1, 1));
+    const [avatar, b] = s.actors;
+    b.position.x = avatar.position.x + avatar.radius + b.radius + 4; b.position.y = avatar.position.y; // 4 px of space: within the reach of a bite (8)
+    const start = { x: b.position.x, y: b.position.y };
+    const journal = [];
+    let hitboxes = 0, strikes = 0;
+    for (let frame = 0; frame < 200; frame++) {
+      step(s, { move: { x: 0, y: 0 } }, undefined, null, journal);
+      hitboxes += s.hitboxes.length;
+      if (b.ai.strike) strikes += 1;
+    }
+    return { id: b.id, attacks: Object.keys(b.attacks), hitboxes, strikes, bites: journal.filter((line) => JSON.parse(line).attack === "bite").length, moved: Math.hypot(b.position.x - start.x, b.position.y - start.y), avatar: avatar.health.now };`;
+  const mouthless = plain(run(play, oneBiter('["biter-shell", "biter-legs"]')));
+  assert.strictEqual(mouthless.id, "biter 0,0");
+  assert.deepStrictEqual(mouthless.attacks, ["bodySlam"]);
+  assert.strictEqual(mouthless.bites, 0, "the Biter without its Mouth bit " + mouthless.bites + " times");
+  assert.strictEqual(mouthless.hitboxes, 0);
+  assert.strictEqual(mouthless.strikes, 0);
+  assert.strictEqual(mouthless.moved, 0, "the Biter without its Mouth moved " + mouthless.moved + " px");
+  assert.strictEqual(mouthless.avatar, 100);
+  const biting = plain(run(play, oneBiter(BITER_PARTS.slice("parts: ".length, -1))));
+  assert.deepStrictEqual(biting.attacks, ["bodySlam", "bite"]);
+  assert.ok(biting.bites > 0 && biting.avatar < 100, "the same Biter with its Mouth should bite the avatar: " + biting.bites + " bites, health " + biting.avatar);
+});
+
+test("262 a Biter whose Legs are taken away (a patched copy where it has only its Shell and Mouth) stands still (issue 75, parcel 3): speed, acceleration and deceleration 0, and in 200 frames alone with the avatar far away its place and its velocity never change, while it keeps its health of 30, its bite, and weighs its Shell and Mouth only (80 per radius); the same Biter with its Legs walks toward the avatar", () => {
+  const play = `
+    const s = firstBirths(createChamber2State(1, 1));
+    const [avatar, b] = s.actors;
+    b.position.x = avatar.position.x + 300; b.position.y = avatar.position.y; // far from the avatar: out of the reach of its bite
+    const start = { x: b.position.x, y: b.position.y };
+    for (let frame = 0; frame < 200; frame++) step(s, { move: { x: 0, y: 0 } });
+    return { alive: s.actors.includes(b), moved: Math.hypot(b.position.x - start.x, b.position.y - start.y), velocity: b.move.velocity, speed: b.speed, acceleration: b.acceleration, deceleration: b.deceleration, health: b.health, weightPerRadius: b.weight / b.radius, attacks: Object.keys(b.attacks) };`;
+  const legless = plain(run(play, oneBiter('["biter-shell", "biter-mouth"]')));
+  assert.strictEqual(legless.alive, true);
+  assert.deepStrictEqual([legless.speed, legless.acceleration, legless.deceleration], [0, 0, 0]);
+  assert.strictEqual(legless.moved, 0, "the Biter without Legs moved " + legless.moved + " px");
+  assert.deepStrictEqual(legless.velocity, { x: 0, y: 0 });
+  assert.deepStrictEqual(legless.health, { now: 30, max: 30 });
+  assert.strictEqual(legless.weightPerRadius, 80);
+  assert.deepStrictEqual(legless.attacks, ["bodySlam", "bite"]);
+  const walking = plain(run(play, oneBiter(BITER_PARTS.slice("parts: ".length, -1))));
+  assert.ok(walking.moved > 100, "the same Biter with its Legs should walk toward the avatar, and it moved " + walking.moved + " px");
+});
+
+test("263 the tag vermin of the Biter comes from its Shell and enemy stays its own (issue 75, parcel 3): the recipe's own tags are enemy, the Shell brings vermin, the Legs and the Mouth bring none, and a Biter that is born is enemy and vermin in that order; in a copy where the Shell brings no tag the Biter is only enemy, and where the Shell brings enemy and vermin the same tag counts once", () => {
+  const tags = `
+    const s = firstBirths(createChamber2State(1, 1));
+    const parts = DEFINITIONS.creatureParts;
+    return { own: DEFINITIONS.actors.biter.tags, shell: parts["biter-shell"].tags ?? null, legs: parts["biter-legs"].tags ?? null, mouth: parts["biter-mouth"].tags ?? null, born: s.actors[1].tags };`;
+  const real = plain(run(tags));
+  assert.deepStrictEqual(real, { own: ["enemy"], shell: ["vermin"], legs: null, mouth: null, born: ["enemy", "vermin"] });
+  const shellTags = (list) => loadGame((text) => text.replace('weightPerRadius: 60 }, tags: ["vermin"] },', "weightPerRadius: 60 }, tags: " + list + " },"));
+  assert.deepStrictEqual(plain(run(tags, shellTags("[]"))).born, ["enemy"]);
+  assert.deepStrictEqual(plain(run(tags, shellTags('["enemy", "vermin"]'))).born, ["enemy", "vermin"]);
 });

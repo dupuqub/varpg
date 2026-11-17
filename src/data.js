@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 67;
+const DEFINITIONS_VERSION = 68;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -95,53 +95,14 @@ const DEFINITIONS = {
     // chases the avatar and, when close enough, strikes with a hitbox and stays still for a moment (see think in src/sim.js).
     // Like the Dummy it is only ranges and a recipe: the seed rolls its radius and health, and it is born like any actor.
     // size: guess, 12 to 20, a little smaller than the avatar (16) on average, so a crowd of them is a swarm and not a wall.
-    // weightPerRadius: guess, the same number as the objects' and the Dummy's, written here on its own: 1200 to 2000 kg.
-    //   The weight is its body slam (blunt, see constants.bodySlam) and part of its bite (see attacks below).
-    // healthRange: guess, 30: the avatar's body slam at a walk (impact 3) hurts for 2.5 and a dash (impact 12) for 10, so a
-    //   Biter takes about 3 dashes or a dozen bumps. To be tuned by playing.
-    // speed: guess, 2.5 px/frame (150 px per second): below the avatar's 3, so the avatar can outrun it, above the Dummy's 2.
-    // acceleration, deceleration: guess, written here on their own. 0.125: the top speed in 2.5 / 0.125 = 20 frames.
-    //   0.25: a stop in 2.5 / 0.25 = 10 frames, the length of the freeze after a bite (target), so it is still when it ends.
-    //   Powers of two, so the sums are exact.
-    // attacks.bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames; later also a pause before):
-    //   damage: puncture = flat + perWeight x weight (the user's idea: bigger Biters bite harder, and the weight counts for
-    //     this attack, not for every attack). guess: flat 5.04, perWeight 0.00336, so 5.04 + 0.00336 x 1200 = 9.072 for the smallest
-    //     and 5.04 + 0.00336 x 2000 = 11.76 for the largest. The avatar has 100 health, so about 9 bites.
-    //     Both terms times 1.4 again (the user, 2026-11-16, issue 73: he could not die yet in play), after times 1.2 (issue 63 and issue 68: "dá 20% a mais de dano pra eles", tuning so the avatar can
-    //     die; they were flat 3 and perWeight 0.002; to be tuned again by playing). The body slam of the Biter is NOT changed: its numbers are the
-    //     shared constants of every body (constants.bodySlam), not the Biter's; a stronger slam for the Biter would be another question.
-    //   reach: guess, 8 px of space between the two bodies, about a quarter of the avatar's width, "close enough to bite".
-    //   windupFrames: the user's idea (2026-11-11): a short pause before the bite and one after it, to prove that both can
-    //     exist (the style is crowds, so seeing the attack is not a priority). guess 15 (a quarter of a second): enough to
-    //     see it and to dash out, short enough for a crowd to stay a threat. 0 would bite at once.
-    //   freezeFrames: the user's number, "about 10 frames", now the pause after the bite.
-    //   hitbox: radius guess 20 (a little more than the avatar's radius, so a bite at the reach always lands: the hitbox is
-    //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames 1 (the user, 2026-11-13: the bite hurts in the
-    //     frame it is born and is gone; who is not there then is not hit; what the eye sees afterwards is a trace in the visual
-    //     state, see constants.visual). A hitbox hurts once.
+    // parts (issue 75, parcel 3): its health, speed, acceleration, deceleration, weight, its bite and its tag vermin come from its
+    //   parts, Shell, Legs and Mouth (DEFINITIONS.creatureParts, where the numbers and their reasons are). Its own tag is enemy.
     biter: {
-      tags: ["enemy", "vermin"], // its faction is "vermin" (the user, 2026-11-13); nothing reads it yet
+      tags: ["enemy"], // its own tag; its faction "vermin" (the user, 2026-11-13; nothing reads it yet) comes from its Shell
       bodyIgnores: ["enemy", "object"],
       name: "Biter",
       size: { min: 12, max: 20 },
-      weightPerRadius: 100,
-      healthRange: { min: 30, max: 30 },
-      speed: 2.5,
-      acceleration: 0.125,
-      deceleration: 0.25,
-      attacks: {
-        bite: {
-          damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }, // 3.6 and 0.0024 times 1.4 (the user, 2026-11-16, issue 73: 40% more damage, he could not die yet in play; before it 3 and 0.002 times 1.2, issue 68; to tune by playing); the slam is constants.bodySlam, shared, unchanged
-          reach: 8,
-          windupFrames: 15,
-          freezeFrames: 10,
-          hitbox: { radius: 20, frames: 1 },
-          exit: "front", // where its hitbox is born (the user, 2026-11-13, issues 3 and 13: "the attack comes out of the front"): one body ahead of it, toward the target
-          target: { pick: "closest", tag: "ally" }, // what the bite aims at: the closest thing that is "ally" (the avatar is the only one today)
-          ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
-          hits: "all", // how its hitbox hits (the user, 2026-11-14, issues 43 and 44): "all", everything it touches is hit, each once; it keeps what the bite did before the rule (its list leaves only the avatar to hit)
-        },
-      },
+      parts: ["biter-shell", "biter-legs", "biter-mouth"],
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
@@ -410,7 +371,8 @@ const DEFINITIONS = {
   //   tags    words added to the actor's own tags
   // src/sim.js checks them when it loads, like the parts of the avatar (CREATURE_PART_SPECS). Empty for now: no actor uses it yet
   // (issue 75, parcel 1 of 5). A number of a part that is a guess (the split of weightPerRadius among the parts) is marked "guess".
-  // The Dummy's numbers came here from its recipe unchanged (issue 75, parcel 2), so the Dummy is the same, bit for bit.
+  // The Dummy's numbers came here from its recipe unchanged (issue 75, parcel 2), so the Dummy is the same, bit for bit; the Biter's
+  // numbers, its bite (with its comments) and its tag vermin too (issue 75, parcel 3), so the Biter is the same, bit for bit.
   creatureParts: {
     // The Dummy's Body (the user's split, issue 75: "Dummy | Body | health").
     // health: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
@@ -427,6 +389,57 @@ const DEFINITIONS = {
     //   deceleration waits for the day one stops. A Dummy without Legs has none of the three and stands still.
     // weightPerRadius: guess, the other 30 of the 100 (see the Body).
     "dummy-legs": { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 30 } },
+    // The Biter's Shell (the user's split, issue 75: "Biter | Shell | health; the tag vermin").
+    // health: guess, 30: the avatar's body slam at a walk (impact 3) hurts for 2.5 and a dash (impact 12) for 10, so a
+    //   Biter takes about 3 dashes or a dozen bumps. To be tuned by playing.
+    // tags: vermin, its faction (the user, 2026-11-13); nothing reads it yet. Its own tag, enemy, stays in its recipe.
+    // weightPerRadius: guess, 60 of the Biter's 100 kg per pixel of radius; the split among Shell, Legs and Mouth is a guess, only the
+    //   sum (100) is fixed. The 100: the same number as the objects' and the Dummy's, written here on its own: 1200 to 2000 kg.
+    //   The weight is its body slam (blunt, see constants.bodySlam) and part of its bite (see the Mouth below).
+    "biter-shell": { name: "Shell", specs: { health: { min: 30, max: 30 }, weightPerRadius: 60 }, tags: ["vermin"] },
+    // The Biter's Legs (the user's split, issue 75: "Biter | Legs | speed, acceleration, deceleration").
+    // speed: guess, 2.5 px/frame (150 px per second): below the avatar's 3, so the avatar can outrun it, above the Dummy's 2.
+    // acceleration, deceleration: guess, written here on their own. 0.125: the top speed in 2.5 / 0.125 = 20 frames.
+    //   0.25: a stop in 2.5 / 0.25 = 10 frames, the length of the freeze after a bite (target), so it is still when it ends.
+    //   Powers of two, so the sums are exact. A Biter without Legs has none of the three and stands still.
+    // weightPerRadius: guess, 20 of the 100 (see the Shell).
+    "biter-legs": { name: "Legs", specs: { speed: 2.5, acceleration: 0.125, deceleration: 0.25, weightPerRadius: 20 } },
+    // The Biter's Mouth (the user's split, issue 75: "Biter | Mouth | the bite, whole"). Its bite came here from the recipe as it was.
+    // A Biter without its Mouth has no bite: it does not bite, and with nothing to aim at it stands still (think in src/sim.js).
+    // weightPerRadius: guess, 20 of the 100 (see the Shell).
+    // bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames; later also a pause before):
+    //   damage: puncture = flat + perWeight x weight (the user's idea: bigger Biters bite harder, and the weight counts for
+    //     this attack, not for every attack). guess: flat 5.04, perWeight 0.00336, so 5.04 + 0.00336 x 1200 = 9.072 for the smallest
+    //     and 5.04 + 0.00336 x 2000 = 11.76 for the largest. The avatar has 100 health, so about 9 bites.
+    //     Both terms times 1.4 again (the user, 2026-11-16, issue 73: he could not die yet in play), after times 1.2 (issue 63 and issue 68: "dá 20% a mais de dano pra eles", tuning so the avatar can
+    //     die; they were flat 3 and perWeight 0.002; to be tuned again by playing). The body slam of the Biter is NOT changed: its numbers are the
+    //     shared constants of every body (constants.bodySlam), not the Biter's; a stronger slam for the Biter would be another question.
+    //   reach: guess, 8 px of space between the two bodies, about a quarter of the avatar's width, "close enough to bite".
+    //   windupFrames: the user's idea (2026-11-11): a short pause before the bite and one after it, to prove that both can
+    //     exist (the style is crowds, so seeing the attack is not a priority). guess 15 (a quarter of a second): enough to
+    //     see it and to dash out, short enough for a crowd to stay a threat. 0 would bite at once.
+    //   freezeFrames: the user's number, "about 10 frames", now the pause after the bite.
+    //   hitbox: radius guess 20 (a little more than the avatar's radius, so a bite at the reach always lands: the hitbox is
+    //     born one body ahead of the Biter, and with the reach above it covers the avatar); frames 1 (the user, 2026-11-13: the bite hurts in the
+    //     frame it is born and is gone; who is not there then is not hit; what the eye sees afterwards is a trace in the visual
+    //     state, see constants.visual). A hitbox hurts once.
+    "biter-mouth": {
+      name: "Mouth",
+      specs: { weightPerRadius: 20 },
+      attacks: {
+        bite: {
+          damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }, // 3.6 and 0.0024 times 1.4 (the user, 2026-11-16, issue 73: 40% more damage, he could not die yet in play; before it 3 and 0.002 times 1.2, issue 68; to tune by playing); the slam is constants.bodySlam, shared, unchanged
+          reach: 8,
+          windupFrames: 15,
+          freezeFrames: 10,
+          hitbox: { radius: 20, frames: 1 },
+          exit: "front", // where its hitbox is born (the user, 2026-11-13, issues 3 and 13: "the attack comes out of the front"): one body ahead of it, toward the target
+          target: { pick: "closest", tag: "ally" }, // what the bite aims at: the closest thing that is "ally" (the avatar is the only one today)
+          ignores: ["self", "enemy", "object"], // the tags this attack does not hurt (the user, 2026-11-13, issues 19 and 20): each attack has its own list; a hitbox copies it at its birth. "self" is the one word that is no tag: the actor that made the hitbox (a bite is born one body ahead and always overlaps its maker)
+          hits: "all", // how its hitbox hits (the user, 2026-11-14, issues 43 and 44): "all", everything it touches is hit, each once; it keeps what the bite did before the rule (its list leaves only the avatar to hit)
+        },
+      },
+    },
   },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).

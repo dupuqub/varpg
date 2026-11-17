@@ -36,7 +36,7 @@ function finalizeObject(type, rolls, blueprint, id) {
   object.bounce = finalBounce(object, blueprint);
   if (object.resistance) writeResistance(object, blueprint); // only a thing whose recipe starts with a resistance has one (the avatar)
   object.attacks = finalAttacks(object);
-  object.tags = [...(recipe.tags ?? [])]; // what it is, written into the thing like every other value (the user, 2026-11-13, issue 20): a summoned Biter can be "ally"
+  object.tags = recipeTags(recipe); // what it is, written into the thing like every other value (the user, 2026-11-13, issue 20): a summoned Biter can be "ally"
   return object;
 }
 
@@ -217,10 +217,10 @@ function fromParts(actor, blueprint, name) {
 // The fields of a creature recipe that its parts give (issue 75), each with the spec of a creature part that gives it.
 const RECIPE_FIELDS_FROM_PARTS = { healthRange: "health", speed: "speed", acceleration: "acceleration", deceleration: "deceleration", weightPerRadius: "weightPerRadius" };
 
-// A value of a recipe that is not the avatar's: its own field, or, for a recipe that names parts (issue 75, parcel 2: the Dummy),
+// A value of a recipe that is not the avatar's: its own field, or, for a recipe that names parts (issue 75, parcels 2 and 3: the Dummy, the Biter),
 // the sum of what its parts give, the way the avatar's values are the sums of the parts of its blueprint (sumSpec); the list of
 // parts plays for it the role of the blueprint. health is a range: the mins add up, and the maxes. undefined when no part gives it
-// (a Dummy without Legs has no speed; the final functions read that as 0). The first value found is kept as it is (never 0 + it),
+// (a Dummy or a Biter without Legs has no speed; the final functions read that as 0). The first value found is kept as it is (never 0 + it),
 // and the sum is redone at each call from the frozen data, so nothing new goes in the state.
 function recipeValue(definition, field) {
   if (definition.parts === undefined) return definition[field];
@@ -233,6 +233,27 @@ function recipeValue(definition, field) {
     else sum = spec === "health" ? { min: sum.min + value.min, max: sum.max + value.max } : sum + value;
   }
   return sum;
+}
+
+// The attacks of a recipe that is not the avatar's (issue 75, parcel 3: the Biter's bite is its Mouth's): its own, or, for a recipe that
+// names parts, the attacks of its parts in the order of the list (the same name in two parts is refused when the definitions load).
+// Read from the frozen data when an actor is made (finalAttacks), so nothing new goes in the state.
+function recipeAttacks(definition) {
+  if (definition.parts === undefined) return definition.attacks;
+  const attacks = {};
+  for (const id of definition.parts) Object.assign(attacks, DEFINITIONS.creatureParts[id].attacks);
+  return attacks;
+}
+
+// The tags of a recipe, written into the thing when it is made (finalizeObject): its own, then the tags of each of its parts in the order
+// of the list (issue 75, the user: "as tags devem vir das peças também... mas não somente"); a part may bring none, and the same tag twice
+// counts once. The Biter: its own enemy, and vermin from its Shell, in that order, as its recipe wrote them before parts.
+function recipeTags(definition) {
+  const tags = [...(definition.tags ?? [])];
+  for (const id of definition.parts ?? []) {
+    for (const tag of DEFINITIONS.creatureParts[id].tags ?? []) if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
 }
 
 // Fails loudly if the blueprint is not allowed: an unknown part, or more weight than the
@@ -398,12 +419,20 @@ function assertValidDefinitions() {
     for (const field of Object.keys(RECIPE_FIELDS_FROM_PARTS)) object[field] = recipeValue(recipe, field);
     if (recipe.parts !== undefined) {
       // One source for each value (issue 75: the old fields leave the recipe when a part gives them): a recipe with parts writes none of them.
-      const own = Object.keys(RECIPE_FIELDS_FROM_PARTS).filter((field) => recipe[field] !== undefined);
+      const own = [...Object.keys(RECIPE_FIELDS_FROM_PARTS), "attacks"].filter((field) => recipe[field] !== undefined); // the attacks too (parcel 3)
       if (own.length > 0) throw new Error("The actor " + id + " has parts and also writes " + own.join(", ") + " in its recipe: with parts, these come from its parts");
       // The health part is required (issue 75, parcel 2): an actor is born with a health rolled from its range, so a recipe whose
       // parts give no health (a Dummy without its Body) cannot be made.
       if (object.healthRange === undefined) throw new Error("The health of " + where + " is missing: none of its parts (" + recipe.parts.join(", ") + ") gives the spec health");
       if (object.weightPerRadius === undefined) object.weightPerRadius = 0; // no part gives weight: it weighs 0 (finalWeight)
+      // One attack for each name (issue 75, parcel 3): two of its parts giving an attack of the same name would hide one of them.
+      const named = {};
+      for (const partId of recipe.parts) {
+        for (const name of Object.keys(DEFINITIONS.creatureParts[partId].attacks ?? {})) {
+          if (named[name] !== undefined) throw new Error("The actor " + id + " has two parts with the attack " + name + ": " + named[name] + " and " + partId);
+          named[name] = partId;
+        }
+      }
     }
     if (!object.size) throw new Error("The size of " + where + " is missing: { min, max }, the range of its radius");
     const { min, max } = object.size;
@@ -684,10 +713,10 @@ function packetOf(parts, weight) {
 // made (the user's rule: static values at the start); NOW is the base plus whatever other things add, calculated again
 // every frame (finalAttackNow); a hit takes the NOW of the moment. Every thing has the body slam, whose base is the
 // weight times bodySlam.attack.damage (the hit itself scales it by the impact, see finalAttack); a recipe can have more
-// (DEFINITIONS.actors.biter.attacks), and what is not about damage (reach, windupFrames, freezeFrames, the hitbox) is copied as it is.
+// (the bite of the Biter, from its part biter-mouth; recipeAttacks), and what is not about damage (reach, windupFrames, freezeFrames, the hitbox) is copied as it is.
 function attackRecipes(thing) {
   const recipe = definitionOf(thing);
-  return { bodySlam: { ...DEFINITIONS.constants.bodySlam.attack, ignores: recipe.bodyIgnores ?? [] }, ...recipe.attacks }; // the body's list is the list of its bodySlam attack
+  return { bodySlam: { ...DEFINITIONS.constants.bodySlam.attack, ignores: recipe.bodyIgnores ?? [] }, ...recipeAttacks(recipe) }; // the body's list is the list of its bodySlam attack; the others are its recipe's or its parts' (the Biter's Mouth)
 }
 
 function finalAttacks(thing) {
@@ -1572,6 +1601,14 @@ function think(state, actor, byTag) {
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
 
+  // No attack of that name (issue 75, parcel 3: a Biter whose Mouth was taken away has no bite): nothing to aim at and nothing to strike
+  // with, so it stands still, like an actor whose attack finds no target (below), and it never bites.
+  if (attack === undefined) {
+    direction.x = 0;
+    direction.y = 0;
+    return;
+  }
+
   // The target of its attack, whoever it is (the closest thing with the tag of attack.target, at any distance: a non-avatar actor sees with
   // no limit, Infinity, the user's answer on issue 13). Whoever has no health is not a target. With none it stands still.
   const target = pickTarget(state, actor, attack.target, Infinity, byTag);
@@ -1949,7 +1986,7 @@ function emitStrikes(state, visual, byTag) {
     if (!actor.ai || !actor.ai.strike) continue;
     actor.ai.strike = false;
     if (actor.health.now <= 0) continue; // the user, 2026-11-13: whoever died in this step does not strike (the flag triggers nothing)
-    const attack = actor.attacks[actor.ai.attack];
+    const attack = actor.attacks[actor.ai.attack]; // always there: think sets strike only with an attack
     const target = pickTarget(state, actor, attack.target, Infinity, byTag); // toward where its target is now, after everyone moved
     if (target === null) continue;
     const dx = target.position.x - actor.position.x;
