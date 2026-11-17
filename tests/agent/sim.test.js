@@ -6236,3 +6236,83 @@ test("267 the tags of an actor are not computed again each frame (issue 75, parc
   for (const id of before) assert.deepStrictEqual(r.now[id], ["enemy", "vermin"], "the tags of " + id + ", born with the real data");
   for (const id of after) assert.deepStrictEqual(r.now[id], ["enemy", "vermin", "patched"], "the tags of " + id + ", born in the copy");
 });
+
+// ---- The dash of any actor (issue 76, parcel 1 of 4) ----
+
+// The Biter's Legs as the data writes them, and a patched copy where they also give the three dash specs (the Booster's strength, and the
+// Review desk's guesses for the Jumper's charges and recharge: only numbers for the test, no actor of the real data has a dash yet).
+const BITER_LEGS_PART = '"biter-legs": { name: "Legs", specs: { speed: 2.5, acceleration: 0.125, deceleration: 0.25, weightPerRadius: 20 } },';
+const withDashLegs = (dashSpecs) => (text) => text.replace(BITER_LEGS_PART, BITER_LEGS_PART.replace("weightPerRadius: 20 }", "weightPerRadius: 20, " + dashSpecs + " }"));
+// One Biter (biter 0,0) on a ground with no objects, with the parts of `list`, and Legs that give a dash.
+const oneDashingBiter = (list) => loadGame((text) => withDashLegs("dashSpeed: 12, dashCharges: 1, rechargeFrames: 90")(startingBiters(1)(withBiterParts(list)(text.replace("chancePercent: 35", "chancePercent: 0")))));
+
+test("268 a creature with a dash part dashes like the avatar (issue 76, parcel 1): in a patched copy where the Biter's Legs give dashSpeed 12, dashCharges 1 and rechargeFrames 90 (and it has no Mouth, so it stands still), a born Biter has the dash { recharge 0, charges 1 of 1, rechargeFrames 90, speed 12 }; asked to dash with a half-tilted direction to the left it dashes at the full strength, velocity (-12, 0), and spends its charge; asked again at once it does not dash and the velocity stays; its charge is still spent 89 frames after the dash (the try counts as one) and back at the 90th", () => {
+  const r = plain(run(`
+    const s = firstBirths(createChamber2State(1, 1));
+    const b = s.actors[1];
+    const born = JSON.parse(JSON.stringify(b.dash));
+    b.move.direction.x = -0.5; b.move.direction.y = 0;
+    const first = updateDash(b, true);
+    const afterFirst = { velocity: { ...b.move.velocity }, now: b.dash.charges.now };
+    const second = updateDash(b, true);
+    const afterSecond = { velocity: { ...b.move.velocity }, now: b.dash.charges.now };
+    for (let frame = 0; frame < 88; frame++) updateDash(b, false); // with the try above, 89 frames since the dash
+    const before90 = b.dash.charges.now;
+    updateDash(b, false);
+    return { id: b.id, born, first, afterFirst, second, afterSecond, before90, after90: b.dash.charges.now };`, oneDashingBiter('["biter-shell", "biter-legs"]')));
+  assert.strictEqual(r.id, "biter 0,0");
+  assert.deepStrictEqual(r.born, { recharge: 0, charges: { now: 1, max: 1 }, rechargeFrames: 90, speed: 12 });
+  assert.strictEqual(r.first, true, "the Biter with a dash part should dash");
+  assert.deepStrictEqual(r.afterFirst, { velocity: { x: -12, y: 0 }, now: 0 });
+  assert.strictEqual(r.second, false, "with no charge left it should not dash");
+  assert.deepStrictEqual(r.afterSecond, r.afterFirst);
+  assert.strictEqual(r.before90, 0);
+  assert.strictEqual(r.after90, 1, "the charge should be back after rechargeFrames (90)");
+});
+
+test("269 a creature with no dash part has no dash (issue 76, parcel 1): the real Biter and the real Dummy are born with no dash in their state and their dash numbers (finalDashSpeed, finalDashMaxCharges, finalDashRechargeFrames) are 0; in the patched copy where only the Legs give a dash, a Biter without its Legs has no dash either", () => {
+  const look = `
+    const b = firstBirths(createChamber2State(1, 1)).actors[1];
+    const d = finalizeObject("dummy", { radius: 10, health: { now: 1, max: 1 } }, undefined, "x");
+    const numbers = (a) => [finalDashSpeed(a), finalDashMaxCharges(a), finalDashRechargeFrames(a)];
+    return { biter: { id: b.id, hasDash: "dash" in b, numbers: numbers(b) }, dummy: { hasDash: "dash" in d, numbers: numbers(d) } };`;
+  const real = plain(run(look));
+  assert.deepStrictEqual(real.biter, { id: "biter 0,0", hasDash: false, numbers: [0, 0, 0] });
+  assert.deepStrictEqual(real.dummy, { hasDash: false, numbers: [0, 0, 0] });
+  const legless = plain(run(look, oneDashingBiter('["biter-shell", "biter-mouth"]')));
+  assert.deepStrictEqual(legless.biter, { id: "biter 0,0", hasDash: false, numbers: [0, 0, 0] });
+});
+
+// A Chamber 1 run of the avatar with dashes pressed, with the journal; the state and the journal as JSON.
+const AVATAR_DASH_RUN = (frames) => `
+  const run = createRun(1);
+  const s = createChamber1State(run.id, 1, run.blueprint);
+  const journal = createJournal();
+  const directions = [{ x: 1, y: 0 }, { x: Math.SQRT1_2, y: Math.SQRT1_2 }, { x: 0, y: 1 }, { x: -Math.SQRT1_2, y: Math.SQRT1_2 }, { x: -1, y: 0 }, { x: 0, y: -1 }];
+  for (let i = 0; i < ${frames}; i++) step(s, { move: directions[Math.floor(i / 37) % 6], dash: i % 23 === 0 || i % 61 === 5 }, run.blueprint, null, journal);
+  const avatar = s.actors[0];
+  return { dash: avatar.dash, sums: [sumSpec(run.blueprint, "dashSpeed"), sumSpec(run.blueprint, "dashCharges"), sumSpec(run.blueprint, "rechargeFrames")], state: JSON.stringify(s), journal: JSON.stringify(journal) };`;
+
+test("270 the avatar's dash numbers are the same as before (issue 76, parcel 1): read through the dash of any actor, the avatar's dash speed, maximum of charges and recharge frames are the sums of its blueprint's parts (the Booster: 12, 1, 240); and 900 frames of Chamber 1 with 100 Dummies and dashes pressed end in the same state and journal, bit for bit, as in a copy of src/sim.js where the dash numbers are read by fromParts, as before issue 76", () => {
+  const now = plain(run(AVATAR_DASH_RUN(900), WITH_DUMMIES));
+  assert.deepStrictEqual(now.sums, [12, 1, 240]);
+  assert.deepStrictEqual([now.dash.speed, now.dash.charges.max, now.dash.rechargeFrames], now.sums);
+  const old = plain(run(AVATAR_DASH_RUN(900), loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(100)), { patchSim: (text) => text.replaceAll("return dashFromParts(actor, blueprint, ", "return fromParts(actor, blueprint, ") })));
+  assert.deepStrictEqual(old.sums, now.sums);
+  assert.strictEqual(now.state, old.state, "the state of the avatar's dash run differs from the one read as before issue 76");
+  assert.strictEqual(now.journal, old.journal, "the journal of the avatar's dash run differs from the one read as before issue 76");
+});
+
+test("271 a dash spec of a creature part that is not finite, or a count that is not whole, is refused when the definitions load (issue 76, parcel 1): dashSpeed Infinity or NaN, dashCharges 1.5 or -1, rechargeFrames Infinity or 2.5; the same Legs with dashSpeed 12, dashCharges 1 and rechargeFrames 90 load", () => {
+  for (const [specs, refused] of [
+    ["dashSpeed: Infinity", /dashSpeed of the creature part biter-legs/],
+    ["dashSpeed: NaN", /dashSpeed of the creature part biter-legs/],
+    ["dashCharges: 1.5", /dashCharges of the creature part biter-legs.*whole/],
+    ["dashCharges: -1", /dashCharges of the creature part biter-legs.*whole/],
+    ["rechargeFrames: Infinity", /rechargeFrames of the creature part biter-legs.*whole/],
+    ["rechargeFrames: 2.5", /rechargeFrames of the creature part biter-legs.*whole/],
+  ]) {
+    assert.throws(() => loadGame(withDashLegs(specs)), refused, specs + " should be refused");
+  }
+  loadGame(withDashLegs("dashSpeed: 12, dashCharges: 1, rechargeFrames: 90"));
+});

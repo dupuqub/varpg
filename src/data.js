@@ -367,6 +367,8 @@ const DEFINITIONS = {
   // with no slots and no limit. A part may give:
   //   specs   creature specs, each optional: health ({ min, max }, the shape of a recipe's healthRange), speed, acceleration,
   //           deceleration and weightPerRadius (whole kg per pixel of radius, like a recipe's)
+  //           and the dash (issue 76): dashSpeed, dashCharges and rechargeFrames, the Booster's specs for the avatar, read the
+  //           same way (a creature whose parts give none of them has no dash; the counts are whole)
   //   attacks attacks written like the attacks of an actor recipe ({ bite: { damage, reach, ... } }), checked by the same rule
   //   tags    words added to the actor's own tags
   // src/sim.js checks them when it loads, like the parts of the avatar (CREATURE_PART_SPECS). Empty for now: no actor uses it yet

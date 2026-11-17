@@ -37,6 +37,9 @@ function finalizeObject(type, rolls, blueprint, id) {
   if (object.resistance) writeResistance(object, blueprint); // only a thing whose recipe starts with a resistance has one (the avatar)
   object.attacks = finalAttacks(object);
   object.tags = recipeTags(recipe); // what it is, written into the thing like every other value (the user, 2026-11-13, issue 20): a summoned Biter can be "ally"
+  // A creature whose parts give a dash (issue 76) carries the dash state of the avatar (its initial dash plus the charges createAvatar
+  // writes); the charges are filled when it is born (spawnActor). No actor of the data has one yet, so no state changes today.
+  if (createsDash(recipe)) object.dash = { recharge: 0, charges: { now: 0, max: 0 } };
   return object;
 }
 
@@ -215,7 +218,18 @@ function fromParts(actor, blueprint, name) {
 }
 
 // The fields of a creature recipe that its parts give (issue 75), each with the spec of a creature part that gives it.
-const RECIPE_FIELDS_FROM_PARTS = { healthRange: "health", speed: "speed", acceleration: "acceleration", deceleration: "deceleration", weightPerRadius: "weightPerRadius" };
+// The three numbers of the dash (issue 76) have the names of the avatar's dash specs, so a creature's dash is read like the avatar's.
+const RECIPE_FIELDS_FROM_PARTS = { healthRange: "health", speed: "speed", acceleration: "acceleration", deceleration: "deceleration", weightPerRadius: "weightPerRadius", dashSpeed: "dashSpeed", dashCharges: "dashCharges", rechargeFrames: "rechargeFrames" };
+
+// The dash specs of a creature part (issue 76): the same three as the Booster's for the avatar. A recipe whose parts give any of them
+// has a dash (createsDash), and the final functions of the dash read them through recipeValue.
+const DASH_SPECS = ["dashSpeed", "dashCharges", "rechargeFrames"];
+
+// Whether a recipe that is not the avatar's has a dash: one of its parts gives one of the dash specs (issue 76). A creature without
+// them has no dash at all, as the avatar with no Booster has no dash strength. The avatar's dash is in its own recipe (initial).
+function createsDash(definition) {
+  return definition.parts !== undefined && DASH_SPECS.some((spec) => recipeValue(definition, spec) !== undefined);
+}
 
 // A value of a recipe that is not the avatar's: its own field, or, for a recipe that names parts (issue 75, parcels 2 and 3: the Dummy, the Biter),
 // the sum of what its parts give, the way the avatar's values are the sums of the parts of its blueprint (sumSpec); the list of
@@ -361,12 +375,13 @@ function checkNoWeight(amount, where) {
 
 // The specs a part of creatures can have (issue 75): the values of a creature recipe that a part may give. Anything else is refused
 // when the definitions load, like PART_SPECS for the parts of the avatar.
-const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius"];
+const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius", ...DASH_SPECS];
 
 // The parts of creatures and the recipes that name them (issue 75, parcel 1): called by assertValidDefinitions, with its check of a
 // list of tags. A recipe's `parts` is a list of ids of DEFINITIONS.creatureParts (the avatar has none: its parts are its blueprint);
 // a part has a name, optional specs of CREATURE_PART_SPECS with finite values (health is { min, max }, whole, 0 or more, min not
-// above max; weightPerRadius is whole kg, 0 or more, the weight rule; the others are numbers, 0 or more), optional tags (a list of
+// above max; weightPerRadius is whole kg, 0 or more, the weight rule; dashCharges and rechargeFrames are counts, whole, 0 or more
+// (issue 76); the others are numbers, 0 or more), optional tags (a list of
 // words) and optional attacks (checked with the attacks of the recipes, above in assertValidDefinitions).
 function assertValidCreatureParts(tagList) {
   const parts = DEFINITIONS.creatureParts;
@@ -382,6 +397,8 @@ function assertValidCreatureParts(tagList) {
         }
       } else if (name === "weightPerRadius") {
         if (!(Number.isInteger(value) && value >= 0)) throw new Error("The spec weightPerRadius of " + where + " must be a whole number of kg, 0 or more, and it is " + value);
+      } else if (name === "dashCharges" || name === "rechargeFrames") {
+        if (!(Number.isInteger(value) && value >= 0)) throw new Error("The spec " + name + " of " + where + " must be a whole number, 0 or more (a count), and it is " + value);
       } else if (!(typeof value === "number" && Number.isFinite(value) && value >= 0)) {
         throw new Error("The spec " + name + " of " + where + " must be a finite number, 0 or more, and it is " + value);
       }
@@ -611,17 +628,24 @@ function finalSpeed(actor, blueprint) {
   return Math.max(0, fromParts(actor, blueprint, "speed") - weightPenalty);
 }
 
-// The speed an actor gets right after a dash, in pixels per frame: the sum of the
-// dashSpeed of the parts (the Booster is the primary source, any part may add to it).
-// Without any, there is no dash. Pure, like finalSpeed.
-function finalDashSpeed(actor, blueprint) {
-  return fromParts(actor, blueprint, "dashSpeed");
+// A number of the dash of any actor (issue 76: one dash for every actor): for the avatar the sum of that spec over the parts of its
+// blueprint (fromParts, as before, bit for bit), for any other actor the sum over the parts of its recipe (recipeValue), 0 when no
+// part gives it. Pure.
+function dashFromParts(actor, blueprint, spec) {
+  return isAvatar(actor) ? fromParts(actor, blueprint, spec) : recipeValue(definitionOf(actor), spec) ?? 0;
 }
 
-// The most charges of dash the avatar can have: the sum of the dashCharges of the parts (the Booster is the
-// primary source). Without any, there is no charge and no dash. Pure, like finalSpeed.
+// The speed an actor gets right after a dash, in pixels per frame: the sum of the
+// dashSpeed of the parts (the Booster is the primary source, any part may add to it; for a creature, its parts).
+// Without any, there is no dash. Pure, like finalSpeed.
+function finalDashSpeed(actor, blueprint) {
+  return dashFromParts(actor, blueprint, "dashSpeed");
+}
+
+// The most charges of dash an actor can have: the sum of the dashCharges of the parts (the Booster is the
+// primary source; for a creature, its parts). Without any, there is no charge and no dash. Pure, like finalSpeed.
 function finalDashMaxCharges(actor, blueprint) {
-  return fromParts(actor, blueprint, "dashCharges");
+  return dashFromParts(actor, blueprint, "dashCharges");
 }
 
 // The maximum health of the avatar: the sum of the health of its parts (nothing else gives it health).
@@ -653,9 +677,9 @@ function finalDeceleration(actor, blueprint) {
 }
 
 // The frames a dash charge takes to come back: the sum of the rechargeFrames of the parts (the Booster is
-// the primary source). Pure, like finalSpeed.
+// the primary source; for a creature, its parts). Pure, like finalSpeed.
 function finalDashRechargeFrames(actor, blueprint) {
-  return fromParts(actor, blueprint, "rechargeFrames");
+  return dashFromParts(actor, blueprint, "rechargeFrames");
 }
 
 // The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object
@@ -1398,6 +1422,7 @@ function spawnActor(state, type, event, nth) {
   const actor = finalizeObject(type, { position, radius, health: { now: health, max: health } }, undefined, spawnedActorId(type, event, nth));
   finalizeStatic(actor);
   finalizeDynamic(actor);
+  if (actor.dash) actor.dash.charges.now = actor.dash.charges.max; // born with its dash charges full, like the avatar (issue 76)
   if (Object.hasOwn(OWN_ROLLS, type)) OWN_ROLLS[type](actor, state.seed, event, nth);
   setCells(actor, state.grid);
   state.actors.push(actor);
