@@ -3819,9 +3819,9 @@ test("168 AGENTS.md opens with the two foundations (go slowly; break big tasks i
   assert.ok(/Go slowly and deliberately/.test(section) && /Break every big task into small steps/.test(section));
 });
 
-test("248 AGENTS.md is at or below 40 KB (40 * 1024 bytes) and every docs/rules/ and docs/notes/ file it points to exists, so no detail grows back into the guide and no pointer is dead", () => {
+test("248 AGENTS.md is at or below 10 KB (10 * 1024 bytes) and every docs/rules/ and docs/notes/ file it points to exists, so no detail grows back into the guide and no pointer is dead", () => {
   const file = path.join(__dirname, "..", "..", "AGENTS.md");
-  assert.ok(fs.statSync(file).size <= 40 * 1024, "AGENTS.md is " + fs.statSync(file).size + " bytes, above 40 KB (40960)");
+  assert.ok(fs.statSync(file).size <= 10 * 1024, "AGENTS.md is " + fs.statSync(file).size + " bytes, above 10 KB (10240)");
   const text = fs.readFileSync(file, "utf8");
   const pointers = new Set([...text.matchAll(/docs\/(?:rules|notes)\/[A-Za-z0-9_.-]+\.md/g)].map((match) => match[0]));
   assert.ok(pointers.size >= 10, "too few pointers read from AGENTS.md: " + pointers.size);
