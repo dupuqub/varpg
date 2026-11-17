@@ -6,6 +6,13 @@ One entry per rule that changed, newest first: the date, who decided, his words,
 
 ---
 
+## 2026-11-16: who an actor attacks follows the data (docs/rules/spawn.md, section "Spawn")
+
+- **Who decided:** the user (issue 71, part 2, parcel 6, spawn.md).
+- **His words:** "A frase é a minha intenção inicial, e o modelo de ações já a substituiu" (the sentence is my first intention, and the action model has already replaced it).
+- **What it replaced:** the sentence "At first, all actors want to attack the player." Today an actor attacks what the target of its attack names in the data (the Biter's bite aims at the closest "ally"); an actor with no attack, such as the Dummy, chases nobody.
+- **Source:** issue 71, part 2, parcel 6 (spawn.md).
+
 ## 2026-11-16: stale statements of AGENTS.md fixed to today's facts (issue 69; sections "State, definitions, blueprint and rules", "Open items", "Ideas", "Handoff", "Code layout", "Working with several agents", "Publishing")
 
 - **Who decided:** the Manager (issue 69, items 7 to 12, and the coordinator's addition of 2026-11-16 for the "##" headings of `AGENTS.md`). No rule changed: every sentence below told something that is no longer true, and was checked against the code, the tests or GitHub before it was reworded.
