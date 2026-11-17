@@ -80,7 +80,7 @@ function withDummies(count) {
 // The Biters of Chamber 2 as the tests written before issue 61 knew them: one crowd of `count` at the start and nobody born later. The
 // whole spawn array of the map chamber2 is replaced by its single event of frame 0 with that count (the later waves are taken out), so a
 // test that plays more than 300 frames meets the fixed crowd it was written for. It fails loudly if the array is no longer written so.
-const CHAMBER2_SPAWNS = /spawns: \[\n *\{ initialFrame: 0, count: 48, type: "biter" \},[^\n]*\n(?: *\{ initialFrame: \d+, count: 6, type: "biter" \},[^\n]*\n)+ *\],/;
+const CHAMBER2_SPAWNS = /spawns: \[\n *\{ initialFrame: 0, count: 67, type: "biter" \},[^\n]*\n(?: *\{ initialFrame: \d+, count: 8, type: "biter" \},[^\n]*\n)+ *\],/;
 function startingBiters(count) {
   return (text) => {
     assert.ok(CHAMBER2_SPAWNS.test(text), "the spawn array of chamber2 is no longer written as the tests expect");
@@ -2601,8 +2601,8 @@ test("118 a part can only have the specs the rules read, and resistance only to 
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { fire: 10 }, speed: 3.5 }")), /resistance of the part legs is to fire/);
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: 30, resistance: { blunt: -100 }, speed: 3.5 }")), /resistance of the part legs to blunt/); // -1 is allowed since issue 34 (negative resistance amplifies): the limit is minus the scale
   assert.throws(() => loadGame((text) => text.replace(legs, "specs: { health: -30, resistance: { blunt: 10 }, speed: 3.5 }")), /spec health of the part legs/);
-  const bite = "damage: { puncture: { flat: 3.6, perWeight: 0.0024 } }";
-  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 3.6, perWeight: 0.0024 } }")), /attack bite of the actor biter has fire/);
+  const bite = "damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }";
+  assert.throws(() => loadGame((text) => text.replace(bite, "damage: { fire: { flat: 5.04, perWeight: 0.00336 } }")), /attack bite of the actor biter has fire/);
   assert.throws(() => loadGame((text) => text.replace(bite, "damage: { puncture: { flat: -3, perWeight: 0.0024 } }")), /attack bite of the actor biter needs flat and perWeight/);
   assert.throws(() => loadGame((text) => text.replace("reach: 8,", "reach: 8.5,")), /reach of the attack bite of the actor biter/);
   assert.throws(() => loadGame((text) => text.replace("windupFrames: 15,", "windupFrames: -1,")), /windupFrames of the attack bite of the actor biter/);
@@ -2625,7 +2625,7 @@ const ALONE_BITERS = `
   }
 `;
 
-test("119 an attack is { base, now }: the base is calculated once, when the actor is made (flat + perWeight x weight, 6.48 for the smallest Biter and 8.4 for the largest, and weight x 0.001 for the body slam of everyone), and now is calculated every frame from the weight the actor has then (the same as the base while the weight does not change)", () => {
+test("119 an attack is { base, now }: the base is calculated once, when the actor is made (flat + perWeight x weight, 9.072 for the smallest Biter and 11.76 for the largest, and weight x 0.001 for the body slam of everyone), and now is calculated every frame from the weight the actor has then (the same as the base while the weight does not change)", () => {
   const result = run(`
     ${ALONE_BITERS}
     const s = aloneBiters(0);
@@ -2638,14 +2638,14 @@ test("119 an attack is { base, now }: the base is calculated once, when the acto
     step(s, { move: { x: 0, y: 0 } });
     return { made: JSON.parse(made), radius: b.radius, small: small.attacks.bite.base, large: large.attacks.bite.base, now: b.attacks.bite.now, base: b.attacks.bite.base, avatar: s.actors[0].attacks };
   `, QUIET);
-  assert.ok(Math.abs(result.small.puncture - 6.48) < 1e-9 && Math.abs(result.large.puncture - 8.4) < 1e-9); // 3.6 + 0.0024 x 1200, 3.6 + 0.0024 x 2000 (issue 68: both terms times 1.2)
+  assert.ok(Math.abs(result.small.puncture - 9.072) < 1e-9 && Math.abs(result.large.puncture - 11.76) < 1e-9); // 5.04 + 0.00336 x 1200, 5.04 + 0.00336 x 2000 (issue 73: both terms times 1.4, after issue 68)
   const weight = 100 * result.radius;
-  assert.ok(Math.abs(result.made.bite.base.puncture - (3.6 + 0.0024 * weight)) < 1e-9);
+  assert.ok(Math.abs(result.made.bite.base.puncture - (5.04 + 0.00336 * weight)) < 1e-9);
   assert.ok(Math.abs(result.made.bodySlam.base.blunt - weight * 0.001) < 1e-9);
   assert.deepStrictEqual(plain(result.made.bite.now), plain(result.made.bite.base)); // a new actor: now is the base
   assert.deepStrictEqual([result.made.bite.reach, result.made.bite.windupFrames, result.made.bite.freezeFrames, plain(result.made.bite.hitbox)], [8, 15, 10, { radius: 20, frames: 1 }]); // what is not damage is copied as it is
-  assert.ok(Math.abs(result.now.puncture - (3.6 + 0.0024 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
-  assert.ok(Math.abs(result.base.puncture - (3.6 + 0.0024 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
+  assert.ok(Math.abs(result.now.puncture - (5.04 + 0.00336 * 1)) < 1e-12, "now: " + result.now.puncture); // the 99 is gone: now is calculated again every frame, with the weight of now (1 kg)
+  assert.ok(Math.abs(result.base.puncture - (5.04 + 0.00336 * weight)) < 1e-9, "the base followed the weight: " + result.base.puncture); // and the base stays as it was made
   assert.deepStrictEqual(plain(result.avatar), { bodySlam: { base: { blunt: 5 }, now: { blunt: 5 }, ignores: ["ally"] } }); // the avatar has only the body slam: 5000 kg x 0.001
 });
 
@@ -2812,7 +2812,7 @@ test("125 two Biters that overlap are pushed apart by weight until they touch, n
   assert.ok(Math.abs(Math.abs(pushA) - 4 * weightB / (weightA + weightB)) < 0.3, "the heavier one did not move less: " + pushA); // the two also walk 0.125 toward the avatar
 });
 
-test("126 Chamber 2 has no Biter at frame 0 and 48 after its first step (ids biter 0,0 to biter 0,47: event 0 of its spawn array, issue 61), no Dummies, born off the screen inside the window with a radius from 12 to 20 and 30 health, the same for the same seed and not for another, and the state is plain JSON", () => {
+test("126 Chamber 2 has no Biter at frame 0 and 67 after its first step (ids biter 0,0 to biter 0,66: event 0 of its spawn array, issue 61), no Dummies, born off the screen inside the window with a radius from 12 to 20 and 30 health, the same for the same seed and not for another, and the state is plain JSON", () => {
   const result = run(`
     const still = { move: { x: 0, y: 0 } };
     const firstStep = (seed) => { const state = createChamber2State(1, seed); step(state, still); return state; };
@@ -2838,9 +2838,9 @@ test("126 Chamber 2 has no Biter at frame 0 and 48 after its first step (ids bit
   `);
   assert.strictEqual(result.atZero, 1, "the state of frame 0 has only the avatar (issue 61: spawn is the last thing of a step)");
   assert.strictEqual(result.frame, 1);
-  assert.strictEqual(result.count, 48);
+  assert.strictEqual(result.count, 67);
   assert.strictEqual(result.others, 0);
-  assert.deepStrictEqual(plain(result.ids), Array.from({ length: 48 }, (_, i) => "biter 0," + i));
+  assert.deepStrictEqual(plain(result.ids), Array.from({ length: 67 }, (_, i) => "biter 0," + i));
   assert.strictEqual(result.bad, 0);
   assert.deepStrictEqual(plain(result.hitboxes), []);
   assert.strictEqual(result.same, true);
@@ -2848,7 +2848,7 @@ test("126 Chamber 2 has no Biter at frame 0 and 48 after its first step (ids bit
   assert.strictEqual(JSON.stringify(JSON.parse(result.json)), result.json);
 });
 
-test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing among the Biters of its spawn events (48 seen from frame 1, 6 more from 301 and from 601, issues 61 and 68) give the same state twice and a clean cross-check, and the Biters really reach it and bite", () => {
+test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing among the Biters of its spawn events (67 seen from frame 1, 8 more from 301 and from 601, issues 61, 68 and 73) give the same state twice and a clean cross-check, and the Biters really reach it and bite", () => {
   const result = run(`
     const play = () => {
       const run = createRun(1);
@@ -2872,14 +2872,14 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
   assert.strictEqual(result.check, null);
   assert.ok(result.health < 100, "no Biter bit the avatar in 15 seconds: health " + result.health);
   assert.ok(result.mostHitboxes >= 1);
-  assert.ok(result.alive > 0 && result.alive <= 60, "alive: " + result.alive); // at most the 48 + 6 + 6 born in the steps of frames 0, 300 and 600
+  assert.ok(result.alive > 0 && result.alive <= 83, "alive: " + result.alive); // at most the 67 + 8 + 8 born in the steps of frames 0, 300 and 600
 });
 
 // ---- Guards of the review of 2026-11-11 (salts, fingerprint of the data, snap of another version) ----
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 64, hash: "ff841ca036981ba0" };
+const DATA_FINGERPRINT = { version: 65, hash: "b3db276df7abddf2" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -3179,7 +3179,7 @@ test("140 a weapon must be sound when the data loads: only the closest rule, who
   bad("speed: 8, radius: 6", "speed: 20, radius: 6"); // 20 >= 6 + 12: it could skip over a Biter of radius 12
 });
 
-test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with the avatar standing among 48 Biters give the same state twice and a clean cross-check, rounds are spent, the mecha is lighter, and Biters die", () => {
+test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with the avatar standing among 67 Biters (83 born by frame 900) give the same state twice and a clean cross-check, rounds are spent, the mecha is lighter, and Biters die", () => {
   const result = run(`
     const play = () => {
       const r = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
@@ -3195,13 +3195,13 @@ test("141 a run of Chamber 2 with the repeater is reproducible: 900 frames with 
     const a = play();
     const b = play();
     const w = a.s.actors[0].weapons[0];
-    return { same: JSON.stringify(a.s) === JSON.stringify(b.s), check: a.check, rounds: 400 - (w.magazine + w.reserve), weight: a.s.actors[0].weight, left: a.s.actors.length - 1 };
+    return { same: JSON.stringify(a.s) === JSON.stringify(b.s), check: a.check, rounds: 400 - (w.magazine + w.reserve), weight: a.s.actors[0].weight, left: a.s.actors.length - 1 }
   `);
   assert.strictEqual(result.same, true);
   assert.strictEqual(result.check, null);
   // The weight is calculated at the start of the step, so it can be one round behind the shots of the last step.
   assert.ok(result.rounds > 0 && [7550 - 6 * result.rounds, 7550 - 6 * (result.rounds - 1)].includes(result.weight), "rounds " + result.rounds + ", weight " + result.weight);
-  assert.ok(result.left < 48, "no Biter died in 15 seconds of firing");
+  assert.ok(result.left < 83, "no Biter died in 15 seconds of firing");
 });
 
 test("142 the body slam follows the weight the avatar has now: it is made once at the loaded weight (7.55 with the repeater full) and every round fired makes it 0.006 lighter; a hit by body slam takes that value", () => {
@@ -3596,7 +3596,7 @@ test("159 the combat journal writes every hit as a line with its numbers: a bite
   assert.deepStrictEqual(Object.keys(plain(result.bulletTotals)), ["avatar:repeater-arm"]);
 });
 
-test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit or a birth (issues 61 and 68: 48 + 9 x 6 = 102 births in the steps of frames 0 to 2700) in frame order, and the totals read from it count the same number of hits as there are hit lines", () => {
+test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 (the avatar's health set by hand so it does not die on the way) with it and without it give the same state; the log keeps every hit (here far more than the old 100), each line a hit or a birth (issues 61, 68 and 73: 67 + 9 x 8 = 139 births in the steps of frames 0 to 2700) in frame order, and the totals read from it count the same number of hits as there are hit lines", () => {
   const result = run(`
     const play = (withJournal) => {
       const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "arm-r", "repeater-arm", "head", "torso", "legs", "generator", "booster"] });
@@ -3619,7 +3619,7 @@ test("160 the journal holds no truth and has no limit: 3000 frames of Chamber 2 
   assert.strictEqual(result.same, true);
   assert.ok(result.hits > 100, "the log must keep more than the old limit of 100: " + result.hits);
   assert.strictEqual(result.hits + result.births, result.lines, "every line is a hit or a birth");
-  assert.strictEqual(result.births, 102);
+  assert.strictEqual(result.births, 139);
   assert.strictEqual(result.ordered, true);
   assert.strictEqual(result.counted, result.hits);
   assert.strictEqual(result.none, null);
@@ -4859,11 +4859,11 @@ test("211 the avatar's death by a hitbox stops the world inside stage 5: the ava
 });
 
 // ---- only a melee attack may use the weight (issue 45) ----
-test("212 only a melee attack may use the weight (the user, issue 45): the data as it is loads, with the body slam (0.001 per kg), the bite (0.0024) and the sword (0) written { flat, perWeight }; the sword with a perWeight of 0.001 loads too; the weapon of the repeater-arm with its damage written { flat: 0, perWeight: 0.001 } is refused on load with a message that names the part, and with a perWeight of 0 in the same form it is refused too, but by the old rule that its damage is a plain number above 0", () => {
+test("212 only a melee attack may use the weight (the user, issue 45): the data as it is loads, with the body slam (0.001 per kg), the bite (0.00336) and the sword (0) written { flat, perWeight }; the sword with a perWeight of 0.001 loads too; the weapon of the repeater-arm with its damage written { flat: 0, perWeight: 0.001 } is refused on load with a message that names the part, and with a perWeight of 0 in the same form it is refused too, but by the old rule that its damage is a plain number above 0", () => {
   const patched = (from, to) => () => loadGame((text) => { const out = text.replace(from, to); assert.notStrictEqual(out, text, "the patch must apply"); return out; });
   assert.doesNotThrow(() => loadGame());
   const numbers = run(`return { slam: DEFINITIONS.constants.bodySlam.attack.damage.blunt.perWeight, bite: DEFINITIONS.actors.biter.attacks.bite.damage.puncture.perWeight, sword: DEFINITIONS.parts["sword-arm"].melee.damage.slash.perWeight };`);
-  assert.deepStrictEqual(plain(numbers), { slam: 0.001, bite: 0.0024, sword: 0 });
+  assert.deepStrictEqual(plain(numbers), { slam: 0.001, bite: 0.00336, sword: 0 });
   assert.doesNotThrow(patched("damage: { slash: { flat: 30, perWeight: 0 } }", "damage: { slash: { flat: 30, perWeight: 0.001 } }"));
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 0, perWeight: 0.001 } }"), /damage puncture of the projectile of the weapon of the part repeater-arm uses the weight.*only a melee attack may/);
   assert.throws(patched("projectile: { damage: { puncture: 10 }", "projectile: { damage: { puncture: { flat: 10, perWeight: 0.5 } }"), /weapon of the part repeater-arm uses the weight/);
@@ -5489,7 +5489,7 @@ function spawnGame(events) {
   return loadGame((text) => text.replace("chancePercent: 35", "chancePercent: 0").replace(CHAMBER2_SPAWNS, array));
 }
 
-test("238 Chamber 2 has 48 Biters from frame 1 and 6 more every 300 frames up to frame 3000 (issue 61, \"Done when\"): the state of frame 0 has only the avatar; over 3002 steps of the real game (the avatar standing, its health set very high) new ids appear only at frame 1 (biter 0,0 to biter 0,47, exactly 48 Biters then) and at frames 301, 601, ... 3001 (biter k,0 to biter k,5 for the event k = 1 to 10), 108 in all; the journal has one birth line per newborn with the frame it is first seen in and the place it has in that state; and the same run with no journal ends in the same state", () => {
+test("238 Chamber 2 has 67 Biters from frame 1 and 8 more every 300 frames up to frame 3000 (issue 61, \"Done when\"): the state of frame 0 has only the avatar; over 3002 steps of the real game (the avatar standing, its health set very high) new ids appear only at frame 1 (biter 0,0 to biter 0,66, exactly 67 Biters then) and at frames 301, 601, ... 3001 (biter k,0 to biter k,7 for the event k = 1 to 10), 147 in all; the journal has one birth line per newborn with the frame it is first seen in and the place it has in that state; and the same run with no journal ends in the same state", () => {
   const result = plain(run(`
     const still = { move: { x: 0, y: 0 } };
     const play = (journal) => {
@@ -5519,11 +5519,11 @@ test("238 Chamber 2 has 48 Biters from frame 1 and 6 more every 300 frames up to
     return { atZero: a.atZero, atOne: a.atOne, newIds: a.newIds, born: a.born, births, same: a.state === b.state };
   `));
   assert.deepStrictEqual(result.atZero, ["avatar_1"], "frame 0 has no Biter: spawn is the last thing of a step");
-  assert.strictEqual(result.atOne, 48);
-  const expected = { 1: Array.from({ length: 48 }, (_, nth) => "biter 0," + nth) };
-  for (let event = 1; event <= 10; event++) expected[300 * event + 1] = Array.from({ length: 6 }, (_, nth) => "biter " + event + "," + nth);
+  assert.strictEqual(result.atOne, 67);
+  const expected = { 1: Array.from({ length: 67 }, (_, nth) => "biter 0," + nth) };
+  for (let event = 1; event <= 10; event++) expected[300 * event + 1] = Array.from({ length: 8 }, (_, nth) => "biter " + event + "," + nth);
   assert.deepStrictEqual(result.newIds, expected);
-  assert.strictEqual(result.births.length, 108);
+  assert.strictEqual(result.births.length, 147);
   for (const line of result.births) {
     const seen = result.born[line.id];
     assert.deepStrictEqual([line.frame, line.type, line.position.x, line.position.y], [seen.frame, "biter", seen.x, seen.y], line.id);
@@ -5562,15 +5562,15 @@ test("239 the same seed gives the same births: two runs of 302 steps of Chamber 
   `));
   assert.strictEqual(result.sameState, true);
   assert.strictEqual(result.sameBirths, true);
-  assert.strictEqual(result.count, 54, "48 in the step of frame 0 and 6 in the step of frame 300");
-  assert.strictEqual(result.checks.length, 54);
+  assert.strictEqual(result.count, 75, "67 in the step of frame 0 and 8 in the step of frame 300");
+  assert.strictEqual(result.checks.length, 75);
   assert.ok(result.checks.every(Boolean), "a newborn does not have the draws of its pair around the avatar's place: " + JSON.stringify(result.checks));
   assert.ok(result.avatarX > 100, "the avatar must have walked, so the births at 300 are counted from a place that is not the start: " + result.avatarX);
   assert.strictEqual(result.sameIdsOtherSeed, true);
-  assert.ok(result.samePlacesOtherSeed < 3, "another seed must give other places: " + result.samePlacesOtherSeed + " of 54 the same");
+  assert.ok(result.samePlacesOtherSeed < 3, "another seed must give other places: " + result.samePlacesOtherSeed + " of 75 the same");
 });
 
-test("240 going back in time and playing gives the same births and nobody twice (issue 61: decided by state.frame alone, no state of the spawn): Chamber 2 played to frame 310 with the history; back to the snap of frame 295, cut, and 15 steps with another input give the wave of frame 300 again (biter 1,0 to biter 1,5, each id once in the state); back to the snap of frame 305 (after the wave), cut, and 5 steps give no birth; every id in every state is unique; the cross-check of each history is null; and the same inputs from frame 295 give the very state of frame 310", () => {
+test("240 going back in time and playing gives the same births and nobody twice (issue 61: decided by state.frame alone, no state of the spawn): Chamber 2 played to frame 310 with the history; back to the snap of frame 295, cut, and 15 steps with another input give the wave of frame 300 again (biter 1,0 to biter 1,7, each id once in the state); back to the snap of frame 305 (after the wave), cut, and 5 steps give no birth; every id in every state is unique; the cross-check of each history is null; and the same inputs from frame 295 give the very state of frame 310", () => {
   const result = plain(run(`
     const still = { move: { x: 0, y: 0 } };
     const left = { move: { x: -1, y: 0 } };
@@ -5616,7 +5616,7 @@ test("240 going back in time and playing gives the same births and nobody twice 
       different: JSON.stringify(t) !== original,
     };
   `));
-  const wave = ["biter 1,0", "biter 1,1", "biter 1,2", "biter 1,3", "biter 1,4", "biter 1,5"];
+  const wave = ["biter 1,0", "biter 1,1", "biter 1,2", "biter 1,3", "biter 1,4", "biter 1,5", "biter 1,6", "biter 1,7"];
   assert.strictEqual(result.sameState, true);
   assert.deepStrictEqual(result.waveOriginal, wave);
   assert.deepStrictEqual(result.waveAgain, wave);
@@ -5772,7 +5772,7 @@ test("246 what a type rolls for itself at birth has one place, OWN_ROLLS, usable
   assert.deepStrictEqual(result.bad, []);
   assert.strictEqual(result.count, 30);
   assert.strictEqual(result.otherSeed, true);
-  assert.deepStrictEqual([result.biters, result.biterRolls], [48, 0]);
+  assert.deepStrictEqual([result.biters, result.biterRolls], [67, 0]);
   assert.strictEqual(result.frozen, true);
   assert.deepStrictEqual(result.keys, ["dummy"]);
 
@@ -5784,8 +5784,8 @@ test("246 what a type rolls for itself at birth has one place, OWN_ROLLS, usable
     const d = firstBirths(createChamber1State(1, 3)).actors.filter((actor) => actor.type === "dummy");
     return { marks: biters.map((b) => b.mark), count: biters.length, dummyAngle: d[0].wander.angle, expected: hashInts(3, 0, 0, SALTS.dummyAngle) % 360 };
   `, withEntry));
-  assert.strictEqual(marked.count, 48);
-  assert.deepStrictEqual(marked.marks, Array.from({ length: 48 }, (_, nth) => [3, 0, nth]));
+  assert.strictEqual(marked.count, 67);
+  assert.deepStrictEqual(marked.marks, Array.from({ length: 67 }, (_, nth) => [3, 0, nth]));
   assert.strictEqual(marked.dummyAngle, marked.expected);
 });
 

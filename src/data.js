@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 64;
+const DEFINITIONS_VERSION = 65;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -116,9 +116,9 @@ const DEFINITIONS = {
     //   Powers of two, so the sums are exact.
     // attacks.bite (the user's idea: when it gets close it sends a hitbox that holds it still for about 10 frames; later also a pause before):
     //   damage: puncture = flat + perWeight x weight (the user's idea: bigger Biters bite harder, and the weight counts for
-    //     this attack, not for every attack). guess: flat 3.6, perWeight 0.0024, so 3.6 + 0.0024 x 1200 = 6.48 for the smallest
-    //     and 3.6 + 0.0024 x 2000 = 8.4 for the largest. The avatar has 100 health, so about 12 bites.
-    //     Both terms times 1.2 (the user, 2026-11-16, issue 63 and issue 68: "dá 20% a mais de dano pra eles", tuning so the avatar can
+    //     this attack, not for every attack). guess: flat 5.04, perWeight 0.00336, so 5.04 + 0.00336 x 1200 = 9.072 for the smallest
+    //     and 5.04 + 0.00336 x 2000 = 11.76 for the largest. The avatar has 100 health, so about 9 bites.
+    //     Both terms times 1.4 again (the user, 2026-11-16, issue 73: he could not die yet in play), after times 1.2 (issue 63 and issue 68: "dá 20% a mais de dano pra eles", tuning so the avatar can
     //     die; they were flat 3 and perWeight 0.002; to be tuned again by playing). The body slam of the Biter is NOT changed: its numbers are the
     //     shared constants of every body (constants.bodySlam), not the Biter's; a stronger slam for the Biter would be another question.
     //   reach: guess, 8 px of space between the two bodies, about a quarter of the avatar's width, "close enough to bite".
@@ -142,7 +142,7 @@ const DEFINITIONS = {
       deceleration: 0.25,
       attacks: {
         bite: {
-          damage: { puncture: { flat: 3.6, perWeight: 0.0024 } }, // 3 and 0.002 times 1.2 (the user, 2026-11-16, issue 68: 20% more damage so the avatar can die; to tune by playing); the slam is constants.bodySlam, shared, unchanged
+          damage: { puncture: { flat: 5.04, perWeight: 0.00336 } }, // 3.6 and 0.0024 times 1.4 (the user, 2026-11-16, issue 73: 40% more damage, he could not die yet in play; before it 3 and 0.002 times 1.2, issue 68; to tune by playing); the slam is constants.bodySlam, shared, unchanged
           reach: 8,
           windupFrames: 15,
           freezeFrames: 10,
@@ -461,17 +461,17 @@ const DEFINITIONS = {
     // Chamber 2 (COMBAT): guesses, to tune by playing (the PLAN desk's table in issue 61).
     chamber2: {
       spawns: [
-        { initialFrame: 0, count: 48, type: "biter" }, // guess: 48 from the start (40 times 1.2, the user, 2026-11-16, issue 68: 20% more Biters so the avatar can die; to tune by playing; it was the old count of 40): enough to be chased from every side, few enough to count the hits and to see each one
-        { initialFrame: 300, count: 6, type: "biter" }, // guess: 6 more (5 times 1.2, issue 68, the user, 2026-11-16) every 5 seconds (300 frames), so the crowd keeps coming and the avatar can die
-        { initialFrame: 600, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 900, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 1200, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 1500, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 1800, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 2100, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 2400, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 2700, count: 6, type: "biter" }, // guess: the same wave (6, issue 68)
-        { initialFrame: 3000, count: 6, type: "biter" }, // guess: the last wave (6, issue 68), at 50 seconds; after it the crowd is what is left
+        { initialFrame: 0, count: 67, type: "biter" }, // guess: 67 from the start (48 times 1.4 = 67.2, down; the user, 2026-11-16, issue 73: 40% more Biters, he could not die yet in play; before it 48 = 40 times 1.2, issue 68; to tune by playing; it was the old count of 40): enough to be chased from every side, few enough to count the hits and to see each one
+        { initialFrame: 300, count: 8, type: "biter" }, // guess: 6 more (6 times 1.4 = 8.4, down; the user, 2026-11-16, issue 73: he could not die yet in play; before it 6 = 5 times 1.2, issue 68) every 5 seconds (300 frames), so the crowd keeps coming and the avatar can die
+        { initialFrame: 600, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 900, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 1200, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 1500, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 1800, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 2100, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 2400, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 2700, count: 8, type: "biter" }, // guess: the same wave (8, issue 73)
+        { initialFrame: 3000, count: 8, type: "biter" }, // guess: the last wave (8, issue 73), at 50 seconds; after it the crowd is what is left
       ],
     },
   },

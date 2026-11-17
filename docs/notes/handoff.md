@@ -40,6 +40,7 @@ The lists are in "Open items" above, in `docs/weapons.md` ("Open items") and in 
 
 ## Open items
 
+- **Chamber 2 is complete (the user, 2026-11-16, issue 73):** after the second tuning (67 Biters at frame 0, waves of 8, bite 5.04 + 0.00336 x weight) he considers it done; the next phase is Chamber 3, with new body parts and new actors (see the idea of issue 67).
 - **Agreed order of work (critical review of 2026-11-10):**
   1. The user played Chamber 1 (2026-11-11) and said everything was very good: the swarm, the push by weight, the birth and the damage rules are validated by play. He also tested the combat of Chamber 2 up to the repeater (2026-11-12) and liked the results; the shield and the touch controls were built after that.
   2. ~~Pause and one-frame advance~~ (built, 2026-11-12; see "Simulation" (docs/rules/state.md)).
