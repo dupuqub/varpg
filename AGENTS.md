@@ -29,10 +29,12 @@ Repository state (2026-11-12): the game is **public and online** (`https://dupuq
 |---|---|---|
 | Actors | `docs/rules/actor.md` | The Dummy and the other actors: how they are made and behave. |
 | Code layout | `docs/rules/code-layout.md` | Which file of the code holds what. |
+| Concept | `docs/rules/concept.md` | The axes of the game, the game loop and the design rules of time and transparency. |
 | Damage | `docs/rules/damage.md` | Damage packets, resistance and how a hit lands. |
 | Movement | `docs/rules/movement.md` | Canvas, camera, movement, dash and input. |
 | Numbers | `docs/rules/numbers.md` | Where each kind of number lives in the code. |
 | Parts | `docs/rules/parts.md` | The kit of mecha parts and how their specs add up. |
+| Run | `docs/rules/run-and-tests.md` | How to open the game and how to run the tests. |
 | Screens | `docs/rules/screens.md` | The mecha theme, the screens and the stack. |
 | Spawn | `docs/rules/spawn.md` | The spawn events of each map. |
 | State | `docs/rules/state.md` | Simulation, the state, the definitions and the run history. |
@@ -45,39 +47,6 @@ Repository state (2026-11-12): the game is **public and online** (`https://dupuq
 | Decisions | `docs/decisions.md` | The history of the rules: older versions and who changed them. |
 | Method | `docs/method.md` | How work is cut into parcels, with a coordinator and helpers. |
 | Tests | `tests/agent/README.md` | How to run the tests and what each one checks. |
-
-## Concept
-
-The game is a constructive critique of the methods of some games. Axes, in priority order:
-
-1. **Respect for the player's time.**
-2. **Data transparency** (against data obfuscation).
-3. **Reproducibility:** a run must be repeatable identically, including for machine learning.
-
-The game is about **builds**: a massive skill tree, but also testing one thing at a time. The structure of the project and its process must let new skills appear without major problems, with automated tests that guarantee the synergies work.
-
-### Game loop
-
-Enter a map (Vampire Survivors style), run the build, collect resources, leave the map, improve the build, next map.
-
-### Respect for time (design rules)
-
-- 10-minute maps.
-- Skill tree respec is always free and unlimited.
-- The player must always be able to pivot builds between runs.
-
-### Transparency (design rules)
-
-- There must be a page that shows in detail how each hit of damage was calculated: an annotated formula that says where and when each buff is applied, and in what order.
-- It is not didactic. It is an audit: the player needs full awareness of the build's real performance, to improve it effectively and to give feedback on the game's logic.
-
-## How to run
-
-Online: `https://dupuqub.github.io/varpg/` (the last push to `main` that passed the tests). Locally: open `index.html` in the browser. The scripts are plain (no modules), so no server is needed.
-
-### Tests
-
-From the root of the repository: `node --test` (no path; Node finds the `*.test.js` files). A good run shows `# fail 0` in the summary at its end. The user can paste the whole output to the agent. The tests load the browser scripts into a `vm` context, so they do not need to become modules; the test file passes the starter blueprint to `step` by default. Whenever a rule or a value changes on purpose, update the numbers in the tests and in `tests/agent/README.md`.
 
 ## How to work on this project
 
