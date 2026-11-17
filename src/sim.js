@@ -1824,19 +1824,34 @@ function recordHit(journal, state, source, attack, target, resolved, taken) {
 // A second state, beside the real one, only for what the eye sees for longer than the rules need. It holds no source of truth: the
 // rules write into it and NEVER read it, the screen reads it, and erasing it changes no decision. It is not in the snaps of the
 // state (they stay cheap to save and to feed a model); the history keeps its own copies of it, outside the cross-check.
-// A trace: { position, radius, age, frames }. It is born at age 0 where a hitbox that lives its frames was born, and goes when
-// its age reaches frames (the screen draws it fainter as it ages).
+// A trace: { position, radius, cone, age, frames, owner, offset }. It is born at age 0 where a hitbox that lives its frames was born, and
+// goes when its age reaches frames (the screen draws it fainter as it ages). owner = the id of whoever made the blow and offset = where
+// the blow was born from the owner's center (zero for the sword, one body ahead for the bite); see traceHitbox and ageVisual.
 function createVisual() {
   return { traces: [] };
 }
 
-function traceHitbox(visual, hitbox) {
+// The trace of a melee hitbox (the sword's slice, the Biter's bite; a shot leaves none) shows the blow travelling with its owner, not a
+// place that still hurts (issue 72, the user, 2026-11-16): it keeps the id of the owner and its offset from the owner's center at birth, and
+// ageVisual moves it to the owner's place of now plus that offset while it fades. It is VISUAL only: the rules never read it, the hitbox
+// itself still lives its one frame where it was born, and no state, snap or answer of the rules changes.
+function traceHitbox(visual, hitbox, owner) {
   // A cone leaves its shape too (the eye draws a slice, not a circle); a round hitbox leaves cone: null.
-  visual.traces.push({ position: { x: hitbox.position.x, y: hitbox.position.y }, radius: hitbox.radius, cone: hitbox.cone === null ? null : { ...hitbox.cone }, age: 0, frames: DEFINITIONS.constants.visual.traceFrames });
+  const offset = { x: hitbox.position.x - owner.position.x, y: hitbox.position.y - owner.position.y };
+  visual.traces.push({ position: { x: hitbox.position.x, y: hitbox.position.y }, radius: hitbox.radius, cone: hitbox.cone === null ? null : { ...hitbox.cone }, age: 0, frames: DEFINITIONS.constants.visual.traceFrames, owner: owner.id, offset });
 }
 
-function ageVisual(visual) {
-  for (const trace of visual.traces) trace.age += 1;
+// Ages the traces by one frame and moves each one to its owner's place of now plus its offset (its direction stays the one of the blow).
+// An owner that is gone (dead and removed) leaves the trace where it last was, and it fades there. Reads the state, which only the
+// visual side does: the real state is never written here.
+function ageVisual(visual, state) {
+  for (const trace of visual.traces) {
+    trace.age += 1;
+    const owner = state.actors.find((actor) => actor.id === trace.owner);
+    if (owner === undefined) continue;
+    trace.position.x = owner.position.x + trace.offset.x;
+    trace.position.y = owner.position.y + trace.offset.y;
+  }
   visual.traces = visual.traces.filter((trace) => trace.age < trace.frames);
 }
 
@@ -1910,7 +1925,7 @@ function spawnHitbox(state, owner, attackName, towardX, towardY, shape, visual =
     ...attackKeys(attack, HITBOX_ATTACK_KEYS),
   };
   state.hitboxes.push(hitbox);
-  if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox); // a hitbox that lives its frames leaves a trace for the eye
+  if (visual !== null && hitbox.framesLeft !== null) traceHitbox(visual, hitbox, owner); // a hitbox that lives its frames leaves a trace for the eye
 }
 
 // Does this hitbox touch this actor? A round one by the circles, a cone by its slice. Any overlap counts.
@@ -2152,7 +2167,7 @@ function cellIndex(coordinate, cellSize) {
 // blueprint = the blueprint of the run (see createRun). It is not in the state, so it is an argument.
 function step(state, input, blueprint, visual = null, journal = null) {
   if (state.mission === "aborted") return; // the pilot ejected: the state, the visual and the journal stay as they were
-  if (visual !== null) ageVisual(visual); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
+  if (visual !== null) ageVisual(visual, state); // the traces of the earlier frames get older (the new ones of this frame are born at age 0)
 
   // Stages 0 to 5: what happens in the frame. They return early when the avatar's death is tested (worldStops): the rest
   // of them runs for nobody. The end of the step below always runs, so a death anywhere ends the step as a death in stage 5 does.

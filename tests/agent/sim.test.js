@@ -2704,7 +2704,7 @@ test("121 within its reach the Biter holds still for 15 frames (the windup), the
   // Step 16 the windup is over: the hitbox is born (toward the avatar, with the packet of the bite now), hurts in that same step and
   // is gone (it lives one frame); the trace it leaves in the visual state is where it was born; the freeze begins.
   assert.strictEqual(born.hitboxes, 0);
-  assert.deepStrictEqual(plain(born.traces), [{ position: { x: 21, y: 0 }, radius: 20, cone: null, age: 0, frames: 12 }]);
+  assert.deepStrictEqual(plain(born.traces), [{ position: { x: 21, y: 0 }, radius: 20, cone: null, age: 0, frames: 12, owner: "biter 0,0", offset: { x: -18, y: 0 } }]);
   assert.ok(Math.abs(born.health - (100 - resisted(born.bite, 10))) < 1e-9, "the bite hurt the avatar once: " + born.health);
   assert.deepStrictEqual([rows[15][1], rows[15][2], plain(born.direction)], ["freeze", 10, { x: 0, y: 0 }]);
   // Steps 17 to 25 it is frozen (frames 9 down to 1) and wants no movement; at step 26 the freeze is over and it chases.
@@ -3495,7 +3495,7 @@ test("156 a trace is born at age 0 where a one-frame hitbox was born, gets one f
     return { afterShot, born, ages, backTraces: back.traces.length, forwardTraces: forward.traces.length, copy: back !== history.visuals[0] };
   `);
   assert.strictEqual(result.afterShot, 0);
-  assert.deepStrictEqual(plain(result.born), [{ position: plain(result.born)[0].position, radius: 20, cone: null, age: 0, frames: 12 }]);
+  assert.deepStrictEqual(plain(result.born), [{ position: plain(result.born)[0].position, radius: 20, cone: null, age: 0, frames: 12, owner: "biter 0,0", offset: { x: 18, y: 0 } }]);
   assert.deepStrictEqual(plain(result.ages), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, null, null]);
   assert.strictEqual(result.backTraces, 0);
   assert.strictEqual(result.forwardTraces, 1);
@@ -5823,4 +5823,129 @@ test("247 going back in time and playing gives the same Dummies and nobody twice
   `, twoEvents));
   assert.deepStrictEqual(turned.ids, ["avatar_1", "dummy 0,0", "dummy 0,1", "dummy 1,0", "dummy 1,1"]);
   assert.notDeepStrictEqual(turned.a, turned.b, "two Dummies with the same nth of two events must not share their turns");
+});
+
+// The sword and the bite of the tests of issue 72: the trace of a melee blow follows its owner while it fades.
+const TRACE_SWORD = `
+  function swordGame(x, y) {
+    const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"] });
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+    s.actors = [s.actors[0], s.actors.find((actor) => actor.id === "biter 0,0")];
+    const biter = s.actors[1];
+    biter.ai.phase = "freeze"; biter.ai.frames = 1000000; biter.health.now = 90; biter.health.max = 90;
+    biter.position.x = x; biter.position.y = y;
+    s.actors[0].position.x = 0; s.actors[0].position.y = 0;
+    return { s, bp: run.blueprint, biter };
+  }
+`;
+
+test("249 the trace of a sword blow follows the avatar while it fades (issue 72): it keeps the id of its owner and an offset of zero, and after the blow (step 13) each step puts it on the avatar's place of the start of that step (where ageVisual reads it) plus the offset, its cone still pointing the way of the blow; the hitbox itself is gone in that frame", () => {
+  const r = plain(run(`
+    ${TRACE_SWORD}
+    const g = swordGame(60, 0);
+    const avatar = g.s.actors[0];
+    const visual = createVisual();
+    for (let i = 1; i <= 13; i++) step(g.s, { move: { x: 0, y: 0 } }, g.bp, visual);
+    const born = JSON.parse(JSON.stringify(visual.traces.find((t) => t.cone !== null)));
+    const hitboxesAtBirth = g.s.hitboxes.length;
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+      const before = { x: avatar.position.x, y: avatar.position.y };
+      step(g.s, { move: { x: 1, y: 0 } }, g.bp, visual);
+      const trace = visual.traces.find((t) => t.cone !== null);
+      rows.push({ before, trace: { x: trace.position.x, y: trace.position.y }, dir: [trace.cone.dirX, trace.cone.dirY], age: trace.age });
+    }
+    return { born, hitboxesAtBirth, rows, moved: avatar.position.x };
+  `));
+  assert.strictEqual(r.born.owner, "avatar_1");
+  assert.deepStrictEqual(r.born.offset, { x: 0, y: 0 });
+  assert.strictEqual(r.hitboxesAtBirth, 0);
+  assert.ok(r.moved > 0, "the avatar must have moved");
+  for (const row of r.rows) {
+    assert.deepStrictEqual(row.trace, row.before, "the trace is on the avatar's place");
+    assert.deepStrictEqual(row.dir, [r.born.cone.dirX, r.born.cone.dirY], "the direction stays the one of the blow");
+  }
+  assert.ok(r.rows[5].trace.x > r.rows[0].trace.x, "the trace really travelled");
+  assert.deepStrictEqual(r.rows.map((row) => row.age), [1, 2, 3, 4, 5, 6]);
+});
+
+test("250 the trace of a bite follows the Biter with its offset of one body ahead (issue 72): born at (21, 0) with offset (-18, 0) for a Biter at (39, 0), then, as the Biter is moved by hand in its freeze, each step puts it on the Biter's place of the start of that step plus the offset, the offset never changing", () => {
+  const r = plain(run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    const visual = createVisual();
+    for (let i = 1; i <= 16; i++) step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+    const born = JSON.parse(JSON.stringify(visual.traces[0]));
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+      b.position.x += 2; b.position.y += 5; // the Biter is in its freeze: it does not move by itself
+      const before = { x: b.position.x, y: b.position.y };
+      step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+      rows.push({ before, trace: { x: visual.traces[0].position.x, y: visual.traces[0].position.y }, offset: visual.traces[0].offset });
+    }
+    return { born, rows, phase: b.ai.phase };
+  `));
+  assert.deepStrictEqual([r.born.owner, r.born.position, r.born.offset], ["biter 0,0", { x: 21, y: 0 }, { x: -18, y: 0 }]);
+  assert.strictEqual(r.phase, "freeze");
+  for (const row of r.rows) {
+    assert.deepStrictEqual(row.trace, { x: row.before.x - 18, y: row.before.y }, "the trace is the Biter's place plus the offset");
+    assert.deepStrictEqual(row.offset, { x: -18, y: 0 });
+  }
+});
+
+test("251 an owner that is gone leaves the trace where it last was and it fades there (issue 72): a bite's trace follows its Biter, the Biter is killed and removed from the actors, and from then on the trace stays on the same place, gets older and goes at its age of 12", () => {
+  const r = plain(run(`
+    ${ALONE_BITERS}
+    const s = aloneBiters(0);
+    const b = s.actors[1];
+    b.position.x = 16 + b.radius + 5; b.position.y = 0;
+    const visual = createVisual();
+    for (let i = 1; i <= 16; i++) step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+    b.position.y += 10;
+    step(s, { move: { x: 0, y: 0 } }, undefined, visual); // the trace follows
+    const followed = { x: visual.traces[0].position.x, y: visual.traces[0].position.y };
+    b.health.now = 0; // dies in this step and is removed at its end
+    const rows = [];
+    for (let i = 0; i < 12; i++) {
+      step(s, { move: { x: 0, y: 0 } }, undefined, visual);
+      rows.push({ gone: !s.actors.some((actor) => actor.id === "biter 0,0"), trace: visual.traces.length === 0 ? null : { x: visual.traces[0].position.x, y: visual.traces[0].position.y, age: visual.traces[0].age } });
+    }
+    return { followed, rows };
+  `));
+  assert.deepStrictEqual(r.followed, { x: 21, y: 10 });
+  assert.strictEqual(r.rows[0].gone, true);
+  const still = r.rows.filter((row) => row.trace !== null);
+  assert.ok(still.length >= 3, "the trace fades for several steps after the owner is gone");
+  for (const row of still) assert.deepStrictEqual([row.trace.x, row.trace.y], [21, 10]);
+  assert.ok(still[still.length - 1].trace.age > still[0].trace.age);
+  assert.strictEqual(r.rows[r.rows.length - 1].trace, null, "and it goes at its age of 12");
+});
+
+test("252 the trace that follows its owner is visual only (issue 72): 900 frames of Chamber 2 with the sword and a moving avatar, with the visual state and without it, give the same state bit for bit and the same journal; traces of a cone and of a bite both followed their owners; and the state carries no key named owner-offset or trace of its own (no new field from this change)", () => {
+  const r = plain(run(`
+    const play = (withVisual) => {
+      const run = createRun(1, { parts: ["shoulder-r", "shoulder-l", "sword-arm", "arm-l", "head", "torso", "legs", "generator", "booster"] });
+      const s = createChamber2State(1, 1, run.blueprint);
+      const visual = withVisual ? createVisual() : null;
+      const journal = createJournal();
+      let cones = 0, bites = 0;
+      for (let i = 0; i < 900; i++) {
+        step(s, { move: { x: i % 40 < 20 ? 1 : -1, y: 0 } }, run.blueprint, visual, journal);
+        if (visual) for (const t of visual.traces) { if (t.age === 0) { if (t.cone) cones++; else bites++; } }
+      }
+      return { state: JSON.stringify(s), journal: journal.join("\\n"), cones, bites };
+    };
+    const a = play(true);
+    const b = play(false);
+    const keys = new Set();
+    const walk = (value) => { if (value && typeof value === "object") for (const k of Object.keys(value)) { keys.add(k); walk(value[k]); } };
+    walk(JSON.parse(a.state));
+    return { sameState: a.state === b.state, sameJournal: a.journal === b.journal, cones: a.cones, bites: a.bites, keys: [...keys] };
+  `));
+  assert.strictEqual(r.sameState, true);
+  assert.strictEqual(r.sameJournal, true);
+  assert.ok(r.cones >= 1 && r.bites >= 1, "the run must have a blow of the sword and a bite");
+  for (const key of ["traces", "trace", "offset", "traceOwner", "traceOffset"]) assert.ok(!r.keys.includes(key), "the state has a new field: " + key);
 });
