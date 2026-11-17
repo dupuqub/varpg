@@ -2881,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 69, hash: "da3b5fbfc628d10e" };
+const DATA_FINGERPRINT = { version: 70, hash: "5b4697d8b7bf6a3d" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -6390,4 +6390,135 @@ test("276 the validator takes the Jumper's data and refuses what the rules refus
     ["dashSpeed: 12, dashCharges: 1, rechargeFrames: 90.5", /rechargeFrames of the creature part jumper-springlegs.*whole/],
   ]) assert.match(loadError((text) => text.replace(legs, specs)) ?? "", refused, specs);
   assert.strictEqual(loadError(null), null);
+});
+
+// ---- The Jumper's mind: the jump (issue 76, parcel 3 of 4) ----
+
+// A game with no objects (chancePercent 0) whose map chamber2 spawns only what `spawns` says (the real map spawns no Jumper yet).
+const jumperGame = (spawns, { objects = false } = {}) => loadGame((text) => {
+  assert.ok(CHAMBER2_SPAWNS.test(text), "the spawn array of chamber2 is no longer written as the tests expect");
+  const placed = text.replace(CHAMBER2_SPAWNS, "spawns: " + spawns + ",");
+  return objects ? placed : placed.replace("chancePercent: 35", "chancePercent: 0");
+});
+const ONE_JUMPER = jumperGame('[{ initialFrame: 0, count: 1, type: "jumper" }]');
+// The scene: frame 1 with the one Jumper of frame 0 (firstBirths), moved to (x, 0); the avatar stands at (0, 0) with radius 16 (no shield).
+const JUMPER_SCENE = (x) => `
+  const run = createRun(1);
+  const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+  const avatar = s.actors[0], jumper = s.actors[1];
+  jumper.position.x = ${x}; jumper.position.y = 0; setCells(jumper, s.grid);
+  const still = { move: { x: 0, y: 0 } };`;
+
+// The slide of one jump, from the numbers of the data: the dash speed (12) in the frame of the dash, then less by the decay of the dash
+// (overspeedDecay 0.5) every frame, since the Spring legs' top speed is 0, down to 0: 12, 11.5, ..., 0.5, then 0. Its sum is the length of a jump.
+const JUMP_SLIDE = [];
+for (let speed = 12; speed > 0; speed -= 0.5) JUMP_SLIDE.push(speed);
+const JUMP_LENGTH = JUMP_SLIDE.reduce((sum, speed) => sum + speed, 0); // 150
+
+test("277 a Jumper alone with a still avatar jumps, slides, stops, waits its recharge and jumps again (issue 76, parcel 3): 520 px to the right of the avatar it dashes in the first frame (it is born with its charge), at the dash speed 12, toward the avatar; it slides 12, 11.5, ... 0.5 px (the decay of the dash, its top speed being 0), 150 px in 24 frames, and stands; its charge comes back 90 frames after the dash and it jumps again in that frame, and again 90 frames later; it never moves off its line and never touches the avatar", () => {
+  const r = plain(run(`${JUMPER_SCENE(520)}
+    const frames = [];
+    for (let i = 0; i < 210; i++) {
+      const frame = s.frame;
+      step(s, still, run.blueprint);
+      frames.push({ frame, x: jumper.position.x, y: jumper.position.y, vx: jumper.move.velocity.x, vy: jumper.move.velocity.y, charges: jumper.dash.charges.now });
+    }
+    return { frames, start: 1, health: [avatar.health.now, avatar.health.max, jumper.health.now, jumper.health.max] };`, ONE_JUMPER));
+  const dashes = r.frames.filter((f) => f.vx === -12).map((f) => f.frame);
+  assert.deepStrictEqual(dashes, [1, 91, 181], "a jump in the first frame and one every 90 frames of recharge");
+  // The speed of every frame: three slides, still in between.
+  const expected = [];
+  for (let i = 0; i < 210; i++) {
+    const since = i % 90;
+    expected.push(since < JUMP_SLIDE.length ? -JUMP_SLIDE[since] : 0);
+  }
+  assert.deepStrictEqual(r.frames.map((f) => f.vx), expected.map((v) => v + 0)); // + 0: a still frame is 0, never -0
+  assert.ok(r.frames.every((f) => f.y === 0 && f.vy === 0), "a straight line toward the avatar");
+  assert.strictEqual(r.frames[23].x, 520 - JUMP_LENGTH, "the first jump is 150 px long and ends in its 24th frame");
+  assert.strictEqual(r.frames[89].x, 520 - JUMP_LENGTH, "it stands until its charge comes back");
+  assert.strictEqual(r.frames[209].x, 520 - 3 * JUMP_LENGTH);
+  // The charge: spent at each dash, back in the frame of the next one (and spent again in it), so it is 0 between the jumps.
+  assert.deepStrictEqual([r.frames[0].charges, r.frames[89].charges, r.frames[90].charges], [0, 0, 0]);
+  assert.deepStrictEqual(r.health, [100, 100, 60, 60], "nobody was touched");
+});
+
+test("278 a jump that connects writes one body slam line each way and none while they stay in touch (issue 76, parcel 3): a Jumper 100 px from a still avatar jumps into it in the first frame; in the 90 frames before its next jump the journal has exactly two hits, in the same frame, the Jumper's bodySlam on the avatar and the avatar's on the Jumper, blunt, and nothing else, while they touch for more than one frame", () => {
+  const r = plain(run(`${JUMPER_SCENE(100)}
+    const journal = createJournal();
+    const touching = [];
+    for (let i = 0; i < 90; i++) {
+      step(s, still, run.blueprint, null, journal);
+      if (s.contacts.some((key) => key.includes(jumper.id))) touching.push(s.frame);
+    }
+    return { lines: journal.map((line) => JSON.parse(line)), touching, avatar: avatar.health.now, jumper: jumper.health.now, id: jumper.id };`, ONE_JUMPER));
+  assert.strictEqual(r.lines.length, 2, JSON.stringify(r.lines));
+  const [a, b] = r.lines;
+  assert.deepStrictEqual([a.event, b.event, a.attack, b.attack], ["hit", "hit", "bodySlam", "bodySlam"]);
+  assert.strictEqual(a.frame, b.frame);
+  assert.deepStrictEqual([[a.source, a.target], [b.source, b.target]].map((pair) => pair.join(" on ")).sort(), ["avatar_1 on " + r.id, r.id + " on avatar_1"].sort());
+  assert.ok(r.lines.every((line) => line.parts.map((part) => part.type).join() === "blunt" && line.total > 0));
+  assert.ok(r.touching.length > 1, "they stayed in touch for more than one frame: " + JSON.stringify(r.touching));
+  assert.ok(r.avatar < 100 && r.jumper < 60, "both were hurt, once each");
+});
+
+test("279 a jump at an avatar that moved away misses and hurts nobody (issue 76, parcel 3): a Jumper 120 px to the right of the avatar jumps in the first frame at where the avatar is then, and in that same frame the avatar dashes down; the Jumper slides along its line (y stays 0) through the place where the avatar was, 150 px, to x = -30, the two bodies never touch, and in the 90 frames before its next jump nobody is hit", () => {
+  const r = plain(run(`${JUMPER_SCENE(120)}
+    const journal = createJournal();
+    let closest = Infinity;
+    for (let i = 0; i < 90; i++) {
+      step(s, i === 0 ? { move: { x: 0, y: 1 }, dash: true } : still, run.blueprint, null, journal);
+      const dx = jumper.position.x - avatar.position.x, dy = jumper.position.y - avatar.position.y;
+      closest = Math.min(closest, Math.sqrt(dx * dx + dy * dy));
+    }
+    return { lines: journal.length, closest, touch: avatar.radius + jumper.radius, x: jumper.position.x, y: jumper.position.y, health: [avatar.health.now, jumper.health.now], avatarY: avatar.position.y };`, ONE_JUMPER));
+  assert.strictEqual(r.lines, 0, "nobody is hit");
+  assert.deepStrictEqual(r.health, [100, 60]);
+  assert.deepStrictEqual([r.x, r.y], [120 - JUMP_LENGTH, 0], "a straight line at the old place, with no correction in the air");
+  assert.ok(r.closest > r.touch, "the bodies never touched: closest " + r.closest + ", touching at " + r.touch);
+  assert.ok(r.avatarY > 100, "the avatar went away");
+});
+
+test("280 a Jumper with no living ally stands still (issue 76, parcel 3): with the avatar's tags emptied there is nothing that is ally; for 200 frames the Jumper does not dash, keeps its charge, wants no direction and stays where it is, at speed 0", () => {
+  const r = plain(run(`${JUMPER_SCENE(200)}
+    avatar.tags = [];
+    const seen = [];
+    for (let i = 0; i < 200; i++) {
+      step(s, still, run.blueprint);
+      seen.push([jumper.position.x, jumper.position.y, jumper.move.velocity.x, jumper.move.velocity.y, jumper.move.direction.x, jumper.move.direction.y, jumper.dash.charges.now]);
+    }
+    return seen;`, ONE_JUMPER));
+  assert.ok(r.every((row) => JSON.stringify(row) === JSON.stringify([200, 0, 0, 0, 0, 0, 1])), JSON.stringify(r.find((row) => JSON.stringify(row) !== JSON.stringify([200, 0, 0, 0, 0, 0, 1]))));
+});
+
+test("281 a run with Jumpers is reproducible as a whole state (issue 76, parcel 3): in a copy whose Chamber 2 spawns 6 Jumpers and 10 Biters at the start and 4 Jumpers at frame 100, with the objects, 900 frames of moves and dashes (the avatar mostly still, so the Jumpers reach it) end in the same state when played twice, the history's cross-check finds no difference, and going back to frame 820 and playing the same inputs again gives the same state; the Jumpers did jump and slam", () => {
+  const game = jumperGame('[{ initialFrame: 0, count: 6, type: "jumper" }, { initialFrame: 0, count: 10, type: "biter" }, { initialFrame: 100, count: 4, type: "jumper" }]', { objects: true });
+  const r = plain(run(`
+    const run = createRun(1);
+    const inputs = [];
+    for (let i = 0; i < 900; i++) inputs.push({ move: (i % 60) < 12 ? { x: (i % 120) < 60 ? 1 : -1, y: 0.5 } : { x: 0, y: 0 }, dash: i % 97 === 5 }); // mostly still, so the Jumpers reach it
+    function play(withHistory) {
+      const s = createChamber2State(1, 1, run.blueprint);
+      s.actors[0].health.now = 1e9; // the avatar does not die: the whole run is played
+      const history = withHistory ? createHistory(s, run.blueprint) : null;
+      const journal = createJournal();
+      let jumps = 0;
+      for (const input of inputs) {
+        step(s, input, run.blueprint, null, journal);
+        jumps += s.actors.filter((actor) => actor.type === "jumper" && Math.abs(Math.sqrt(actor.move.velocity.x ** 2 + actor.move.velocity.y ** 2) - 12) < 1e-9).length;
+        if (history) recordFrame(history, s, input);
+      }
+      return { s, history, journal, jumps };
+    }
+    const first = play(true), second = play(false);
+    const index = first.history.snaps.findIndex((snap) => snap.frame === 820);
+    const back = stateFromSnap(first.history, index);
+    for (let i = 820; i < 900; i++) step(back, inputs[i], run.blueprint);
+    const slams = first.journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit" && String(line.source).startsWith("jumper")).length;
+    return { same: JSON.stringify(first.s) === JSON.stringify(second.s), again: JSON.stringify(back) === JSON.stringify(first.s), check: crossCheck(first.history),
+      jumpers: first.s.actors.filter((actor) => actor.type === "jumper").length, jumps: first.jumps, slams, frame: first.s.frame };`, game));
+  assert.strictEqual(r.frame, 900);
+  assert.strictEqual(r.same, true, "two plays of the same inputs");
+  assert.strictEqual(r.check, null, "the cross-check of the history");
+  assert.strictEqual(r.again, true, "back to frame 220 and the same inputs again");
+  assert.ok(r.jumpers > 0 && r.jumps > 10 && r.slams > 0, "the Jumpers were there and jumped and slammed: " + JSON.stringify(r));
 });

@@ -40,6 +40,10 @@ function finalizeObject(type, rolls, blueprint, id) {
   // A creature whose parts give a dash (issue 76) carries the dash state of the avatar (its initial dash plus the charges createAvatar
   // writes); the charges are filled when it is born (spawnActor). No actor of the data has one yet, so no state changes today.
   if (createsDash(recipe)) object.dash = { recharge: 0, charges: { now: 0, max: 0 } };
+  // A creature whose parts give a jump (issue 76, parcel 3: the Jumper's Spring legs) is born with the mind of the jump: ai.jump, a copy of
+  // the part's jump (its target), read by thinkJump. Only the Jumper has one, and no map spawns it yet, so no state changes today.
+  const jump = recipeJump(recipe);
+  if (jump !== undefined) object.ai = { jump: JSON.parse(JSON.stringify(jump)) };
   return object;
 }
 
@@ -259,6 +263,16 @@ function recipeAttacks(definition) {
   return attacks;
 }
 
+// The jump of a recipe (issue 76, parcel 3: the Jumper's Spring legs): the `jump` of the first of its parts that has one, or undefined.
+// A recipe whose parts give a jump is born with the mind of the jump (finalizeObject writes its `ai`, see thinkJump).
+function recipeJump(definition) {
+  for (const id of definition.parts ?? []) {
+    const jump = DEFINITIONS.creatureParts[id].jump;
+    if (jump !== undefined) return jump;
+  }
+  return undefined;
+}
+
 // The tags of a recipe, written into the thing when it is made (finalizeObject): its own, then the tags of each of its parts in the order
 // of the list (issue 75, the user: "as tags devem vir das peças também... mas não somente"); a part may bring none, and the same tag twice
 // counts once. The Biter: its own enemy, and vermin from its Shell, in that order, as its recipe wrote them before parts.
@@ -405,6 +419,8 @@ function assertValidCreatureParts(tagList) {
     }
     if (part.tags !== undefined) tagList(part.tags, "the tags of " + where);
     for (const [name, attack] of Object.entries(part.attacks ?? {})) tagList(attack.ignores, "the ignores of the attack " + name + " of " + where);
+    // The jump (issue 76, parcel 3): only its target, checked like the target of an attack.
+    if (part.jump !== undefined) checkTarget(part.jump?.target, "the jump of " + where);
   }
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     if (actor.parts === undefined) continue;
@@ -1623,6 +1639,10 @@ function collideActors(state, lastContacts, journal = null) {
 // Called by step for every actor that has `ai`, before anyone moves. It only changes the actor (its ai and its wanted direction).
 function think(state, actor, byTag) {
   const ai = actor.ai;
+  if (ai.jump !== undefined) { // the mind of the jump (the Jumper, issue 76): see thinkJump
+    thinkJump(state, actor, byTag);
+    return;
+  }
   const attack = actor.attacks[ai.attack];
   const direction = actor.move.direction;
 
@@ -1693,6 +1713,32 @@ function think(state, actor, byTag) {
   }
   direction.x = towardX;
   direction.y = towardY;
+}
+
+// ---- The Jumper: the jump ----
+// The mind of an actor whose parts give a jump (issue 76, parcel 3: the Jumper's Spring legs; the user: "eles veem aonde eu estou e dão um
+// dash pra lá"). It has no attack: the jump is a dash (updateDash, the one formula of every actor), and it hurts only by the body slam.
+// Every frame it looks for its target (ai.jump.target, the closest "ally", through pickTarget and the index by tag, like the Biter):
+// - with a living target, it wants to go toward where the target is now, before anyone moves; an actor whose mind jumps wants to dash
+//   whenever it wants to move (see stage 2 of playStages), so it dashes in the first frame it has a charge, at that place, in a straight
+//   line. While it has no charge, wanting to go there changes nothing: its top speed and acceleration are 0 (the Spring legs), so it
+//   slides on with the decay of the dash and then stands; the direction of the jump is fixed at the dash (no correction in the air);
+// - with none (no living ally), it wants nothing: it does not dash and stands still.
+// Called by think, before anyone moves. It only changes the actor's wanted direction.
+function thinkJump(state, actor, byTag) {
+  const direction = actor.move.direction;
+  const target = pickTarget(state, actor, actor.ai.jump.target, Infinity, byTag); // at any distance, like the Biter (issue 13)
+  if (target === null) {
+    direction.x = 0;
+    direction.y = 0;
+    return;
+  }
+  const dx = target.position.x - actor.position.x;
+  const dy = target.position.y - actor.position.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  // On the same center there is no direction: it faces right, as the Biter does, so the result is the same everywhere.
+  direction.x = distance === 0 ? 1 : dx / distance;
+  direction.y = distance === 0 ? 0 : dy / distance;
 }
 
 // ---- Weapons ----
@@ -2382,7 +2428,8 @@ function playStages(state, input, blueprint, visual, journal) {
     // slowing down starts in the next frame.
     let dashed = false;
     if (actor.dash) {
-      const wantsDash = isAvatar(actor) && input.dash === true;
+      // The avatar dashes when the button is pressed; an actor whose mind jumps (the Jumper, issue 76) whenever it wants to move (thinkJump).
+      const wantsDash = isAvatar(actor) ? input.dash === true : actor.ai?.jump !== undefined && (direction.x !== 0 || direction.y !== 0);
       dashed = updateDash(actor, wantsDash);
     }
 

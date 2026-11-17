@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 69;
+const DEFINITIONS_VERSION = 70;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -122,7 +122,8 @@ const DEFINITIONS = {
     // parts (issue 76, parcel 2): its health, tag vermin, dash, speed, acceleration, deceleration and weight come from its parts,
     //   Shell and Spring legs (DEFINITIONS.creatureParts, where the numbers and their reasons are). Its own tag is enemy, like the Biter's.
     // bodyIgnores: the Biter's. No attack of its own (no bite, no hitbox): the body slam is its attack.
-    // No ai yet: nothing in this parcel spawns it or makes it move; its mind comes in parcel 3.
+    // No ai in its recipe: its mind comes from its Spring legs (issue 76, parcel 3: their `jump`, the target of the jump), written into the
+    // Jumper when it is made (finalizeObject), so a Jumper without its Spring legs has no mind and no dash. No map spawns it yet.
     jumper: {
       tags: ["enemy"],
       bodyIgnores: ["enemy", "object"],
@@ -479,7 +480,15 @@ const DEFINITIONS = {
     // dashCharges: guess, 1. rechargeFrames: guess, 90 (a jump every second and a half; the stillness between jumps is what the player reads).
     // speed, acceleration, deceleration: 0 (the user: "ele tem aceleração zero"); it moves only by dashing.
     // weightPerRadius: guess, 20 of the 100 (see the Shell).
-    "jumper-springlegs": { name: "Spring legs", specs: { speed: 0, acceleration: 0, deceleration: 0, dashSpeed: 12, dashCharges: 1, rechargeFrames: 90, weightPerRadius: 20 } },
+    // jump (issue 76, parcel 3): the mind of the legs. With a charge and a living target it dashes at where the target is in that frame, a
+    //   straight line with no correction in the air (it can miss); with no living target it stands still (thinkJump in src/sim.js).
+    //   target: guess of the Review desk, the closest thing that is "ally", the same rule as the Biter's bite (the avatar is the only one today).
+    //   The jump is a dash, not an attack: no hitbox, no damage of its own; it hurts only by the body slam when it collides.
+    "jumper-springlegs": {
+      name: "Spring legs",
+      specs: { speed: 0, acceleration: 0, deceleration: 0, dashSpeed: 12, dashCharges: 1, rechargeFrames: 90, weightPerRadius: 20 },
+      jump: { target: { pick: "closest", tag: "ally" } },
+    },
   },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
