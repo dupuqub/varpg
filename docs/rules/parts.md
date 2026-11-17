@@ -7,6 +7,7 @@
 - Capacity, from the torso, is a hard limit on what the blueprint weighs, not a speed penalty: a blueprint above it is refused (docs/rules/parts.md).
 - The avatar starts with full health and full dash charges; with no part giving a dash there is none (docs/rules/parts.md).
 - The values of the parts copy the avatar from before parts, not a goal of play, and are the first to redo (docs/rules/parts.md).
+- A creature (the Dummy, the Biter) is made of parts too: an actor recipe may have a `parts` list of ids of `DEFINITIONS.creatureParts`, and its health, speed, acceleration, deceleration, weight, attacks and tags come from them; the avatar has none of these, it keeps its blueprint (docs/rules/parts.md).
 - Not built: a part would be an instance rolled by seed inside the ranges of its model, deterministic, and kept as rolled (with its seed and library version), never derived again; today the blueprint names part models (docs/rules/parts.md).
 - Not built: content would live in a library of shelves (one per pack), books (one per kind of content) and entries, addressed shelf:book:entry, versioned per shelf, frozen once, with pack effects as data, not code; today the definitions are one flat object with one version (docs/rules/parts.md).
 
@@ -28,6 +29,22 @@ The user asked for the kit with **only what is used now**: weight, speed, health
 - **Known weakness:** the values of the parts were chosen by the agent to reproduce what the avatar had before parts existed. They are not wrong, but they did not come from a goal of play, which is the opposite of the user's "no normalization". They are the first candidates to be redone.
 - From the user's old project, for reference: each part had `Specs` that add up, `Mods` that look like multipliers (not used here yet), and `Weight`, which was simply subtracted from the speed.
 - Open: whether other parts (the generator) add to the capacity.
+
+## Parts of creatures (issue 75)
+
+A creature part lives in `DEFINITIONS.creatureParts` in `src/data.js`, apart from the avatar's `DEFINITIONS.parts`. It has a `name` (flavor only) and, each optional:
+
+- `specs`: `health` (a range, `{ min, max }`), `speed`, `acceleration`, `deceleration` and `weightPerRadius` (whole kg per pixel of radius, like the objects').
+- `attacks`: written like the attacks of a recipe (the Biter's `bite`); the same attack name in two parts of one recipe is refused when the file loads.
+- `tags`: words added to the actor's tags.
+
+An actor recipe (`DEFINITIONS.actors`) may have an optional `parts` list. The list plays for it the role the blueprint plays for the avatar, with no slots and no limit. Its values are the sum of what its parts give (`recipeValue` in `src/sim.js`; the health ranges add their mins and their maxes); a value no part gives is none (a creature without Legs stands still). The tags of the actor are its own plus its parts', the same tag once, written once when it is made. A recipe with `parts` does not also write the old fields (`healthRange`, `speed`, `acceleration`, `deceleration`, `weightPerRadius`, `attacks`): the load refuses it, so each value has one source. The parts are checked when the file loads, like the avatar's.
+
+- The Dummy: `dummy-body` (Body: health) and `dummy-legs` (Legs: speed, acceleration, deceleration).
+- The Biter: `biter-shell` (Shell: health, the tag `vermin`), `biter-legs` (Legs: speed, acceleration, deceleration) and `biter-mouth` (Mouth: the bite, whole). Its own tag, `enemy`, stays in its recipe.
+- **The split of the weight is a guess.** Each `weightPerRadius` is marked `guess` in the data: Dummy Body 70 and Legs 30; Biter Shell 60, Legs 20 and Mouth 20. Only the sums are fixed (100 for each), because they are the weight the recipes had before parts.
+- The numbers of the parts are the ones the recipes had (the Dummy and the Biter are the same, bit for bit); their reasons are in the comments of the data.
+- Not built: taking a part off or putting one on an actor during a run.
 
 ## Parts made by seed (the user's idea, not implemented)
 
