@@ -6153,3 +6153,86 @@ test("263 the tag vermin of the Biter comes from its Shell and enemy stays its o
   assert.deepStrictEqual(plain(run(tags, shellTags("[]"))).born, ["enemy"]);
   assert.deepStrictEqual(plain(run(tags, shellTags('["enemy", "vermin"]'))).born, ["enemy", "vermin"]);
 });
+
+// ---- The tags of an actor (issue 75, parcel 4): its own plus its parts', once, when it is made ----
+
+// The Dummy's two parts as the data writes them, so a test can give them tags in a patched copy (loadGame fails loudly if the text moved).
+const DUMMY_BODY_PART = '"dummy-body": { name: "Body", specs: { health: { min: 100, max: 100 }, weightPerRadius: 70 } },';
+const DUMMY_LEGS_PART = '"dummy-legs": { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 30 } },';
+const withDummyPartTags = (bodyTags, legsTags) => loadGame((text) => {
+  let out = text;
+  if (bodyTags !== null) out = out.replace(DUMMY_BODY_PART, DUMMY_BODY_PART.replace(" } },", " }, tags: " + bodyTags + " },"));
+  if (legsTags !== null) out = out.replace(DUMMY_LEGS_PART, DUMMY_LEGS_PART.replace(" } },", " }, tags: " + legsTags + " },"));
+  return out;
+});
+const DUMMY_TAGS = `
+  const made = finalizeObject("dummy", {}, undefined, "x");
+  return { own: DEFINITIONS.actors.dummy.tags, recipe: recipeTags(DEFINITIONS.actors.dummy), born: tagsOf(made), avatarOwn: DEFINITIONS.actors.avatar.tags, avatar: tagsOf(finalizeObject("avatar", {}, createRun(1).blueprint, AVATAR_ID)) };`;
+
+test("264 the tags of an actor are its own, then its parts' (issue 75, parcel 4): in a copy where the Dummy's Body brings the tag heavy and its Legs bring none, a Dummy that is made is enemy and heavy, in that order; the real Dummy, whose parts bring no tags, keeps exactly its own tags (enemy); the avatar, which has no creature parts, keeps exactly its own tags (ally)", () => {
+  const union = plain(run(DUMMY_TAGS, withDummyPartTags('["heavy"]', null)));
+  assert.deepStrictEqual(union.own, ["enemy"]);
+  assert.deepStrictEqual(union.recipe, ["enemy", "heavy"]);
+  assert.deepStrictEqual(union.born, ["enemy", "heavy"]);
+  const real = plain(run(DUMMY_TAGS));
+  assert.deepStrictEqual(real.born, real.own, "an actor whose parts bring no tags should keep exactly its own tags");
+  assert.deepStrictEqual(real.born, ["enemy"]);
+  assert.deepStrictEqual(real.avatar, real.avatarOwn);
+  assert.deepStrictEqual(real.avatar, ["ally"]);
+});
+
+test("265 a tag given by two parts counts once (issue 75, parcel 4): in a copy where the Dummy's Body brings heavy and slow and its Legs bring slow and enemy (its own tag), a Dummy that is made is enemy, heavy and slow, each once, in the order they first appear", () => {
+  const r = plain(run(DUMMY_TAGS, withDummyPartTags('["heavy", "slow"]', '["slow", "enemy"]')));
+  assert.deepStrictEqual(r.recipe, ["enemy", "heavy", "slow"]);
+  assert.deepStrictEqual(r.born, ["enemy", "heavy", "slow"]);
+});
+
+// The tags of every actor of a Chamber 2 run, frame by frame: the tags each one had the first frame it was seen (its birth), and the
+// actors whose tags were ever different later. Played in the context "where", from a state given as JSON (or a new one).
+const TAGS_OVER_A_RUN = (frames, stateJson = null) => `
+  const run = createRun(1);
+  const s = ${stateJson === null ? "createChamber2State(1, 1, run.blueprint)" : "JSON.parse(" + JSON.stringify(stateJson) + ")"};
+  const atBirth = {};
+  const changed = [];
+  const look = () => {
+    for (const actor of s.actors) {
+      const tags = JSON.stringify(actor.tags);
+      if (atBirth[actor.id] === undefined) atBirth[actor.id] = tags;
+      else if (atBirth[actor.id] !== tags && !changed.includes(actor.id)) changed.push(actor.id);
+    }
+  };
+  look();
+  for (let frame = 0; frame < ${frames}; frame++) {
+    step(s, { move: { x: frame % 200 < 100 ? 1 : -1, y: frame % 300 < 150 ? 0.5 : -0.5 } }, run.blueprint);
+    look();
+  }
+  return { frame: s.frame, atBirth, changed, now: Object.fromEntries(s.actors.map((actor) => [actor.id, actor.tags])) };`;
+
+test("266 the tags of an actor are static (issue 75, parcel 4): in 301 frames of the real Chamber 2 (its first crowd and the wave of frame 300), the tags of every actor at every frame are the ones it had at its birth; after 300 frames the avatar is still ally and every Biter alive (from the start and from the wave) is still enemy and vermin", () => {
+  const r = plain(run(TAGS_OVER_A_RUN(301)));
+  assert.strictEqual(r.frame, 301);
+  assert.deepStrictEqual(r.changed, [], "the tags of these actors changed after their birth: " + r.changed.join(", "));
+  const ids = Object.keys(r.now);
+  const fromStart = ids.filter((id) => id.startsWith("biter 0,"));
+  const fromWave = ids.filter((id) => id.startsWith("biter ") && !id.startsWith("biter 0,"));
+  assert.ok(fromStart.length > 0 && fromWave.length > 0, "the run should have Biters from the start and from the wave alive: " + fromStart.length + " and " + fromWave.length);
+  for (const id of ids) {
+    assert.strictEqual(JSON.stringify(r.now[id]), r.atBirth[id], "the tags of " + id + " after 300 frames are not those of its birth");
+    assert.deepStrictEqual(r.now[id], id === "avatar_1" ? ["ally"] : ["enemy", "vermin"], "the tags of " + id);
+  }
+});
+
+test("267 the tags of an actor are not computed again each frame (issue 75, parcel 4): the state of frame 1 of Chamber 2, made with the real data, plays 300 more frames in a copy where the Shell brings vermin and patched; the Biters born before keep enemy and vermin at every frame (their tags were written when they were made), while the Biters born in the copy (the wave of frame 300) are enemy, vermin and patched", () => {
+  const born = plain(run("const s = createChamber2State(1, 1, createRun(1).blueprint); step(s, { move: { x: 0, y: 0 } }, createRun(1).blueprint); return s;"));
+  assert.strictEqual(born.frame, 1);
+  const patched = loadGame((text) => text.replace('weightPerRadius: 60 }, tags: ["vermin"] },', 'weightPerRadius: 60 }, tags: ["vermin", "patched"] },'));
+  const r = plain(run(TAGS_OVER_A_RUN(300, JSON.stringify(born)), patched));
+  assert.strictEqual(r.frame, 301);
+  assert.deepStrictEqual(r.changed, [], "the tags of these actors changed after their birth: " + r.changed.join(", "));
+  const ids = Object.keys(r.now);
+  const before = ids.filter((id) => id.startsWith("biter 0,"));
+  const after = ids.filter((id) => id.startsWith("biter ") && !id.startsWith("biter 0,"));
+  assert.ok(before.length > 0 && after.length > 0, "the run should have Biters born before and in the copy alive: " + before.length + " and " + after.length);
+  for (const id of before) assert.deepStrictEqual(r.now[id], ["enemy", "vermin"], "the tags of " + id + ", born with the real data");
+  for (const id of after) assert.deepStrictEqual(r.now[id], ["enemy", "vermin", "patched"], "the tags of " + id + ", born in the copy");
+});
