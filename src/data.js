@@ -13,11 +13,11 @@
 //   anchor  = tied to something in the real world
 //   rule    = forced by another number or by a rule of the game
 //   guess   = a placeholder, to be tuned by playing
-// The relations between numbers are collected in AGENTS.md ("Where the numbers are", "Relations").
+// The relations between numbers are collected in docs/rules/numbers.md ("Where the numbers are", "Relations").
 // Every weight is a whole number of kg, 0 or more: the weight of a part, and for an object its "size"
 // ({ min, max }: the range of its radius) and its "weightPerRadius", all whole: weight = weightPerRadius x radius,
 // so it is whole by construction. src/sim.js checks it when it loads. A weight of 0 means harmless and easy to
-// break (a branch, a box), see AGENTS.md ("Weight 0").
+// break (a branch, a box), see docs/rules/damage.md ("Weight 0").
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
