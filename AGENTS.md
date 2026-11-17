@@ -24,6 +24,29 @@ A 2D top-down action RPG in the vein of Diablo and Path of Exile, running in the
 
 Repository state (2026-11-12): the game is **public and online** (`https://dupuqub.github.io/varpg/`, published from `main` by a workflow that runs the tests first; see "Publishing" in docs/notes/handoff.md). Screen navigation (main menu, test chambers list, Chamber 0 diagnostics and the played Chambers 1 and 2), with pause, one frame back and forward, fullscreen, and keyboard, gamepad and touch controls. In Chamber 1 the avatar is always at the center of the screen, moves with inertia, dashes, collides with the objects of the seed (rocks and Shrooms, all placed by seed and formula, in layers, none by hand) and with the Dummies (test actors made by the seed, born from the map's spawn events off the screen, wandering and wrapping around the window of the grid), and collisions with the avatar hurt (the body slam); actors push each other by weight. The avatar's values are sums over the mecha parts of its blueprint. The collision grid (several cells per actor) is used between actors. In Chamber 2 the Dummies are replaced by Biters, born from the map's spawn events (a crowd after the first step, then waves), enemies that chase the avatar and bite with a hitbox; damage is a packet by type that the target resists by points; the avatar has an auto-aiming repeater whose ammunition weighs, and a shield from the Generator whose ring is its radius. See "Code layout" (docs/rules/code-layout.md). **More than one agent may work here: read "Working with several agents" and `docs/desks.md` before the first change.**
 
+## Where things are
+
+| Topic | File | What is there |
+|---|---|---|
+| Actors | `docs/rules/actor.md` | The Dummy and the other actors: how they are made and behave. |
+| Code layout | `docs/rules/code-layout.md` | Which file of the code holds what. |
+| Damage | `docs/rules/damage.md` | Damage packets, resistance and how a hit lands. |
+| Movement | `docs/rules/movement.md` | Canvas, camera, movement, dash and input. |
+| Numbers | `docs/rules/numbers.md` | Where each kind of number lives in the code. |
+| Parts | `docs/rules/parts.md` | The kit of mecha parts and how their specs add up. |
+| Screens | `docs/rules/screens.md` | The mecha theme, the screens and the stack. |
+| Spawn | `docs/rules/spawn.md` | The spawn events of each map. |
+| State | `docs/rules/state.md` | Simulation, the state, the definitions and the run history. |
+| Weapons (rules) | `docs/rules/weapons.md` | The decided rules of weapons, shots and objects. |
+| World | `docs/rules/world.md` | The seed, the objects, collision and the grid. |
+| Handoff | `docs/notes/handoff.md` | State of the work, open items, ideas, publishing and patterns. |
+| Desks | `docs/desks.md` | Which conversations to open and what each one does. |
+| Step order | `docs/step-order.md` | The stages of one step and why each sits where it does. |
+| Weapons (vision) | `docs/weapons.md` | The user's vision of weapons, the old model and open questions. |
+| Decisions | `docs/decisions.md` | The history of the rules: older versions and who changed them. |
+| Method | `docs/method.md` | How work is cut into parcels, with a coordinator and helpers. |
+| Tests | `tests/agent/README.md` | How to run the tests and what each one checks. |
+
 ## Concept
 
 The game is a constructive critique of the methods of some games. Axes, in priority order:
