@@ -3820,6 +3820,16 @@ test("168 AGENTS.md opens with the two foundations (go slowly; break big tasks i
   assert.ok(/Go slowly and deliberately/.test(section) && /Break every big task into small steps/.test(section));
 });
 
+test("248 AGENTS.md is at or below 40 KB (40 * 1024 bytes) and every docs/rules/ and docs/notes/ file it points to exists, so no detail grows back into the guide and no pointer is dead", () => {
+  const file = path.join(__dirname, "..", "..", "AGENTS.md");
+  assert.ok(fs.statSync(file).size <= 40 * 1024, "AGENTS.md is " + fs.statSync(file).size + " bytes, above 40 KB (40960)");
+  const text = fs.readFileSync(file, "utf8");
+  const pointers = new Set([...text.matchAll(/docs\/(?:rules|notes)\/[A-Za-z0-9_.-]+\.md/g)].map((match) => match[0]));
+  assert.ok(pointers.size >= 10, "too few pointers read from AGENTS.md: " + pointers.size);
+  const missing = [...pointers].filter((pointer) => !fs.existsSync(path.join(__dirname, "..", "..", pointer)));
+  assert.deepStrictEqual(missing, [], "AGENTS.md points to files that do not exist");
+});
+
 // ---- The first dash and the safe ground around the start (review 2026-11-13, point 1; issue 4) ----
 // The promise of safeRadius: the very first dash, straight from the start, cannot touch an object. The avatar is born with a
 // full shield, so its radius at that moment is the ring, not the body; and the blueprint decides the top speed, so a heavier
