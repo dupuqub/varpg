@@ -4,7 +4,8 @@
 const REFERENCE_GRID_CELL = 64;
 const REFERENCE_GRID_COLOR = "#1d232b";
 const AVATAR_COLOR = "#ffffff";
-const ACTOR_COLORS = { dummy: "#3d8bff", biter: "#e0453a" }; // by actor type (not the avatar): a new actor type needs its color here
+const ACTOR_COLORS = { dummy: "#3d8bff", biter: "#e0453a", jumper: "#4fd17a" }; // by actor type (not the avatar): a new actor type needs its color here. The Jumper is green: no other actor, hitbox (yellow) or the avatar (white) has it (issue 78)
+const SQUARE_ACTORS = ["jumper"]; // the actor types drawn as a square instead of a circle, so a Jumper is told from a Biter by shape too, not only by color and size (issue 78)
 const RADAR_COLOR = "rgba(255, 255, 255, 0.6)"; // the circle of the Radar: white, no fill
 const HITBOX_COLOR = "#ffd23f"; // the hitboxes are yellow circles
 const OBJECT_COLORS = { rock: "#5a5f66", shroom: "#b5ad7a", branch: "#7a5a3c" }; // by object type: a new object type needs its color here. The Branch is a wood brown (the planner's choice), so it reads apart from the gray rock and the beige Shroom.
@@ -129,9 +130,13 @@ function drawActors(context, state, player) {
     const screenY = actor.position.y - player.position.y + height / 2;
     if (screenX < -actor.radius || screenX > width + actor.radius || screenY < -actor.radius || screenY > height + actor.radius) continue;
     context.fillStyle = color;
-    context.beginPath();
-    context.arc(screenX, screenY, actor.radius, 0, Math.PI * 2);
-    context.fill();
+    if (SQUARE_ACTORS.includes(actor.type)) {
+      context.fillRect(screenX - actor.radius, screenY - actor.radius, actor.radius * 2, actor.radius * 2); // the square holds the circle of its radius, so what is drawn is what collides, at least as far out
+    } else {
+      context.beginPath();
+      context.arc(screenX, screenY, actor.radius, 0, Math.PI * 2);
+      context.fill();
+    }
     if (actor.health.now < actor.health.max) {
       drawHealthLabel(context, screenX, screenY - actor.radius - 8, actor.health.now, actor.health.max);
     }

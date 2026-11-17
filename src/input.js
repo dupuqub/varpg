@@ -13,7 +13,7 @@ let dashPressed = false;
 let padDashWasDown = false;
 
 // The screens that are played (the same ones as CHAMBERS in main.js, which is loaded after this file).
-const GAME_SCREENS = ["screen-chamber-1", "screen-chamber-2"];
+const GAME_SCREENS = ["screen-chamber-1", "screen-chamber-2", "screen-chamber-3"];
 
 function inGameView() {
   return GAME_SCREENS.some((id) => !document.getElementById(id).hidden);

@@ -23,6 +23,7 @@
     <button data-goto="screen-chamber-0">CHAMBER 0: DIAGNOSTICS</button>
     <button data-goto="screen-chamber-1">CHAMBER 1: MOVEMENT</button>
     <button data-goto="screen-chamber-2">CHAMBER 2: COMBAT</button>
+    <button data-goto="screen-chamber-3">CHAMBER 3: JUMPERS</button>
     <button data-goto="screen-menu">BACK</button>
   </main>
 
@@ -48,6 +49,27 @@
     <canvas id="canvas-2" width="1920" height="1080"></canvas>
     <div class="overlay">
       <span>CHAMBER 2: COMBAT</span>
+      <span class="hint">WASD / LEFT STICK: MOVE · SPACE / A: DASH</span>
+      <span class="controls">
+        <button data-control="back" title="STEP BACK ONE FRAME (KEY ,)">&lt;&lt;</button>
+        <button data-control="toggle" title="PAUSE / PLAY (KEY P)">||</button>
+        <button data-control="forward" title="STEP FORWARD ONE FRAME (KEY ; OR .)">&gt;&gt;</button>
+        <button data-control="fullscreen" title="FULLSCREEN" hidden>[ ]</button>
+        <span data-control="status"></span>
+      </span>
+      <button data-goto="screen-chambers">BACK (ESC)</button>
+    </div>
+    <div class="alert" data-control="aborted" hidden>
+      <span>ABORT MISSION</span>
+      <button data-goto="screen-menu">BACK TO THE MENU</button>
+    </div>
+  </main>
+
+  <!-- Chamber 3: Chamber 2 plus Jumpers (issue 78) -->
+  <main id="screen-chamber-3" class="screen fullscreen" hidden>
+    <canvas id="canvas-3" width="1920" height="1080"></canvas>
+    <div class="overlay">
+      <span>CHAMBER 3: JUMPERS</span>
       <span class="hint">WASD / LEFT STICK: MOVE · SPACE / A: DASH</span>
       <span class="controls">
         <button data-control="back" title="STEP BACK ONE FRAME (KEY ,)">&lt;&lt;</button>
