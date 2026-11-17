@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 71;
+const DEFINITIONS_VERSION = 72;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -121,6 +121,7 @@ const DEFINITIONS = {
     // size: guess, 22 to 28, bigger than the Biter's 12 to 20.
     // parts (issue 76, parcel 2): its health, tag vermin, dash, speed, acceleration, deceleration and weight come from its parts,
     //   Shell and Spring legs (DEFINITIONS.creatureParts, where the numbers and their reasons are). Its own tag is enemy, like the Biter's.
+    //   The Carapace (issue 81, parcel B): blunt resistance only while its jump is active (see the part).
     // bodyIgnores: the Biter's. No attack of its own (no bite, no hitbox): the body slam is its attack.
     // No ai in its recipe: its mind comes from its Spring legs (issue 76, parcel 3: their `jump`, the target of the jump), written into the
     // Jumper when it is made (finalizeObject), so a Jumper without its Spring legs has no mind and no dash. No map spawns it yet.
@@ -129,7 +130,7 @@ const DEFINITIONS = {
       bodyIgnores: ["enemy", "object"],
       name: "Jumper",
       size: { min: 22, max: 28 },
-      parts: ["jumper-shell", "jumper-springlegs"],
+      parts: ["jumper-shell", "jumper-springlegs", "jumper-carapace"],
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
@@ -395,6 +396,9 @@ const DEFINITIONS = {
   //           deceleration and weightPerRadius (whole kg per pixel of radius, like a recipe's)
   //           and the dash (issue 76): dashSpeed, dashCharges and rechargeFrames, the Booster's specs for the avatar, read the
   //           same way (a creature whose parts give none of them has no dash; the counts are whole)
+  //           and resistance (issue 81): points per damage type, like the avatar's parts
+  //   while   (issue 81) the condition under which its specs count: "dashing", while the actor's key of the jump (dash.active) is
+  //           on; for now only on a part whose specs are resistance and nothing else
   //   attacks attacks written like the attacks of an actor recipe ({ bite: { damage, reach, ... } }), checked by the same rule
   //   tags    words added to the actor's own tags
   // src/sim.js checks them when it loads, like the parts of the avatar (CREATURE_PART_SPECS). Empty for now: no actor uses it yet
@@ -489,6 +493,18 @@ const DEFINITIONS = {
       specs: { speed: 0, acceleration: 0, deceleration: 0, dashSpeed: 12, dashCharges: 1, rechargeFrames: 90, weightPerRadius: 20 },
       jump: { target: { pick: "closest", tag: "ally" } },
     },
+    // The Jumper's Carapace (the user, 2026-11-17, issue 81, parcel B; his idea and words are in issue 80): it gives 250 points of blunt
+    //   resistance only while the jump is active, "71% of blunt off: 250 / (250 + 100)" (constants.damage.resistanceScale 100). Not a
+    //   defense against body slams only: blunt, the type that exists. Why: a jump that connects cost the Jumper three to four times what
+    //   it cost the avatar (finding P5.1 of docs/review-2026-11-17.md: 8.97 against 2.57 at impact 7), because each side of a collision
+    //   is hurt by the other's weight; with the Carapace that 8.97 becomes 8.97 x 100 / 350 = 2.56.
+    // while: "dashing" (the field of a creature part whose specs count only in a state, src/sim.js CREATURE_PART_CONDITIONS): its specs
+    //   count only while the Jumper's key of the jump (dash.active) is on: from the start of a dash until its speed is back at its top
+    //   speed. A push during the jump keeps the key on, so it keeps the Carapace too, accepted by the user: "o bicho apanhando igual uma
+    //   piñata [...] ainda é um pulo em atividade, pelo menos para o Jumper". A still Jumper (key off) takes a body slam whole.
+    // weightPerRadius: guess, 0 (not written: a part with `while` may have only resistance in its specs, and a part that gives no weight
+    //   weighs 0), so the Jumper's weight, and so its body slam, stay as they are (100 kg per pixel of radius, Shell and Spring legs).
+    "jumper-carapace": { name: "Carapace", specs: { resistance: { blunt: 250 } }, while: "dashing" },
   },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).

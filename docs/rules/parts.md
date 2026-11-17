@@ -8,6 +8,7 @@
 - The avatar starts with full health and full dash charges; with no part giving a dash there is none (docs/rules/parts.md).
 - The values of the parts copy the avatar from before parts, not a goal of play, and are the first to redo (docs/rules/parts.md).
 - A creature (the Dummy, the Biter) is made of parts too: an actor recipe may have a `parts` list of ids of `DEFINITIONS.creatureParts`, and its health, speed, acceleration, deceleration, weight, attacks and tags come from them; the avatar has none of these, it keeps its blueprint (docs/rules/parts.md).
+- A creature part may give `resistance` and may say, with `while: "dashing"`, that its specs count only while its actor's key of the jump is on (only on a part whose specs are resistance, for now): the Jumper's Carapace, 250 blunt during the jump (docs/rules/parts.md).
 - Not built: a part would be an instance rolled by seed inside the ranges of its model, deterministic, and kept as rolled (with its seed and library version), never derived again; today the blueprint names part models (docs/rules/parts.md).
 - Not built: content would live in a library of shelves (one per pack), books (one per kind of content) and entries, addressed shelf:book:entry, versioned per shelf, frozen once, with pack effects as data, not code; today the definitions are one flat object with one version (docs/rules/parts.md).
 
@@ -37,6 +38,8 @@ A creature part lives in `DEFINITIONS.creatureParts` in `src/data.js`, apart fro
 - `specs`: `health` (a range, `{ min, max }`), `speed`, `acceleration`, `deceleration` and `weightPerRadius` (whole kg per pixel of radius, like the objects').
 - `attacks`: written like the attacks of a recipe (the Biter's `bite`); the same attack name in two parts of one recipe is refused when the file loads.
 - `tags`: words added to the actor's tags.
+- `specs.resistance` (issue 81, parcel B): points per damage type, as the avatar's parts (a known type, finite, above minus the resistance scale). The resistance of a creature is the sum over its parts whose condition holds (`creatureResistance` in `src/sim.js`), **computed when a hit needs it** (`resolveDamage`) from the key and the frozen data, so nothing new goes in the state; the avatar's stays written each frame from its blueprint (`finalizeDynamic`).
+- `while` (issue 81, parcel B): the condition under which the part's specs count. The only one is `"dashing"`: while the actor's key of the jump (`dash.active`, see docs/rules/movement.md) is on. **For now allowed only on a part whose specs are `resistance` and nothing else** (no other spec, attack, jump or tag, which would count always); anything else is refused when the file loads.
 
 An actor recipe (`DEFINITIONS.actors`) may have an optional `parts` list. The list plays for it the role the blueprint plays for the avatar, with no slots and no limit. Its values are the sum of what its parts give (`recipeValue` in `src/sim.js`; the health ranges add their mins and their maxes); a value no part gives is none (a creature without Legs stands still). The tags of the actor are its own plus its parts', the same tag once, written once when it is made. A recipe with `parts` does not also write the old fields (`healthRange`, `speed`, `acceleration`, `deceleration`, `weightPerRadius`, `attacks`): the load refuses it, so each value has one source. The parts are checked when the file loads, like the avatar's.
 
@@ -44,6 +47,7 @@ An actor recipe (`DEFINITIONS.actors`) may have an optional `parts` list. The li
 - The Biter: `biter-shell` (Shell: health, the tag `vermin`), `biter-legs` (Legs: speed, acceleration, deceleration) and `biter-mouth` (Mouth: the bite, whole). Its own tag, `enemy`, stays in its recipe.
 - **The split of the weight is a guess.** Each `weightPerRadius` is marked `guess` in the data: Dummy Body 70 and Legs 30; Biter Shell 60, Legs 20 and Mouth 20. Only the sums are fixed (100 for each), because they are the weight the recipes had before parts.
 - The numbers of the parts are the ones the recipes had (the Dummy and the Biter are the same, bit for bit); their reasons are in the comments of the data.
+- The Jumper: `jumper-shell` (Shell: health, the tag `vermin`), `jumper-springlegs` (Spring legs: the dash and the jump) and `jumper-carapace` (Carapace, issue 81: `resistance: { blunt: 250 }` with `while: "dashing"`, "71% of blunt off: 250 / (250 + 100)"; it gives no weight, a guess marked in the data, so the Jumper's weight and its slam stay as they were). A push during the jump keeps the key on, so the Carapace too (the user: "o bicho apanhando igual uma piñata [...] ainda é um pulo em atividade, pelo menos para o Jumper").
 - Not built: taking a part off or putting one on an actor during a run.
 
 ## Parts made by seed (the user's idea, not implemented)

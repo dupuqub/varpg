@@ -394,14 +394,16 @@ function checkNoWeight(amount, where) {
 
 // The specs a part of creatures can have (issue 75): the values of a creature recipe that a part may give. Anything else is refused
 // when the definitions load, like PART_SPECS for the parts of the avatar.
-const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius", ...DASH_SPECS];
+const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius", ...DASH_SPECS, "resistance"];
 
 // The parts of creatures and the recipes that name them (issue 75, parcel 1): called by assertValidDefinitions, with its check of a
 // list of tags. A recipe's `parts` is a list of ids of DEFINITIONS.creatureParts (the avatar has none: its parts are its blueprint);
 // a part has a name, optional specs of CREATURE_PART_SPECS with finite values (health is { min, max }, whole, 0 or more, min not
 // above max; weightPerRadius is whole kg, 0 or more, the weight rule; dashCharges and rechargeFrames are counts, whole, 0 or more
-// (issue 76); the others are numbers, 0 or more), optional tags (a list of
-// words) and optional attacks (checked with the attacks of the recipes, above in assertValidDefinitions).
+// (issue 76); resistance is points per known damage type, finite and above minus the resistance scale, as the avatar's parts (issue 81);
+// the others are numbers, 0 or more), optional tags (a list of words), optional attacks (checked with the attacks of the recipes, above
+// in assertValidDefinitions) and an optional condition `while` (issue 81, parcel B: one of CREATURE_PART_CONDITIONS), allowed for now
+// only on a part whose specs are resistance and nothing else (no other spec, no attack, no jump, no tag, which would count always).
 function assertValidCreatureParts(tagList) {
   const parts = DEFINITIONS.creatureParts;
   for (const [id, part] of Object.entries(parts)) {
@@ -418,6 +420,15 @@ function assertValidCreatureParts(tagList) {
         if (!(Number.isInteger(value) && value >= 0)) throw new Error("The spec weightPerRadius of " + where + " must be a whole number of kg, 0 or more, and it is " + value);
       } else if (name === "dashCharges" || name === "rechargeFrames") {
         if (!(Number.isInteger(value) && value >= 0)) throw new Error("The spec " + name + " of " + where + " must be a whole number, 0 or more (a count), and it is " + value);
+      } else if (name === "resistance") {
+        // Points per damage type, checked as the avatar's parts are (issue 81): a known type, finite, above minus the resistance scale.
+        if (value === null || typeof value !== "object") throw new Error("The spec resistance of " + where + " must be points per type of damage ({ blunt: 10 }), and it is " + JSON.stringify(value));
+        const scale = DEFINITIONS.constants.damage.resistanceScale;
+        for (const [type, points] of Object.entries(value)) {
+          if (!DEFINITIONS.damageTypes.includes(type)) throw new Error("The resistance of " + where + " is to " + type + ", which is not a type of damage: " + DEFINITIONS.damageTypes.join(", "));
+          if (!Number.isFinite(points)) throw new Error("The resistance of " + where + " to " + type + " must be a finite number, and it is " + points);
+          if (points <= -scale) throw new Error("The resistance of " + where + " to " + type + " must be above minus the resistance scale (" + -scale + "), and it is " + points);
+        }
       } else if (!(typeof value === "number" && Number.isFinite(value) && value >= 0)) {
         throw new Error("The spec " + name + " of " + where + " must be a finite number, 0 or more, and it is " + value);
       }
@@ -426,6 +437,15 @@ function assertValidCreatureParts(tagList) {
     for (const [name, attack] of Object.entries(part.attacks ?? {})) tagList(attack.ignores, "the ignores of the attack " + name + " of " + where);
     // The jump (issue 76, parcel 3): only its target, checked like the target of an attack.
     if (part.jump !== undefined) checkTarget(part.jump?.target, "the jump of " + where);
+    // The condition (issue 81, parcel B): a known one, and for now only on a part whose specs are resistance and that gives nothing else.
+    if (part.while !== undefined) {
+      if (!Object.hasOwn(CREATURE_PART_CONDITIONS, part.while)) throw new Error("The while of " + where + " must be one of " + Object.keys(CREATURE_PART_CONDITIONS).join(", ") + ", and it is " + JSON.stringify(part.while));
+      const specs = Object.keys(part.specs ?? {});
+      const others = [...specs.filter((name) => name !== "resistance"), ...["attacks", "jump", "tags"].filter((key) => part[key] !== undefined)];
+      if (!specs.includes("resistance") || others.length > 0) {
+        throw new Error("The while of " + where + " is allowed only on a part whose specs are resistance and nothing else, and it has " + (others.length > 0 ? others.join(", ") : "no resistance"));
+      }
+    }
   }
   for (const [id, actor] of Object.entries(DEFINITIONS.actors)) {
     if (actor.parts === undefined) continue;
@@ -730,9 +750,34 @@ function finalBounce(thing, blueprint) {
 
 // The resistance of an actor to one type of damage, in points: for the avatar the sum of the resistance of its parts
 // (the user's decision: the resistance is a number of points, and the points become a share of the damage taken off by
-// a curve, see resolveDamage). Nothing else has any: no recipe gives it. Pure, like finalSpeed.
+// a curve, see resolveDamage); for any other thing the sum over the parts of its recipe whose condition holds now
+// (creatureResistance, issue 81: the Jumper's Carapace). Pure, like finalSpeed.
 function finalResistance(actor, blueprint, type) {
-  return isAvatar(actor) ? sumResistance(blueprint, type) : 0;
+  return isAvatar(actor) ? sumResistance(blueprint, type) : creatureResistance(actor, type);
+}
+
+// The conditions a creature part may put on its specs (issue 81, parcel B): the field `while` of the part names one, and its specs
+// count only while it holds for the actor. "dashing": while the actor's key of the jump is on (dash.active, set by the start of a dash
+// and cleared when the speed is back at the top speed; see releaseDashKey). For now only a part whose specs are resistance may have it
+// (assertValidCreatureParts).
+const CREATURE_PART_CONDITIONS = { dashing: (actor) => actor.dash !== undefined && actor.dash.active === true };
+
+// Whether the specs of a creature part count now for this actor: always, for a part with no `while`; else while its condition holds.
+function partCounts(actor, part) {
+  return part.while === undefined || CREATURE_PART_CONDITIONS[part.while](actor);
+}
+
+// The resistance of a creature to one type, in points (issue 81, parcel B): the sum of the `resistance` of the parts of its recipe whose
+// condition holds now (partCounts), as the avatar's is the sum over the parts of its blueprint. It is computed when a hit needs it
+// (resolveDamage), from the key of the jump and the frozen data, so nothing new goes in the state: no recipe but the avatar's carries a
+// resistance table. A thing with no parts (a rock, a Shroom) or whose parts give none has 0, as before.
+function creatureResistance(actor, type) {
+  let sum = 0;
+  for (const id of findDefinition(actor.type)?.parts ?? []) {
+    const part = DEFINITIONS.creatureParts[id];
+    if (partCounts(actor, part)) sum += part.specs?.resistance?.[type] ?? 0;
+  }
+  return sum;
 }
 
 // Writes the resistance of every type into the actor (an actor that carries one starts with { } in its recipe).
@@ -825,7 +870,8 @@ function resolveDamage(packet, target, withShield = true) {
     const amount = packet[type];
     if (!(amount > 0)) continue;
     const fromShield = withShield && shieldAlive(target) ? target.shield.resistance[type] ?? 0 : 0; // counted only while the shield has something left
-    const points = (target.resistance?.[type] ?? 0) + fromShield;
+    // The avatar reads the table written this frame (finalizeDynamic); anything else, its parts whose condition holds now (issue 81).
+    const points = (target.resistance ? target.resistance[type] ?? 0 : finalResistance(target, null, type)) + fromShield;
     if (points + scale <= 0) throw new Error("The resistance to " + type + " is " + points + " points, at or below minus the resistance scale (" + -scale + "): the curve cannot be calculated");
     const reduction = points / (points + scale);
     const after = amount * (1 - reduction);

@@ -2881,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 71, hash: "131fca8b5b083f96" };
+const DATA_FINGERPRINT = { version: 72, hash: "fa32a29b100c264a" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -5970,7 +5970,7 @@ test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the 
   assert.doesNotThrow(() => loadGame(withCreatureParts(VALID_CREATURE_PARTS, '["body", "legs", "mouth"]')));
   // The real data (since parcel 3): the Dummy's two parts and the Biter's three, and the two actors that name parts.
   const real = plain(run(`return { table: Object.keys(DEFINITIONS.creatureParts), withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
-  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs", "biter-shell", "biter-legs", "biter-mouth", "jumper-shell", "jumper-springlegs"], withParts: ["dummy", "biter", "jumper"] }); // the Jumper's two since issue 76, parcel 2
+  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs", "biter-shell", "biter-legs", "biter-mouth", "jumper-shell", "jumper-springlegs", "jumper-carapace"], withParts: ["dummy", "biter", "jumper"] }); // the Jumper's two since issue 76, parcel 2, and its Carapace since issue 81, parcel B
 });
 
 test("254 an unknown part id in a recipe is refused when the definitions load (issue 75, parcel 1): the Dummy naming the part wings, and the part toString (found only on the prototype of an object), each stop the game with a message that names the actor and the part", () => {
@@ -6327,7 +6327,7 @@ const JUMPER_LOOK = (radius) => `
   return { id: jumper.id, hasDash: "dash" in jumper, dash: jumper.dash ? JSON.parse(JSON.stringify(jumper.dash)) : null, tags: jumper.tags, weight: jumper.weight,
     numbers: [finalDashSpeed(jumper), finalDashMaxCharges(jumper), finalDashRechargeFrames(jumper), finalSpeed(jumper), finalAcceleration(jumper), finalDeceleration(jumper)],
     attacks: Object.keys(jumper.attacks) };`;
-const JUMPER_PARTS = 'parts: ["jumper-shell", "jumper-springlegs"],';
+const JUMPER_PARTS = 'parts: ["jumper-shell", "jumper-springlegs", "jumper-carapace"],'; // the Carapace since issue 81, parcel B
 const withJumperParts = (list) => (text) => text.replace(JUMPER_PARTS, "parts: " + list + ",");
 
 test("272 the Jumper's recipe is in the data with the Review desk's numbers (issue 76, parcel 2): it names its two parts, its own tag is enemy, its radius goes from 22 to 28, its body ignores are the Biter's, it has no ai and no attack of its own; the Shell has health 60 (twice the Biter's 30) and the tag vermin; the Spring legs have speed, acceleration and deceleration 0 and the dash of the Booster (dashSpeed 12, dashCharges 1) with a recharge of 90 frames; the weight per radius of the two parts is 100 in sum", () => {
@@ -6337,7 +6337,7 @@ test("272 the Jumper's recipe is in the data with the Review desk's numbers (iss
     return { parts: jumper.parts, tags: jumper.tags, size: jumper.size, bodyIgnores: jumper.bodyIgnores, biterIgnores: biter.bodyIgnores, ai: "ai" in jumper.initial, attackKeys: Object.keys(jumper).filter((key) => key === "attacks"),
       shell: shell.specs, shellTags: shell.tags, biterHealth: DEFINITIONS.creatureParts["biter-shell"].specs.health, legs: legs.specs, legsAttacks: "attacks" in legs, shellAttacks: "attacks" in shell, booster: { dashSpeed: booster.dashSpeed },
       weightSum: shell.specs.weightPerRadius + legs.specs.weightPerRadius, version: DEFINITIONS_VERSION };`));
-  assert.deepStrictEqual(r.parts, ["jumper-shell", "jumper-springlegs"]);
+  assert.deepStrictEqual(r.parts, ["jumper-shell", "jumper-springlegs", "jumper-carapace"]); // the Carapace since issue 81, parcel B (it gives no weight: weightSum below is unchanged)
   assert.deepStrictEqual(r.tags, ["enemy"]);
   assert.deepStrictEqual(r.size, { min: 22, max: 28 });
   assert.deepStrictEqual(r.bodyIgnores, r.biterIgnores);
@@ -6750,4 +6750,98 @@ test("289 the avatar's dash sets its key of the jump too, and nothing else of th
     for (const actor of state.actors) if (actor.dash) delete actor.dash.active;
     assert.strictEqual(JSON.stringify(state), without.snaps[i], "frame " + i);
   });
+});
+
+// ---- The Jumper's Carapace (issue 81, parcel B): a creature part whose specs count only while dashing ----
+// The user (2026-11-17): the Carapace gives "250 points of blunt resistance only while the jump is active" ("71% of blunt off:
+// 250 / (250 + 100)"); a part says so with while: "dashing", allowed for now only on a part whose specs are resistance.
+
+// The Carapace as the data writes it, the text the patches of the tests below replace.
+const CARAPACE = '"jumper-carapace": { name: "Carapace", specs: { resistance: { blunt: 250 } }, while: "dashing" },';
+
+test("290 the condition while of a creature part is refused on a part whose specs are not resistance (issue 81, parcel B): the Spring legs with while dashing, the Carapace with a weightPerRadius beside its resistance, the Carapace with a tag, the Carapace with no specs, and a while that is not a known condition each stop the game with a message that names the part; the real Carapace loads", () => {
+  const legs = 'jump: { target: { pick: "closest", tag: "ally" } },\n    },';
+  for (const [patch, refused] of [
+    [(text) => text.replace(legs, 'jump: { target: { pick: "closest", tag: "ally" } },\n      while: "dashing",\n    },'), /The while of the creature part jumper-springlegs is allowed only on a part whose specs are resistance and nothing else, and it has speed, acceleration, deceleration, dashSpeed, dashCharges, rechargeFrames, weightPerRadius, jump/],
+    [(text) => text.replace(CARAPACE, CARAPACE.replace("{ blunt: 250 } }", "{ blunt: 250 }, weightPerRadius: 0 }")), /The while of the creature part jumper-carapace is allowed only on a part whose specs are resistance and nothing else, and it has weightPerRadius/],
+    [(text) => text.replace(CARAPACE, CARAPACE.replace('while: "dashing"', 'while: "dashing", tags: ["hard"]')), /The while of the creature part jumper-carapace is allowed only .* and it has tags/],
+    [(text) => text.replace(CARAPACE, CARAPACE.replace("specs: { resistance: { blunt: 250 } }, ", "")), /The while of the creature part jumper-carapace is allowed only .* and it has no resistance/],
+    [(text) => text.replace(CARAPACE, CARAPACE.replace('"dashing"', '"flying"')), /The while of the creature part jumper-carapace must be one of dashing, and it is "flying"/],
+  ]) assert.match(loadError(patch) ?? "", refused, String(refused));
+  assert.strictEqual(loadError(null), null);
+});
+
+test("291 a resistance of a creature part that is not finite or not to a known damage type is refused when the definitions load (issue 81, parcel B): the Carapace with blunt Infinity, blunt NaN, blunt -100 (at minus the resistance scale), fire 250 (not a damage type) or a resistance that is a number stop the game with a message that names the part; the damage types are the ones the avatar's parts use (blunt, puncture, slash), and a Carapace with puncture 10 and slash -50 loads", () => {
+  for (const [points, refused] of [
+    ["{ blunt: Infinity }", /The resistance of the creature part jumper-carapace to blunt must be a finite number, and it is Infinity/],
+    ["{ blunt: NaN }", /The resistance of the creature part jumper-carapace to blunt must be a finite number, and it is NaN/],
+    ["{ blunt: -100 }", /The resistance of the creature part jumper-carapace to blunt must be above minus the resistance scale \(-100\)/],
+    ["{ fire: 250 }", /The resistance of the creature part jumper-carapace is to fire, which is not a type of damage: blunt, puncture, slash/],
+    ["250", /The spec resistance of the creature part jumper-carapace must be points per type of damage/],
+  ]) assert.match(loadError((text) => text.replace(CARAPACE, CARAPACE.replace("{ blunt: 250 }", points))) ?? "", refused, points);
+  assert.strictEqual(loadError((text) => text.replace(CARAPACE, CARAPACE.replace("{ blunt: 250 }", "{ blunt: 250, puncture: 10, slash: -50 }"))), null);
+  assert.deepStrictEqual(plain(run("return DEFINITIONS.damageTypes;")), ["blunt", "puncture", "slash"]);
+});
+
+// The scene of finding P5.1 (docs/review-2026-11-17.md): the combat blueprint with its shield, one Jumper alone on a ground with no objects.
+const CARAPACE_GAME = loadGame((text) => text.replace(CHAMBER2_SPAWNS, 'spawns: [{ initialFrame: 0, count: 1, type: "jumper" }],').replace("chancePercent: 35", "chancePercent: 0"), { shield: true });
+
+test("292 the jump that connects costs the Jumper 8.97 x 100 / 350 = 2.56 blunt (issue 81, parcel B; the scene of P5.1): an unkillable Jumper 300 px from a still avatar with the combat blueprint; in the first body slam of the avatar on the Jumper its key of the jump is on, the slam is 8.97 blunt (the avatar's weight), the Jumper's blunt resistance is the Carapace's 250 points, the reduction is 250 / 350, and the Jumper loses 8.97 x 100 / 350 = 2.56; the repeater's puncture on it is not resisted", () => {
+  const r = plain(run(`
+    const run = createRun(1, DEFINITIONS.combatBlueprint);
+    const s = firstBirths(createChamber2State(1, 1, run.blueprint));
+    const avatar = s.actors[0], jumper = s.actors[1];
+    jumper.position.x = 300; jumper.position.y = 0; setCells(jumper, s.grid);
+    jumper.health.now = jumper.health.max = 1e9; // unkillable
+    const journal = createJournal();
+    const keys = {};
+    for (let i = 0; i < 120; i++) { step(s, { move: { x: 0, y: 0 } }, run.blueprint, null, journal); keys[s.frame - 1] = jumper.dash.active; }
+    const hits = journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit" && line.target === jumper.id);
+    return { slam: hits.find((line) => line.attack === "bodySlam"), shot: hits.find((line) => line.attack === "repeater-arm"), keys };`, CARAPACE_GAME));
+  assert.ok(r.slam, "the jump connected");
+  assert.strictEqual(r.keys[r.slam.frame], true, "the key of the jump is on in the frame of the slam " + r.slam.frame);
+  const [blunt] = r.slam.parts;
+  assert.strictEqual(blunt.type, "blunt");
+  assert.strictEqual(blunt.amount.toFixed(2), "8.97", "the avatar's body slam of P5.1");
+  assert.strictEqual(blunt.points, 250, "the Carapace's points");
+  assert.strictEqual(blunt.reduction, 250 / 350);
+  assert.ok(Math.abs(r.slam.total - (blunt.amount * 100) / 350) < 1e-12, r.slam.total + " against " + (blunt.amount * 100) / 350);
+  assert.strictEqual(r.slam.total.toFixed(2), "2.56");
+  assert.ok(Math.abs(r.slam.health - r.slam.total) < 1e-6, "the health it lost: " + r.slam.health); // taken off a health of 1e9, so the subtraction rounds
+  assert.deepStrictEqual([r.shot.parts[0].type, r.shot.parts[0].points, r.shot.total], ["puncture", 0, r.shot.parts[0].amount], "the Carapace resists only blunt");
+});
+
+test("293 a body slam on a still Jumper costs it the full amount (issue 81, parcel B): with the avatar's tags emptied the Jumper does not jump, its key stays off, and the avatar dashes into it; the avatar's body slam on it is resisted by 0 points and the Jumper loses the whole amount", () => {
+  const r = plain(run(`${JUMPER_SCENE(100)}
+    avatar.tags = [];
+    const journal = createJournal();
+    let keyOn = false;
+    for (let i = 0; i < 60; i++) { step(s, { move: { x: 1, y: 0 }, dash: i === 0 }, run.blueprint, null, journal); keyOn = keyOn || jumper.dash.active; }
+    return { keyOn, slams: journal.map((line) => JSON.parse(line)).filter((line) => line.event === "hit" && line.target === jumper.id && line.attack === "bodySlam") };`, ONE_JUMPER));
+  assert.strictEqual(r.keyOn, false, "the Jumper never jumped");
+  assert.ok(r.slams.length >= 1, "the avatar slammed the Jumper");
+  for (const slam of r.slams) {
+    assert.deepStrictEqual([slam.parts[0].type, slam.parts[0].points, slam.parts[0].reduction], ["blunt", 0, 0]);
+    assert.ok(slam.parts[0].amount > 0);
+    assert.strictEqual(slam.total, slam.parts[0].amount, "the full amount");
+    assert.ok(Math.abs(slam.health - slam.total) < 1e-9, "the health it lost: " + slam.health); // the health taken is a subtraction, which rounds
+  }
+});
+
+test("294 the Carapace gives nothing while the key of the jump is off (issue 81, parcel B): a Jumper made with its key off has 0 points of resistance to blunt, puncture and slash, and a packet of 10 blunt costs it 10; with its key on it has 250 blunt and 0 of the others, and the 10 blunt cost it 10 x 100 / 350; a copy of the Jumper without the Carapace has 0 with the key on too; a Biter has 0", () => {
+  const code = `${JUMPER_LOOK(25).replace(/return \{[\s\S]*$/, "")}
+    const look = () => ({ points: DEFINITIONS.damageTypes.map((type) => finalResistance(jumper, null, type)), blunt10: resolveDamage({ blunt: 10 }, jumper).total });
+    const off = look();
+    jumper.dash.active = true;
+    const on = look();
+    const biter = finalizeObject("biter", { radius: 16, health: { now: 30, max: 30 }, position: { x: 0, y: 0 } }, undefined, "biter 0,0");
+    return { off, on, biter: DEFINITIONS.damageTypes.map((type) => finalResistance(biter, null, type)), stored: "resistance" in jumper };`;
+  const r = plain(run(code));
+  assert.deepStrictEqual(r.off, { points: [0, 0, 0], blunt10: 10 });
+  assert.deepStrictEqual(r.on.points, [250, 0, 0]);
+  assert.strictEqual(r.on.blunt10, 10 * (1 - 250 / 350));
+  assert.deepStrictEqual(r.biter, [0, 0, 0]);
+  assert.strictEqual(r.stored, false, "the resistance of a creature is computed when needed, never stored");
+  const without = plain(run(code, loadGame(withJumperParts('["jumper-shell", "jumper-springlegs"]'))));
+  assert.deepStrictEqual(without.on, { points: [0, 0, 0], blunt10: 10 }, "the 250 come from the Carapace");
 });

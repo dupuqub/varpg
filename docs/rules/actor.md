@@ -4,7 +4,7 @@
 
 - An actor is anything that acts in combat (the avatar, the Dummy, the Biter); it holds its own value of everything it uses, and the code reads the actor (docs/rules/actor.md).
 - The Dummy and the Biter are made of parts (a `parts` list in the recipe): their values come from the parts, and their tags are their own plus the parts' (docs/rules/actor.md).
-- What never changes in a run is calculated once, at birth; the top speed, the resistance, the attacks of the moment, the dash speed and the avatar's weight, every frame (docs/rules/actor.md).
+- What never changes in a run is calculated once, at birth; the top speed, the resistance, the attacks of the moment, the dash speed and the avatar's weight, every frame (docs/rules/actor.md); a creature's resistance, from its parts whose condition holds, when a hit needs it (docs/rules/parts.md).
 - The Biter chases the avatar, stands still to wind up once within reach, bites, stands still again and chases again (docs/rules/actor.md).
 - The Jumper moves only by dashing: with a charge and a living `ally` it dashes at the place its target has in that frame, in a straight line with no correction in the air; with no living `ally` it stands still, and its only damage is the body slam (docs/rules/actor.md).
 - What can be a target is an actor; what only hurts is a hitbox, born at its attack's exit (the avatar's center, one body ahead of a Biter) with the attack it had then (docs/rules/actor.md).
