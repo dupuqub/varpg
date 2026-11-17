@@ -1907,9 +1907,10 @@ test("91 a run with 100 Dummies is reproducible: the same inputs give the same s
 });
 
 test("92 the speed of a Dummy comes from its recipe through finalSpeed (and a thing without a speed has 0); a speed that is not above 0 stops the game when it loads", () => {
-  const patch = (speed) => (text) => text.replace("      speed: 2,\n", "      speed: " + speed + ",\n");
+  // The Dummy's speed is given by its Legs since issue 75, parcel 2: the patch changes the speed of the part dummy-legs.
+  const patch = (speed) => (text) => text.replace("specs: { speed: 2, acceleration", "specs: { speed: " + speed + ", acceleration");
   assert.throws(() => loadGame(patch(0)), /speed of the actor dummy.*0/);
-  assert.throws(() => loadGame(patch(-1)), /speed of the actor dummy/);
+  assert.throws(() => loadGame(patch(-1)), /speed of the creature part dummy-legs must be a finite number, 0 or more/); // refused by the check of the part, first
   const fast = loadGame(patch(3));
   const result = run(`
     const s = firstBirths(createChamber1State(1, 1));
@@ -2405,8 +2406,9 @@ test("109 the push between actors is split by weight: a giant Dummy (25600 kg) m
 
   // Weight 0 on both sides (a patched Dummy with weightPerRadius 0): half each, no division by zero.
   const weightless = loadGame((text) => {
-    const patched = text.replace("chancePercent: 35", "chancePercent: 0").replace(DUMMY_EVENT, dummyEvent(2)).replace("      weightPerRadius: 100,\n      healthRange: { min: 100, max: 100 },", "      weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 },");
-    assert.ok(patched.includes("weightPerRadius: 0,\n      healthRange: { min: 100, max: 100 }"), "the patch of the Dummy weight should apply");
+    const patched = text.replace("chancePercent: 35", "chancePercent: 0").replace(DUMMY_EVENT, dummyEvent(2)).replace("health: { min: 100, max: 100 }, weightPerRadius: 70 }", "health: { min: 100, max: 100 }, weightPerRadius: 0 }").replace("deceleration: 0.0625, weightPerRadius: 30 }", "deceleration: 0.0625, weightPerRadius: 0 }");
+    // The Dummy's weight is given by its parts since issue 75, parcel 2: both parts (Body and Legs) weigh 0 in this copy.
+    assert.ok(patched.includes("weightPerRadius: 0 } },\n") && !/weightPerRadius: (70|30) \}/.test(patched), "the patch of the Dummy weight should apply");
     return patched;
   });
   const zero = run(`
@@ -2879,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 66, hash: "7ddd49c98c84b9fb" };
+const DATA_FINGERPRINT = { version: 67, hash: "9463489a5de35bcf" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -5953,19 +5955,21 @@ test("252 the trace that follows its owner is visual only (issue 72): 900 frames
 // ---- Actors may have parts: the shape and the validator (issue 75, parcel 1 of 5) ----
 
 // A patched copy of the data where the Dummy names creature parts: `table` is the text of DEFINITIONS.creatureParts and `list` the
-// text of the Dummy's parts. The real data has an empty table and no actor with parts, so these tests write their own.
-const CREATURE_PARTS_TABLE = /creatureParts: \{\},/;
+// text of the Dummy's parts. Both replace the real ones (since parcel 2 the real Dummy has the parts dummy-body and dummy-legs).
+const CREATURE_PARTS_TABLE = /creatureParts: \{\n[\s\S]*?\n  \},\n/;
+const DUMMY_PARTS = 'parts: ["dummy-body", "dummy-legs"],';
 const withCreatureParts = (table, list) => (text) => text
-  .replace(CREATURE_PARTS_TABLE, "creatureParts: " + table + ",")
-  .replace('name: "Dummy",', 'name: "Dummy", parts: ' + list + ",");
+  .replace(CREATURE_PARTS_TABLE, "creatureParts: " + table + ",\n")
+  .replace(DUMMY_PARTS, "parts: " + list + ",");
 const VALID_CREATURE_PARTS = '{ body: { name: "Body", specs: { health: { min: 100, max: 100 } }, tags: ["test"] }, '
   + 'legs: { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 100 } }, '
   + 'mouth: { name: "Mouth", attacks: { bite: { damage: { puncture: { flat: 1, perWeight: 0 } }, reach: 8, windupFrames: 15, freezeFrames: 10, hitbox: { radius: 20, frames: 1 }, exit: "front", target: { pick: "closest", tag: "ally" }, ignores: ["self"], hits: "all" } } } }';
 
-test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the Dummy names the creature parts body (health, a tag), legs (speed, acceleration, deceleration, weightPerRadius) and mouth (a bite written like a recipe's), and the data loads; the real data loads too, with an empty table of creature parts and no actor that names parts", () => {
+test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the Dummy names the creature parts body (health, a tag), legs (speed, acceleration, deceleration, weightPerRadius) and mouth (a bite written like a recipe's), and the data loads; the real data loads too, where (since parcel 2) the table holds the Dummy's two parts and the Dummy is the only actor that names parts", () => {
   assert.doesNotThrow(() => loadGame(withCreatureParts(VALID_CREATURE_PARTS, '["body", "legs", "mouth"]')));
-  const real = plain(run(`return { table: DEFINITIONS.creatureParts, withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
-  assert.deepStrictEqual(real, { table: {}, withParts: [] });
+  // The real data (since parcel 2): the Dummy's two parts, and the Dummy the only actor that names parts.
+  const real = plain(run(`return { table: Object.keys(DEFINITIONS.creatureParts), withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
+  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs"], withParts: ["dummy"] });
 });
 
 test("254 an unknown part id in a recipe is refused when the definitions load (issue 75, parcel 1): the Dummy naming the part wings, and the part toString (found only on the prototype of an object), each stop the game with a message that names the actor and the part", () => {
@@ -5983,4 +5987,63 @@ test("255 an unknown spec and a value that is not finite in a creature part are 
 test("256 a tag of a creature part that is not a word is refused when the definitions load (issue 75, parcel 1): the part body with the tags [7] stops the game with a message that names the tags of the part", () => {
   const notWord = VALID_CREATURE_PARTS.replace('tags: ["test"]', "tags: [7]");
   assert.match(loadError(withCreatureParts(notWord, '["body"]')) ?? "", /The list of the tags of the creature part body must be written/);
+});
+
+// ---- The Dummy from parts (issue 75, parcel 2 of 5) ----
+
+// The Dummy's parts in the real data, and the recipe it had before parcel 2 (its own fields, with no parts), for the patched copies.
+const DUMMY_OLD_FIELDS = "weightPerRadius: 100, healthRange: { min: 100, max: 100 }, speed: 2, acceleration: 0.125, deceleration: 0.0625,";
+const withDummyParts = (list) => (text) => text.replace(DUMMY_PARTS, "parts: " + list + ",");
+
+test("257 the Dummy made of its parts Body and Legs has the numbers it had before (issue 75, parcel 2): health range 100 to 100, speed 2, acceleration 0.125, deceleration 0.0625 and weight per radius 100 (the Body's 70 plus the Legs' 30, a guess; only the sum is fixed), in the recipe values and in a Dummy that is born; and a copy where the Dummy has its old fields and no parts plays 300 frames of 100 Dummies to the same state and journal, bit for bit", () => {
+  const numbers = `
+    const recipe = DEFINITIONS.actors.dummy;
+    const s = firstBirths(createChamber1State(1, 1));
+    const d = s.actors[1];
+    return {
+      recipe: { health: recipeValue(recipe, "healthRange"), speed: recipeValue(recipe, "speed"), acceleration: recipeValue(recipe, "acceleration"), deceleration: recipeValue(recipe, "deceleration"), weightPerRadius: recipeValue(recipe, "weightPerRadius") },
+      born: { health: d.health, speed: d.speed, acceleration: d.acceleration, deceleration: d.deceleration, weightPerRadius: d.weight / d.radius },
+    };`;
+  const result = plain(run(numbers, WITH_DUMMIES));
+  assert.deepStrictEqual(result.recipe, { health: { min: 100, max: 100 }, speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 100 });
+  assert.deepStrictEqual(result.born, { health: { now: 100, max: 100 }, speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 100 });
+
+  // The Dummy as it was written before parcel 2 (its own fields), in a patched copy: the same 300 frames give the same state and journal.
+  const old = loadGame((text) => withDummyParts("[]")(text).replace("parts: [],", DUMMY_OLD_FIELDS).replace(DUMMY_EVENT, dummyEvent(100)));
+  const play = `
+    const s = createChamber1State(1, 1);
+    const journal = [];
+    for (let frame = 0; frame < 300; frame++) step(s, { move: { x: frame % 120 < 60 ? 1 : -1, y: 0 } }, undefined, null, journal);
+    return { parts: DEFINITIONS.actors.dummy.parts ?? null, json: JSON.stringify(s) + JSON.stringify(journal), dummies: s.actors.length - 1, lines: journal.length };`;
+  const before = run(play, old);
+  const now = run(play, WITH_DUMMIES);
+  assert.strictEqual(before.parts, null, "the copy should have the Dummy with no parts");
+  assert.deepStrictEqual(plain(now.parts), ["dummy-body", "dummy-legs"]);
+  assert.ok(now.dummies === 100 && now.lines >= 100, "the run should have its 100 Dummies and their birth lines in the journal: " + now.dummies + " Dummies, " + now.lines + " lines");
+  assert.strictEqual(now.json, before.json, "the Dummy made of parts plays differently from the Dummy of its old fields");
+});
+
+test("258 a Dummy whose Legs are taken away (a patched copy where it has only its Body) stands still (issue 75, parcel 2): speed, acceleration and deceleration 0, and in 200 frames alone on a ground with no objects its place and its velocity never change, while it keeps its health of 100 and weighs only its Body (70 per radius); the same Dummy with its Legs walks away", () => {
+  const ground = (list) => loadGame((text) => withDummyParts(list)(text).replace("chancePercent: 35", "chancePercent: 0").replace(DUMMY_EVENT, dummyEvent(1)));
+  const play = `
+    const s = firstBirths(createChamber1State(1, 1));
+    const d = s.actors[1];
+    const start = { x: d.position.x, y: d.position.y };
+    for (let frame = 0; frame < 200; frame++) step(s, { move: { x: 0, y: 0 } });
+    return { id: d.id, alive: s.actors.includes(d), moved: Math.hypot(d.position.x - start.x, d.position.y - start.y), velocity: d.move.velocity, speed: d.speed, acceleration: d.acceleration, deceleration: d.deceleration, health: d.health, weightPerRadius: d.weight / d.radius };`;
+  const legless = plain(run(play, ground('["dummy-body"]')));
+  assert.strictEqual(legless.id, "dummy 0,0");
+  assert.strictEqual(legless.alive, true);
+  assert.deepStrictEqual([legless.speed, legless.acceleration, legless.deceleration], [0, 0, 0]);
+  assert.strictEqual(legless.moved, 0, "the Dummy without Legs moved " + legless.moved + " px");
+  assert.deepStrictEqual(legless.velocity, { x: 0, y: 0 });
+  assert.deepStrictEqual(legless.health, { now: 100, max: 100 });
+  assert.strictEqual(legless.weightPerRadius, 70);
+  const walking = plain(run(play, ground('["dummy-body", "dummy-legs"]')));
+  assert.ok(walking.moved > 100, "the same Dummy with its Legs should walk away, and it moved " + walking.moved + " px");
+});
+
+test("259 a Dummy whose Body is gone is refused when the definitions load (issue 75, parcel 2): the health part is required, so a copy where the Dummy has only its Legs stops the game with a message that names the actor and its parts; and a recipe with parts that also writes one of the fields its parts give (healthRange) is refused too, one source for each value", () => {
+  assert.match(loadError(withDummyParts('["dummy-legs"]')) ?? "", /The health of the actor dummy is missing: none of its parts \(dummy-legs\) gives the spec health/);
+  assert.match(loadError((text) => text.replace(DUMMY_PARTS, DUMMY_PARTS + " healthRange: { min: 100, max: 100 },")) ?? "", /The actor dummy has parts and also writes healthRange in its recipe/);
 });

@@ -214,6 +214,27 @@ function fromParts(actor, blueprint, name) {
   return isAvatar(actor) ? sumSpec(blueprint, name) : 0;
 }
 
+// The fields of a creature recipe that its parts give (issue 75), each with the spec of a creature part that gives it.
+const RECIPE_FIELDS_FROM_PARTS = { healthRange: "health", speed: "speed", acceleration: "acceleration", deceleration: "deceleration", weightPerRadius: "weightPerRadius" };
+
+// A value of a recipe that is not the avatar's: its own field, or, for a recipe that names parts (issue 75, parcel 2: the Dummy),
+// the sum of what its parts give, the way the avatar's values are the sums of the parts of its blueprint (sumSpec); the list of
+// parts plays for it the role of the blueprint. health is a range: the mins add up, and the maxes. undefined when no part gives it
+// (a Dummy without Legs has no speed; the final functions read that as 0). The first value found is kept as it is (never 0 + it),
+// and the sum is redone at each call from the frozen data, so nothing new goes in the state.
+function recipeValue(definition, field) {
+  if (definition.parts === undefined) return definition[field];
+  const spec = RECIPE_FIELDS_FROM_PARTS[field];
+  let sum;
+  for (const id of definition.parts) {
+    const value = DEFINITIONS.creatureParts[id].specs?.[spec];
+    if (value === undefined) continue;
+    if (sum === undefined) sum = value;
+    else sum = spec === "health" ? { min: sum.min + value.min, max: sum.max + value.max } : sum + value;
+  }
+  return sum;
+}
+
 // Fails loudly if the blueprint is not allowed: an unknown part, or more weight than the
 // blueprint can carry (the capacity of the Torso). A hard limit, not a speed penalty.
 // It also refuses a summed resistance (issue 34, the user: "negative resistance amplifies damage") at or below minus the scale: the
@@ -359,9 +380,31 @@ function assertValidCreatureParts(tagList) {
 }
 
 function assertValidDefinitions() {
+  // The tags of exclusion (the user, 2026-11-13, issues 19 and 20): every thing has its tags and the list of its body, and every attack has
+  // its own list written (an empty one is a choice, a missing one is refused: leaving "self" or a side out is always visible in the data).
+  const tagList = (list, where) => {
+    if (!Array.isArray(list) || list.some((tag) => typeof tag !== "string" || tag === "")) {
+      throw new Error("The list of " + where + " must be written, a list of words (it can be empty for the lists of ignored tags): " + JSON.stringify(list));
+    }
+  };
+  // The parts of creatures and the ids the recipes name, first (issue 75): the checks of the recipes below read the values the parts give.
+  assertValidCreatureParts(tagList);
   // The things made by the seed from ranges: every object, and the actors of the crowds (the Dummy and the Biter).
-  for (const [id, object] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy, biter: DEFINITIONS.actors.biter })) {
+  // A recipe with parts (issue 75) is read through recipeValue: the values its parts give, checked by the same rules. Its parts are
+  // checked first (assertValidCreatureParts, above), so every id it names is a creature part.
+  for (const [id, recipe] of Object.entries({ ...DEFINITIONS.objects, dummy: DEFINITIONS.actors.dummy, biter: DEFINITIONS.actors.biter })) {
     const where = (DEFINITIONS.objects[id] ? "the object " : "the actor ") + id;
+    const object = { size: recipe.size, bounce: recipe.bounce };
+    for (const field of Object.keys(RECIPE_FIELDS_FROM_PARTS)) object[field] = recipeValue(recipe, field);
+    if (recipe.parts !== undefined) {
+      // One source for each value (issue 75: the old fields leave the recipe when a part gives them): a recipe with parts writes none of them.
+      const own = Object.keys(RECIPE_FIELDS_FROM_PARTS).filter((field) => recipe[field] !== undefined);
+      if (own.length > 0) throw new Error("The actor " + id + " has parts and also writes " + own.join(", ") + " in its recipe: with parts, these come from its parts");
+      // The health part is required (issue 75, parcel 2): an actor is born with a health rolled from its range, so a recipe whose
+      // parts give no health (a Dummy without its Body) cannot be made.
+      if (object.healthRange === undefined) throw new Error("The health of " + where + " is missing: none of its parts (" + recipe.parts.join(", ") + ") gives the spec health");
+      if (object.weightPerRadius === undefined) object.weightPerRadius = 0; // no part gives weight: it weighs 0 (finalWeight)
+    }
     if (!object.size) throw new Error("The size of " + where + " is missing: { min, max }, the range of its radius");
     const { min, max } = object.size;
     if (!(Number.isInteger(object.weightPerRadius) && object.weightPerRadius >= 0)) {
@@ -478,13 +521,6 @@ function assertValidDefinitions() {
       }
     }
   }
-  // The tags of exclusion (the user, 2026-11-13, issues 19 and 20): every thing has its tags and the list of its body, and every attack has
-  // its own list written (an empty one is a choice, a missing one is refused: leaving "self" or a side out is always visible in the data).
-  const tagList = (list, where) => {
-    if (!Array.isArray(list) || list.some((tag) => typeof tag !== "string" || tag === "")) {
-      throw new Error("The list of " + where + " must be written, a list of words (it can be empty for the lists of ignored tags): " + JSON.stringify(list));
-    }
-  };
   for (const [id, thing] of Object.entries({ ...DEFINITIONS.objects, ...DEFINITIONS.actors })) {
     const where = id + " (" + (DEFINITIONS.objects[id] ? "an object" : "an actor") + ")";
     tagList(thing.tags, "the tags of " + where);
@@ -495,7 +531,6 @@ function assertValidDefinitions() {
     if (part.weapon) tagList(part.weapon.ignores, "the ignores of the weapon of the part " + id);
     if (part.melee) tagList(part.melee.ignores, "the ignores of the melee of the part " + id);
   }
-  assertValidCreatureParts(tagList);
   const squareSizes = [];
   for (const [id, layer] of Object.entries(DEFINITIONS.terrain.objects.layers)) {
     const where = "the layer " + id + " of terrain.objects";
@@ -542,7 +577,7 @@ function assertValidDefinitions() {
 // It is a function, not a stored value, so buffs can be applied here, in order, later.
 // It must stay pure: the result depends only on the arguments and the definitions.
 function finalSpeed(actor, blueprint) {
-  if (!isAvatar(actor)) return definitionOf(actor).speed ?? 0; // not the avatar: its recipe (a Dummy), or none (no parts, no weight penalty)
+  if (!isAvatar(actor)) return recipeValue(definitionOf(actor), "speed") ?? 0; // not the avatar: its recipe or its parts (the Dummy's Legs), or none (no weight penalty)
   const weightPenalty = carriedWeight(actor, blueprint) * DEFINITIONS.constants.weightSpeedPenalty;
   return Math.max(0, fromParts(actor, blueprint, "speed") - weightPenalty);
 }
@@ -576,14 +611,16 @@ function finalRadius(object, blueprint) {
   return object.bodyRadius ?? object.radius ?? definitionOf(object).radius;
 }
 
-// How fast the avatar speeds up toward its wanted speed, in pixels per frame, every frame. Base from the recipe.
+// How fast an actor speeds up toward its wanted speed, in pixels per frame, every frame. Base from the recipe, or from its parts
+// (the Dummy's Legs; recipeValue).
 function finalAcceleration(actor, blueprint) {
-  return definitionOf(actor).acceleration ?? 0;
+  return recipeValue(definitionOf(actor), "acceleration") ?? 0;
 }
 
-// How fast the avatar slows down toward a stop, in pixels per frame, every frame. Base from the recipe.
+// How fast an actor slows down toward a stop, in pixels per frame, every frame. Base from the recipe, or from its parts
+// (the Dummy's Legs; recipeValue).
 function finalDeceleration(actor, blueprint) {
-  return definitionOf(actor).deceleration ?? 0;
+  return recipeValue(definitionOf(actor), "deceleration") ?? 0;
 }
 
 // The frames a dash charge takes to come back: the sum of the rechargeFrames of the parts (the Booster is
@@ -593,10 +630,11 @@ function finalDashRechargeFrames(actor, blueprint) {
 }
 
 // The weight of a thing, in kg: for the avatar the total weight of its blueprint, for an object
-// weightPerRadius x radius (the user's decision: the radius, not the area). Both are whole numbers
-// (assertValidDefinitions), so the weight is whole and nothing is rounded.
+// weightPerRadius x radius (the user's decision: the radius, not the area); for a recipe with parts (the Dummy) the weightPerRadius
+// is the sum of its parts' (recipeValue), 0 if none gives it. Both are whole numbers (assertValidDefinitions), so the weight is
+// whole and nothing is rounded.
 function finalWeight(thing, blueprint) {
-  return isAvatar(thing) ? carriedWeight(thing, blueprint) : definitionOf(thing).weightPerRadius * thing.radius;
+  return isAvatar(thing) ? carriedWeight(thing, blueprint) : (recipeValue(definitionOf(thing), "weightPerRadius") ?? 0) * thing.radius;
 }
 
 // How much of the speed of whoever hits it comes back (0 = none, 1 = all). A type without "bounce" has none.
@@ -1293,7 +1331,8 @@ function birthOffset(seed, event, nth, radius, grid) {
 function drawBirth(seed, type, event, nth, grid) {
   const recipe = DEFINITIONS.actors[type];
   const radius = rollInRange(seed, event, nth, SALTS.crowdRadius, recipe.size.min, recipe.size.max);
-  const health = rollInRange(seed, event, nth, SALTS.crowdHealth, recipe.healthRange.min, recipe.healthRange.max);
+  const healthRange = recipeValue(recipe, "healthRange"); // its own, or the sum of its parts' (the Dummy's Body)
+  const health = rollInRange(seed, event, nth, SALTS.crowdHealth, healthRange.min, healthRange.max);
   return { radius, health, offset: birthOffset(seed, event, nth, radius, grid) };
 }
 

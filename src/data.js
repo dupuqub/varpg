@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 66;
+const DEFINITIONS_VERSION = 67;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -72,25 +72,14 @@ const DEFINITIONS = {
     // collision, picks a new random angle (see OWN_ROLLS and collideActors in src/sim.js). Like an object, it is
     // only ranges and recipes: the seed rolls its radius, health and first angle, and nothing is placed by hand.
     // size: the user's decision for the stress test, 50% smaller than the objects (8 to 16), so more fit.
-    // weightPerRadius: guess, the same number as the objects', written here on their own. The weight is the attack of
-    //   its body slam (see bodySlam below), so a Dummy hits with 800 to 1600 kg.
-    // healthRange: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
-    // speed: guess, 2 px/frame (120 px per second), slower than the avatar (3), so the avatar can catch one.
-    //   Like the others, it goes through a final function (finalSpeed) into the Dummy, which carries it.
-    // acceleration, deceleration (the user's decision, 2026-11-11: every actor that moves has them in its recipe, and
-    //   its speed is calculated like anyone's): guess, written here on their own. 0.125: the top speed in 2 / 0.125 =
-    //   16 frames (0.27 s). 0.0625: a stop in 32 frames (0.53 s), twice the time of speeding up, so it slides. Powers
-    //   of two, like the avatar's. A Dummy always wants to walk, so its deceleration waits for the day one stops.
+    // parts (issue 75, parcel 2): its health, speed, acceleration, deceleration and weight come from its parts, Body and Legs
+    //   (DEFINITIONS.creatureParts, where the numbers and their reasons are), as the avatar's come from its blueprint.
     dummy: {
       tags: ["enemy"],
       bodyIgnores: ["enemy", "object"],
       name: "Dummy",
       size: { min: 8, max: 16 },
-      weightPerRadius: 100,
-      healthRange: { min: 100, max: 100 },
-      speed: 2,
-      acceleration: 0.125,
-      deceleration: 0.0625,
+      parts: ["dummy-body", "dummy-legs"],
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
@@ -421,7 +410,24 @@ const DEFINITIONS = {
   //   tags    words added to the actor's own tags
   // src/sim.js checks them when it loads, like the parts of the avatar (CREATURE_PART_SPECS). Empty for now: no actor uses it yet
   // (issue 75, parcel 1 of 5). A number of a part that is a guess (the split of weightPerRadius among the parts) is marked "guess".
-  creatureParts: {},
+  // The Dummy's numbers came here from its recipe unchanged (issue 75, parcel 2), so the Dummy is the same, bit for bit.
+  creatureParts: {
+    // The Dummy's Body (the user's split, issue 75: "Dummy | Body | health").
+    // health: the user's number, 100 "just to see them colliding a lot" (a guess about what is best to see).
+    // weightPerRadius: guess, 70 of the Dummy's 100 kg per pixel of radius (the same number as the objects'); the split between
+    //   Body and Legs is a guess, only the sum (100) is fixed. The weight is the attack of its body slam (constants.bodySlam),
+    //   so a Dummy hits with 800 to 1600 kg.
+    "dummy-body": { name: "Body", specs: { health: { min: 100, max: 100 }, weightPerRadius: 70 } },
+    // The Dummy's Legs (the user's split, issue 75: "Dummy | Legs | speed, acceleration, deceleration").
+    // speed: guess, 2 px/frame (120 px per second), slower than the avatar (3), so the avatar can catch one. It goes through
+    //   a final function (finalSpeed) into the Dummy, which carries it.
+    // acceleration, deceleration (the user's decision, 2026-11-11: every actor that moves has them, and its speed is calculated
+    //   like anyone's): guess. 0.125: the top speed in 2 / 0.125 = 16 frames (0.27 s). 0.0625: a stop in 32 frames (0.53 s),
+    //   twice the time of speeding up, so it slides. Powers of two, like the avatar's. A Dummy always wants to walk, so its
+    //   deceleration waits for the day one stops. A Dummy without Legs has none of the three and stands still.
+    // weightPerRadius: guess, the other 30 of the 100 (see the Body).
+    "dummy-legs": { name: "Legs", specs: { speed: 2, acceleration: 0.125, deceleration: 0.0625, weightPerRadius: 30 } },
+  },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
   starterBlueprint: {
