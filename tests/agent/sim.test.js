@@ -6392,6 +6392,19 @@ test("276 the validator takes the Jumper's data and refuses what the rules refus
   assert.strictEqual(loadError(null), null);
 });
 
+test("282 a bad target of the jump of a creature part is refused when the definitions load (issue 76, parcel 4): the Spring legs with the pick farthest, with a tag that is empty, a number or missing, and with no target at all stop the game with the message of the target that names the jump of the part; the real target loads", () => {
+  const real = 'jump: { target: { pick: "closest", tag: "ally" } }';
+  const refused = /The target of the jump of the creature part jumper-springlegs must be \{ pick, tag \}, with pick one of closest and a tag that is a word/;
+  for (const bad of [
+    'jump: { target: { pick: "farthest", tag: "ally" } }',
+    'jump: { target: { pick: "closest", tag: "" } }',
+    'jump: { target: { pick: "closest", tag: 7 } }',
+    'jump: { target: { pick: "closest" } }',
+    "jump: {}",
+  ]) assert.match(loadError((text) => text.replace(real, bad)) ?? "", refused, bad);
+  assert.strictEqual(loadError(null), null);
+});
+
 // ---- The Jumper's mind: the jump (issue 76, parcel 3 of 4) ----
 
 // A game with no objects (chancePercent 0) whose map chamber2 spawns only what `spawns` says (the real map spawns no Jumper yet).
