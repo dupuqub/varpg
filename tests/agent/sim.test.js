@@ -1481,7 +1481,7 @@ test("75 everything is made by finalizeObject: an unknown type is refused, an ob
       fromSeed: JSON.stringify(objectsInArea(1, -960, -540, 960, 540)[0]),
     };
   `);
-  assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy", "biter"]);
+  assert.deepStrictEqual(plain(result.actors), ["avatar", "dummy", "biter", "jumper"]); // the Jumper since issue 76, parcel 2 (nothing spawns it yet)
   assert.match(result.unknown, /Unknown type: nope/);
   assert.deepStrictEqual(plain(result.rock), { type: "rock", position: { x: 1, y: 2 }, square: { x: 0, y: 0 }, radius: 28, health: { now: 12, max: 12 }, weight: 2800, bounce: 0, attacks: { bodySlam: { base: { blunt: 2800 * 0.001 }, now: { blunt: 2800 * 0.001 }, ignores: ["enemy", "object"] } }, tags: ["object"] });
   assert.strictEqual(result.avatar, 16); // the avatar's radius is its recipe's base, through finalRadius
@@ -2881,7 +2881,7 @@ test("127 a Chamber 2 run is reproducible: 900 frames with the avatar standing a
 
 // The pair kept here must change together with src/data.js: when the data changes, raise DEFINITIONS_VERSION and write the
 // new version and fingerprint below (the failure message prints the new fingerprint).
-const DATA_FINGERPRINT = { version: 68, hash: "a4955f579c6ffa6a" };
+const DATA_FINGERPRINT = { version: 69, hash: "da3b5fbfc628d10e" };
 
 test("128 every salt of the seed has a name in one table and the numbers are all different; no call of the hash or of the roll uses a bare number as its salt", () => {
   const result = run(`return { salts: SALTS, frozen: Object.isFrozen(SALTS) };`);
@@ -5376,9 +5376,9 @@ test("232 any hit that lands breaks a weightless Branch, a hit of resolved 0 too
 test("233 every kind of actor in the data breaks a weightless Branch by contact (the user's sentence, I27: \"the Branch has to break with anything\"): for each key of the actors of the data (avatar, Dummy, Biter) an isolated Branch of seed 1 breaks when that actor's body touches it, whatever the speed (3 px/frame and at rest), and the actor keeps its velocity and its place, and (I28) the break leaves a line naming that actor and the Branch; a Rock does not break under any of them", () => {
   const DUMMIED = loadGame((text) => text.replace(DUMMY_EVENT, dummyEvent(1)), { branches: true });
   const kinds = plain(run(`return Object.keys(DEFINITIONS.actors);`, DUMMIED));
-  assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter"], "if an actor is added to the data, this test must meet it");
-  const ids = { avatar: "avatar_1", dummy: "dummy 0,0", biter: "biter 0,0" };
-  for (const kind of kinds) {
+  assert.deepStrictEqual(kinds, ["avatar", "dummy", "biter", "jumper"], "if an actor is added to the data, this test must meet it");
+  const ids = { avatar: "avatar_1", dummy: "dummy 0,0", biter: "biter 0,0" }; // the Jumper (issue 76, parcel 2) is spawned by no map yet, so no scene has one: it waits for parcel 3
+  for (const kind of kinds.filter((name) => ids[name] !== undefined)) {
     for (const speed of [3, 0]) {
       const result = plain(run(`
         const objects = objectsInArea(1, -6000, -6000, 6000, 6000);
@@ -5970,7 +5970,7 @@ test("253 a recipe with parts loads (issue 75, parcel 1): in a patched copy the 
   assert.doesNotThrow(() => loadGame(withCreatureParts(VALID_CREATURE_PARTS, '["body", "legs", "mouth"]')));
   // The real data (since parcel 3): the Dummy's two parts and the Biter's three, and the two actors that name parts.
   const real = plain(run(`return { table: Object.keys(DEFINITIONS.creatureParts), withParts: Object.keys(DEFINITIONS.actors).filter((id) => DEFINITIONS.actors[id].parts !== undefined) };`));
-  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs", "biter-shell", "biter-legs", "biter-mouth"], withParts: ["dummy", "biter"] });
+  assert.deepStrictEqual(real, { table: ["dummy-body", "dummy-legs", "biter-shell", "biter-legs", "biter-mouth", "jumper-shell", "jumper-springlegs"], withParts: ["dummy", "biter", "jumper"] }); // the Jumper's two since issue 76, parcel 2
 });
 
 test("254 an unknown part id in a recipe is refused when the definitions load (issue 75, parcel 1): the Dummy naming the part wings, and the part toString (found only on the prototype of an object), each stop the game with a message that names the actor and the part", () => {
@@ -6315,4 +6315,79 @@ test("271 a dash spec of a creature part that is not finite, or a count that is 
     assert.throws(() => loadGame(withDashLegs(specs)), refused, specs + " should be refused");
   }
   loadGame(withDashLegs("dashSpeed: 12, dashCharges: 1, rechargeFrames: 90"));
+});
+
+// ---- The Spring legs and the Jumper in the data (issue 76, parcel 2 of 4) ----
+
+// A Jumper made by finalizeObject with its radius (the range of its size, at `radius`) and the numbers it carries; `where` is the game.
+const JUMPER_LOOK = (radius) => `
+  const jumper = finalizeObject("jumper", { radius: ${radius}, health: { now: 60, max: 60 }, position: { x: 0, y: 0 } }, undefined, "jumper 0,0");
+  finalizeStatic(jumper); finalizeDynamic(jumper); // what spawnActor does after finalizeObject
+  if (jumper.dash) jumper.dash.charges.now = jumper.dash.charges.max; // born with the charges full
+  return { id: jumper.id, hasDash: "dash" in jumper, dash: jumper.dash ? JSON.parse(JSON.stringify(jumper.dash)) : null, tags: jumper.tags, weight: jumper.weight,
+    numbers: [finalDashSpeed(jumper), finalDashMaxCharges(jumper), finalDashRechargeFrames(jumper), finalSpeed(jumper), finalAcceleration(jumper), finalDeceleration(jumper)],
+    attacks: Object.keys(jumper.attacks) };`;
+const JUMPER_PARTS = 'parts: ["jumper-shell", "jumper-springlegs"],';
+const withJumperParts = (list) => (text) => text.replace(JUMPER_PARTS, "parts: " + list + ",");
+
+test("272 the Jumper's recipe is in the data with the Review desk's numbers (issue 76, parcel 2): it names its two parts, its own tag is enemy, its radius goes from 22 to 28, its body ignores are the Biter's, it has no ai and no attack of its own; the Shell has health 60 (twice the Biter's 30) and the tag vermin; the Spring legs have speed, acceleration and deceleration 0 and the dash of the Booster (dashSpeed 12, dashCharges 1) with a recharge of 90 frames; the weight per radius of the two parts is 100 in sum", () => {
+  const r = plain(run(`
+    const jumper = DEFINITIONS.actors.jumper, biter = DEFINITIONS.actors.biter, booster = DEFINITIONS.parts.booster.specs;
+    const shell = DEFINITIONS.creatureParts["jumper-shell"], legs = DEFINITIONS.creatureParts["jumper-springlegs"];
+    return { parts: jumper.parts, tags: jumper.tags, size: jumper.size, bodyIgnores: jumper.bodyIgnores, biterIgnores: biter.bodyIgnores, ai: "ai" in jumper.initial, attackKeys: Object.keys(jumper).filter((key) => key === "attacks"),
+      shell: shell.specs, shellTags: shell.tags, biterHealth: DEFINITIONS.creatureParts["biter-shell"].specs.health, legs: legs.specs, legsAttacks: "attacks" in legs, shellAttacks: "attacks" in shell, booster: { dashSpeed: booster.dashSpeed },
+      weightSum: shell.specs.weightPerRadius + legs.specs.weightPerRadius, version: DEFINITIONS_VERSION };`));
+  assert.deepStrictEqual(r.parts, ["jumper-shell", "jumper-springlegs"]);
+  assert.deepStrictEqual(r.tags, ["enemy"]);
+  assert.deepStrictEqual(r.size, { min: 22, max: 28 });
+  assert.deepStrictEqual(r.bodyIgnores, r.biterIgnores);
+  assert.deepStrictEqual([r.ai, r.attackKeys, r.legsAttacks, r.shellAttacks], [false, [], false, false]);
+  assert.deepStrictEqual(r.shell.health, { min: 60, max: 60 });
+  assert.strictEqual(r.shell.health.max, 2 * r.biterHealth.max);
+  assert.deepStrictEqual(r.shellTags, ["vermin"]);
+  assert.deepStrictEqual([r.legs.speed, r.legs.acceleration, r.legs.deceleration], [0, 0, 0]);
+  assert.deepStrictEqual([r.legs.dashSpeed, r.legs.dashCharges, r.legs.rechargeFrames], [12, 1, 90]);
+  assert.strictEqual(r.legs.dashSpeed, r.booster.dashSpeed, "the dash strength is the Booster's");
+  assert.strictEqual(r.weightSum, 100);
+});
+
+test("273 the Spring legs alone give the Jumper its dash (issue 76, parcel 2): a Jumper made with radius 22 and one with radius 28 are born with the dash { recharge 0, charges 1 of 1, rechargeFrames 90, speed 12 } (made the way spawnActor makes an actor), their dash numbers are 12, 1 and 90 and their speed, acceleration and deceleration 0, they are enemy and vermin, and they weigh 100 kg per radius (2200 and 2800 kg); in a copy where the Jumper has only the Spring legs, the dash numbers are the same", () => {
+  for (const radius of [22, 28]) {
+    const r = plain(run(JUMPER_LOOK(radius)));
+    assert.deepStrictEqual(r.dash, { recharge: 0, charges: { now: 1, max: 1 }, rechargeFrames: 90, speed: 12 });
+    assert.deepStrictEqual(r.numbers, [12, 1, 90, 0, 0, 0]);
+    assert.deepStrictEqual(r.tags, ["enemy", "vermin"]);
+    assert.strictEqual(r.weight, 100 * radius);
+  }
+  const alone = plain(run(JUMPER_LOOK(25), loadGame(withJumperParts('["jumper-springlegs"]'))));
+  assert.deepStrictEqual(alone.numbers, [12, 1, 90, 0, 0, 0], "the Spring legs alone should give the whole dash");
+  assert.strictEqual(alone.weight, 20 * 25);
+});
+
+test("274 a Jumper whose Spring legs are taken away has no dash (issue 76, parcel 2): in a patched copy where the Jumper names only its Shell, it is born with no dash in its state, its dash numbers are 0 and 0 and 0, and it is still enemy and vermin and weighs 80 kg per radius", () => {
+  const r = plain(run(JUMPER_LOOK(25), loadGame(withJumperParts('["jumper-shell"]'))));
+  assert.strictEqual(r.hasDash, false, "no Spring legs, so no dash");
+  assert.deepStrictEqual(r.numbers, [0, 0, 0, 0, 0, 0]);
+  assert.deepStrictEqual(r.tags, ["enemy", "vermin"]);
+  assert.strictEqual(r.weight, 80 * 25);
+});
+
+test("275 the Jumper's only attack is the body slam (issue 76, parcel 2): the attacks of a Jumper made are exactly bodySlam (no bite, no hitbox), its slam grows with its weight (blunt 0.001 x weight), and a Biter still has its bite besides", () => {
+  const r = plain(run(`${JUMPER_LOOK(25)}`.replace("return {", "const biter = finalizeObject(\"biter\", { radius: 16, health: { now: 30, max: 30 }, position: { x: 0, y: 0 } }, undefined, \"biter 0,0\"); return { biterAttacks: Object.keys(biter.attacks), slam: jumper.attacks.bodySlam.base, ")));
+  assert.deepStrictEqual(r.attacks, ["bodySlam"]);
+  assert.deepStrictEqual(r.slam, { blunt: 0.001 * 100 * 25 });
+  assert.deepStrictEqual(r.biterAttacks, ["bodySlam", "bite"]);
+});
+
+test("276 the validator takes the Jumper's data and refuses what the rules refuse (issue 76, parcel 2): the Jumper naming a part that does not exist, the Spring legs with a spec no rule reads, with a dashSpeed that is not finite and with a dashCharges or rechargeFrames that is not whole, each stop the game with a message that names the part; the real Spring legs load", () => {
+  assert.match(loadError(withJumperParts('["jumper-shell", "jumper-wings"]')) ?? "", /The actor jumper has the part "jumper-wings", which is not a creature part/);
+  const legs = 'dashSpeed: 12, dashCharges: 1, rechargeFrames: 90';
+  for (const [specs, refused] of [
+    ["dashSpede: 12, dashCharges: 1, rechargeFrames: 90", /The creature part jumper-springlegs has the spec dashSpede, which no rule reads/],
+    ["dashSpeed: NaN, dashCharges: 1, rechargeFrames: 90", /dashSpeed of the creature part jumper-springlegs must be a finite number/],
+    ["dashSpeed: Infinity, dashCharges: 1, rechargeFrames: 90", /dashSpeed of the creature part jumper-springlegs must be a finite number/],
+    ["dashSpeed: 12, dashCharges: 1.5, rechargeFrames: 90", /dashCharges of the creature part jumper-springlegs.*whole/],
+    ["dashSpeed: 12, dashCharges: 1, rechargeFrames: 90.5", /rechargeFrames of the creature part jumper-springlegs.*whole/],
+  ]) assert.match(loadError((text) => text.replace(legs, specs)) ?? "", refused, specs);
+  assert.strictEqual(loadError(null), null);
 });

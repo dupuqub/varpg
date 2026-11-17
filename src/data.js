@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 68;
+const DEFINITIONS_VERSION = 69;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -111,6 +111,31 @@ const DEFINITIONS = {
         move: {
           direction: { x: 0, y: 0 }, // what it wants: toward the avatar, or still while it holds the freeze
           velocity: { x: 0, y: 0 }, // how it is really moving: it is born still and speeds up
+        },
+      },
+    },
+
+    // The Jumper (the user, 2026-11-16 and 17, issue 76: "uma criatura nova que anda em bursts, tipo um sapo pulando"; bigger than the
+    // Biter, it moves only by dashing toward the avatar, and its only attack is the jump: the body slam, which every body has).
+    // Everything here is the Review desk's guess (the user said "pode rodar o planejamento" without answering), to tune by playing.
+    // size: guess, 22 to 28, bigger than the Biter's 12 to 20.
+    // parts (issue 76, parcel 2): its health, tag vermin, dash, speed, acceleration, deceleration and weight come from its parts,
+    //   Shell and Spring legs (DEFINITIONS.creatureParts, where the numbers and their reasons are). Its own tag is enemy, like the Biter's.
+    // bodyIgnores: the Biter's. No attack of its own (no bite, no hitbox): the body slam is its attack.
+    // No ai yet: nothing in this parcel spawns it or makes it move; its mind comes in parcel 3.
+    jumper: {
+      tags: ["enemy"],
+      bodyIgnores: ["enemy", "object"],
+      name: "Jumper",
+      size: { min: 22, max: 28 },
+      parts: ["jumper-shell", "jumper-springlegs"],
+      initial: {
+        position: { x: 0, y: 0 }, // set by the seed
+        cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
+        crushes: false, // the same potential behavior as every actor's, off
+        move: {
+          direction: { x: 0, y: 0 }, // what it wants: still until its mind exists
+          velocity: { x: 0, y: 0 }, // how it is really moving: it is born still
         },
       },
     },
@@ -442,6 +467,19 @@ const DEFINITIONS = {
         },
       },
     },
+    // The Jumper's Shell (issue 76, parcel 2; every number here is a guess of the Review desk, to tune by playing).
+    // health: guess, 60, twice the Biter's 30: it is bigger, and it stands still between jumps, so it is easy to shoot.
+    // tags: vermin, like the Biter's Shell. Its own tag, enemy, stays in its recipe.
+    // weightPerRadius: guess, 80 of the Jumper's 100 kg per pixel of radius (the same total as the Biter's, so it is heavier only by
+    //   being bigger: 2200 to 2800 kg); the split between Shell and Spring legs is a guess, only the sum (100) is fixed.
+    "jumper-shell": { name: "Shell", specs: { health: { min: 60, max: 60 }, weightPerRadius: 80 }, tags: ["vermin"] },
+    // The Jumper's Spring legs (issue 76, parcel 2; guesses of the Review desk): the dash, and no walking.
+    // dashSpeed: the Booster's, 12 (the same dash as the avatar's: the formula is one for every actor; with a top speed of zero it
+    //   slides to a stop, the button-football look the user described).
+    // dashCharges: guess, 1. rechargeFrames: guess, 90 (a jump every second and a half; the stillness between jumps is what the player reads).
+    // speed, acceleration, deceleration: 0 (the user: "ele tem aceleração zero"); it moves only by dashing.
+    // weightPerRadius: guess, 20 of the 100 (see the Shell).
+    "jumper-springlegs": { name: "Spring legs", specs: { speed: 0, acceleration: 0, deceleration: 0, dashSpeed: 12, dashCharges: 1, rechargeFrames: 90, weightPerRadius: 20 } },
   },
 
   // The blueprint a new run starts with: the nine parts of the old project (the "knight", 5000 kg).
