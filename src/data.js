@@ -21,7 +21,7 @@
 
 // Raise this number whenever any definition changes. Every state carries the
 // version it was made with, so a state from another version can be refused.
-const DEFINITIONS_VERSION = 72;
+const DEFINITIONS_VERSION = 73;
 
 const DEFINITIONS = {
   // The types of damage (the user's idea, 2026-11-11: a hit is a packet with one amount per type, and the target resists
@@ -122,6 +122,7 @@ const DEFINITIONS = {
     // parts (issue 76, parcel 2): its health, tag vermin, dash, speed, acceleration, deceleration and weight come from its parts,
     //   Shell and Spring legs (DEFINITIONS.creatureParts, where the numbers and their reasons are). Its own tag is enemy, like the Biter's.
     //   The Carapace (issue 81, parcel B): blunt resistance only while its jump is active (see the part).
+    //   The Spring legs' slam (issue 88): its body slam times 8 only while its jump is active (see the part).
     // bodyIgnores: the Biter's. No attack of its own (no bite, no hitbox): the body slam is its attack.
     // No ai in its recipe: its mind comes from its Spring legs (issue 76, parcel 3: their `jump`, the target of the jump), written into the
     // Jumper when it is made (finalizeObject), so a Jumper without its Spring legs has no mind and no dash. No map spawns it yet.
@@ -130,7 +131,7 @@ const DEFINITIONS = {
       bodyIgnores: ["enemy", "object"],
       name: "Jumper",
       size: { min: 22, max: 28 },
-      parts: ["jumper-shell", "jumper-springlegs", "jumper-carapace"],
+      parts: ["jumper-shell", "jumper-springlegs", "jumper-springlegs-slam", "jumper-carapace"],
       initial: {
         position: { x: 0, y: 0 }, // set by the seed
         cells: { from: { x: 0, y: 0 }, to: { x: 0, y: 0 } }, // the grid cells it covers, written every frame
@@ -504,6 +505,20 @@ const DEFINITIONS = {
     //   piñata [...] ainda é um pulo em atividade, pelo menos para o Jumper". A still Jumper (key off) takes a body slam whole.
     // weightPerRadius: guess, 0 (not written: a part with `while` may have only resistance in its specs, and a part that gives no weight
     //   weighs 0), so the Jumper's weight, and so its body slam, stay as they are (100 kg per pixel of radius, Shell and Spring legs).
+    // The Spring legs' slam (the user, 2026-11-17, issue 88): the jump hurts more than a bite. "Tudo vem de uma peça": the Spring legs
+    //   multiply the damage the Jumper's body does only while the jump key is on. Why: a standing avatar in Chamber 3 took 2.56 from a
+    //   jump on average against 9.16 from a bite (the table of issue 88), and the user played it: "não consegui sentir o impacto do dano
+    //   do pulo"; his word: "eu preciso que dê mais dano que a mordida."
+    // bodySlamMultiplier: 8 (the field of a creature part that multiplies its actor's body slam, src/sim.js creatureBodySlamMultiplier;
+    //   the packet of the slam is multiplied by the product of the multipliers of the parts that count at the hit). The user: "concordo
+    //   com o x8 dinâmico, sem dano mínimo": dynamic, so the damage keeps growing with the impact (a graze stays small), and no minimum.
+    //   Only the Jumper's attack: its defense is the Carapace, the slam of every other body (constants.bodySlam) is unchanged.
+    // while: "dashing", as the Carapace: only while the Jumper's key of the jump (dash.active) is on; standing or pushed (key off), its
+    //   body hits as any body. Its own part, not a spec of the Spring legs, because a part has one `while` for all its specs and the
+    //   Spring legs' dash must count always (the smaller change: the validator and the dash stay as they were); the name says it is theirs.
+    // weightPerRadius: guess, 0 (not written), the same guess as the Carapace's: the Jumper's weight, and so its slam before the
+    //   multiplier, stay as they are.
+    "jumper-springlegs-slam": { name: "Spring legs' slam", specs: { bodySlamMultiplier: 8 }, while: "dashing" },
     "jumper-carapace": { name: "Carapace", specs: { resistance: { blunt: 250 } }, while: "dashing" },
   },
 

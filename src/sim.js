@@ -394,16 +394,22 @@ function checkNoWeight(amount, where) {
 
 // The specs a part of creatures can have (issue 75): the values of a creature recipe that a part may give. Anything else is refused
 // when the definitions load, like PART_SPECS for the parts of the avatar.
-const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius", ...DASH_SPECS, "resistance"];
+const CREATURE_PART_SPECS = ["health", "speed", "acceleration", "deceleration", "weightPerRadius", ...DASH_SPECS, "resistance", "bodySlamMultiplier"];
+
+// The specs a creature part with a condition `while` may have, and nothing else (issue 81, parcel B: resistance; issue 88: the
+// multiplier of the body slam): what is computed at the moment of a hit, so it can follow the condition without anything in the state.
+const CONDITIONAL_PART_SPECS = ["resistance", "bodySlamMultiplier"];
 
 // The parts of creatures and the recipes that name them (issue 75, parcel 1): called by assertValidDefinitions, with its check of a
 // list of tags. A recipe's `parts` is a list of ids of DEFINITIONS.creatureParts (the avatar has none: its parts are its blueprint);
 // a part has a name, optional specs of CREATURE_PART_SPECS with finite values (health is { min, max }, whole, 0 or more, min not
 // above max; weightPerRadius is whole kg, 0 or more, the weight rule; dashCharges and rechargeFrames are counts, whole, 0 or more
 // (issue 76); resistance is points per known damage type, finite and above minus the resistance scale, as the avatar's parts (issue 81);
+// bodySlamMultiplier is a finite number above 0 (issue 88: 0 would erase the slam, below 0 would turn it over; no upper bound);
 // the others are numbers, 0 or more), optional tags (a list of words), optional attacks (checked with the attacks of the recipes, above
 // in assertValidDefinitions) and an optional condition `while` (issue 81, parcel B: one of CREATURE_PART_CONDITIONS), allowed for now
-// only on a part whose specs are resistance and nothing else (no other spec, no attack, no jump, no tag, which would count always).
+// only on a part whose specs are among CONDITIONAL_PART_SPECS and nothing else (no other spec, no attack, no jump, no tag, which would
+// count always).
 function assertValidCreatureParts(tagList) {
   const parts = DEFINITIONS.creatureParts;
   for (const [id, part] of Object.entries(parts)) {
@@ -429,6 +435,8 @@ function assertValidCreatureParts(tagList) {
           if (!Number.isFinite(points)) throw new Error("The resistance of " + where + " to " + type + " must be a finite number, and it is " + points);
           if (points <= -scale) throw new Error("The resistance of " + where + " to " + type + " must be above minus the resistance scale (" + -scale + "), and it is " + points);
         }
+      } else if (name === "bodySlamMultiplier") {
+        if (!(typeof value === "number" && Number.isFinite(value) && value > 0)) throw new Error("The spec bodySlamMultiplier of " + where + " must be a finite number above 0, and it is " + JSON.stringify(value));
       } else if (!(typeof value === "number" && Number.isFinite(value) && value >= 0)) {
         throw new Error("The spec " + name + " of " + where + " must be a finite number, 0 or more, and it is " + value);
       }
@@ -437,13 +445,14 @@ function assertValidCreatureParts(tagList) {
     for (const [name, attack] of Object.entries(part.attacks ?? {})) tagList(attack.ignores, "the ignores of the attack " + name + " of " + where);
     // The jump (issue 76, parcel 3): only its target, checked like the target of an attack.
     if (part.jump !== undefined) checkTarget(part.jump?.target, "the jump of " + where);
-    // The condition (issue 81, parcel B): a known one, and for now only on a part whose specs are resistance and that gives nothing else.
+    // The condition (issue 81, parcel B; issue 88): a known one, and for now only on a part whose specs are among CONDITIONAL_PART_SPECS
+    // (resistance, bodySlamMultiplier) and that gives nothing else.
     if (part.while !== undefined) {
       if (!Object.hasOwn(CREATURE_PART_CONDITIONS, part.while)) throw new Error("The while of " + where + " must be one of " + Object.keys(CREATURE_PART_CONDITIONS).join(", ") + ", and it is " + JSON.stringify(part.while));
       const specs = Object.keys(part.specs ?? {});
-      const others = [...specs.filter((name) => name !== "resistance"), ...["attacks", "jump", "tags"].filter((key) => part[key] !== undefined)];
-      if (!specs.includes("resistance") || others.length > 0) {
-        throw new Error("The while of " + where + " is allowed only on a part whose specs are resistance and nothing else, and it has " + (others.length > 0 ? others.join(", ") : "no resistance"));
+      const others = [...specs.filter((name) => !CONDITIONAL_PART_SPECS.includes(name)), ...["attacks", "jump", "tags"].filter((key) => part[key] !== undefined)];
+      if (!specs.some((name) => CONDITIONAL_PART_SPECS.includes(name)) || others.length > 0) {
+        throw new Error("The while of " + where + " is allowed only on a part whose specs are " + CONDITIONAL_PART_SPECS.join(" or ") + " and nothing else, and it has " + (others.length > 0 ? others.join(", ") : "no " + CONDITIONAL_PART_SPECS.join(" or ")));
       }
     }
   }
@@ -758,8 +767,8 @@ function finalResistance(actor, blueprint, type) {
 
 // The conditions a creature part may put on its specs (issue 81, parcel B): the field `while` of the part names one, and its specs
 // count only while it holds for the actor. "dashing": while the actor's key of the jump is on (dash.active, set by the start of a dash
-// and cleared when the speed is back at the top speed; see releaseDashKey). For now only a part whose specs are resistance may have it
-// (assertValidCreatureParts).
+// and cleared when the speed is back at the top speed; see releaseDashKey). For now only a part whose specs are resistance or
+// bodySlamMultiplier may have it (CONDITIONAL_PART_SPECS, assertValidCreatureParts).
 const CREATURE_PART_CONDITIONS = { dashing: (actor) => actor.dash !== undefined && actor.dash.active === true };
 
 // Whether the specs of a creature part count now for this actor: always, for a part with no `while`; else while its condition holds.
@@ -778,6 +787,19 @@ function creatureResistance(actor, type) {
     if (partCounts(actor, part)) sum += part.specs?.resistance?.[type] ?? 0;
   }
   return sum;
+}
+
+// The multiplier of a creature's body slam (issue 88: the Jumper's Spring legs' slam, x8 only while it jumps): the product of the
+// `bodySlamMultiplier` of the parts of its recipe whose condition holds now (partCounts); 1 for a thing whose parts give none, and for
+// the avatar and the objects, which have no creature parts. Computed when a hit needs it (finalAttack), from the key of the jump and the
+// frozen data, so nothing new goes in the state, as creatureResistance. It is the attacker's: the target's parts never change the slam.
+function creatureBodySlamMultiplier(actor) {
+  let product = 1;
+  for (const id of findDefinition(actor.type)?.parts ?? []) {
+    const part = DEFINITIONS.creatureParts[id];
+    if (partCounts(actor, part)) product *= part.specs?.bodySlamMultiplier ?? 1;
+  }
+  return product;
 }
 
 // Writes the resistance of every type into the actor (an actor that carries one starts with { } in its recipe).
@@ -837,14 +859,17 @@ function finalAttackNow(actor, name, attack, type) {
 // gives an empty packet, and so does an impact of 0 or less. An empty packet does no damage, but it is still a hit (the user,
 // 2026-11-14, issue 46): landHit writes its line (total 0), the target is marked and a pierce is spent; only the shield's wait is not
 // restarted (it is not damage).
-// Nothing here is about the dash: any hit counts, whatever gave the speed. Whether a contact is a hit at all (the
-// minimum impact) is decided where the collision is. Pure.
+// Whatever gave the speed, any hit counts. Whether a contact is a hit at all (the minimum impact) is decided where the collision is.
+// The packet is then multiplied by the attacker's creatureBodySlamMultiplier (issue 88): 1 for every body but a Jumper whose key of the
+// jump is on, where the Spring legs' slam makes it 8; a factor of 1 leaves every amount as it was, bit for bit. No minimum (the user:
+// "sem dano mínimo"). Pure.
 function finalAttack(attacker, hit) {
   const packet = {};
   if (hit.impact <= 0) return packet;
   const { now } = attacker.attacks.bodySlam;
+  const multiplier = creatureBodySlamMultiplier(attacker);
   for (const type of DEFINITIONS.damageTypes) {
-    if (now[type] > 0) packet[type] = (now[type] * hit.impact) / DEFINITIONS.constants.bodySlam.referenceImpact;
+    if (now[type] > 0) packet[type] = ((now[type] * hit.impact) / DEFINITIONS.constants.bodySlam.referenceImpact) * multiplier;
   }
   return packet;
 }
