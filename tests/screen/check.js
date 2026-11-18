@@ -4,7 +4,7 @@
 //   node tests/screen/check.js T2      the text of the COMBAT REPORT (no browser)
 //   node tests/screen/check.js T3      the death on the screen (a real browser: Chrome, driven by puppeteer-core)
 //   node tests/screen/check.js T4      the line of the journal that says the mission was aborted (a real browser too)
-//   node tests/screen/check.js T5      Chamber 3 on the menu and in play, and a Jumper drawn as a green square (a real browser too)
+//   node tests/screen/check.js T5      Chamber 3 on the menu and in play, and a Jumper drawn as a green circle with a square mark (a real browser too)
 //
 // It prints one line per thing checked ("ok" or "NOT OK") and ends with CHECK PASSED or CHECK FAILED (exit code 1).
 // These are not tests of the rules (those are tests/agent/) and `node --test` does not run this file.
@@ -219,7 +219,7 @@ async function checkT4() {
   await browser.close();
 }
 
-// T5 (issue 78): Chamber 3 is on the menu, plays like Chamber 2 (pause, history, ABORT MISSION) and its Jumpers are drawn as green squares,
+// T5 (issue 78): Chamber 3 is on the menu, plays like Chamber 2 (pause, history, ABORT MISSION) and its Jumpers are drawn as green circles with a darker square inside,
 // told from the red circles of the Biters by color and by shape. The colors are read from the pixels of the canvas.
 async function checkT5() {
   const { browser, page, errors, wait, kill } = await openGame("screen-chamber-3");
@@ -249,15 +249,16 @@ async function checkT5() {
       if (!jumper) return null;
       const at = onScreen(jumper);
       const pixel = (x, y) => Array.from(canvas.getContext("2d").getImageData(Math.round(x), Math.round(y), 1, 1).data).slice(0, 3);
-      return { radius: jumper.radius, center: pixel(at.x, at.y), corner: pixel(at.x + jumper.radius - 3, at.y + jumper.radius - 3) };
+      return { radius: jumper.radius, center: pixel(at.x, at.y), ring: pixel(at.x + jumper.radius * 0.9, at.y), corner: pixel(at.x + jumper.radius - 3, at.y + jumper.radius - 3) };
     });
     if (seen === null) { await page.keyboard.press("p"); await wait(250); }
   }
   expect(seen !== null, "a Jumper came into the open part of the screen to be looked at");
   if (seen !== null) {
-    const green = (rgb) => Math.abs(rgb[0] - 79) < 6 && Math.abs(rgb[1] - 209) < 6 && Math.abs(rgb[2] - 122) < 6;
-    expect(green(seen.center), "the center of the Jumper is green: " + seen.center.join(","));
-    expect(green(seen.corner), "the corner of its square is green too (a circle would be black there): " + seen.corner.join(","));
+    const near = (rgb, want) => rgb.every((value, i) => Math.abs(value - want[i]) < 6);
+    expect(near(seen.center, [31, 107, 59]), "the center of the Jumper is the color of the square mark: " + seen.center.join(","));
+    expect(near(seen.ring, [79, 209, 122]), "a point between the square and the circle is green: " + seen.ring.join(","));
+    expect(!near(seen.corner, [79, 209, 122]) && !near(seen.corner, [31, 107, 59]), "the corner of the old square, outside the circle, is not the Jumper's: " + seen.corner.join(","));
     expect(seen.radius > 18, "the Jumper is bigger than a Biter (radius " + seen.radius + " against 18 or less)");
   }
 
