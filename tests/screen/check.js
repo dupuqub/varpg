@@ -3,7 +3,8 @@
 //   node tests/screen/check.js T1      every object type has a color (no browser)
 //   node tests/screen/check.js T2      the text of the COMBAT REPORT (no browser)
 //   node tests/screen/check.js T3      the death on the screen (a real browser: Chrome, driven by puppeteer-core)
-//   node tests/screen/check.js T4      the line of the combat log that says the mission was aborted (a real browser too)
+//   node tests/screen/check.js T4      the line of the journal that says the mission was aborted (a real browser too)
+//   node tests/screen/check.js T5      Chamber 3 on the menu and in play, and a Jumper drawn as a green square (a real browser too)
 //
 // It prints one line per thing checked ("ok" or "NOT OK") and ends with CHECK PASSED or CHECK FAILED (exit code 1).
 // These are not tests of the rules (those are tests/agent/) and `node --test` does not run this file.
@@ -80,8 +81,8 @@ function checkT2() {
   }
 }
 
-// Opens the game in Chrome and enters Chamber 2. kill() leaves the avatar with no health, so the next step aborts the mission.
-async function openGame() {
+// Opens the game in Chrome and enters Chamber 2 (or the screen it is given). kill() leaves the avatar with no health, so the next step aborts the mission.
+async function openGame(screenId = "screen-chamber-2") {
   const puppeteer = require("puppeteer-core");
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new", args: ["--no-sandbox"] });
   const page = await browser.newPage();
@@ -91,7 +92,7 @@ async function openGame() {
   const kill = () => page.evaluate(() => { state.actors.find((actor) => actor.id === AVATAR_ID).health.now = 0; });
   await page.goto("file://" + path.join(ROOT, "index.html"));
   await page.click('[data-goto="screen-chambers"]');
-  await page.click('[data-goto="screen-chamber-2"]');
+  await page.click(`[data-goto="${screenId}"]`);
   await wait(700);
   return { browser, page, errors, wait, kill };
 }
@@ -218,10 +219,68 @@ async function checkT4() {
   await browser.close();
 }
 
-const CHECKS = { T1: checkT1, T2: checkT2, T3: checkT3, T4: checkT4 };
+// T5 (issue 78): Chamber 3 is on the menu, plays like Chamber 2 (pause, history, ABORT MISSION) and its Jumpers are drawn as green squares,
+// told from the red circles of the Biters by color and by shape. The colors are read from the pixels of the canvas.
+async function checkT5() {
+  const { browser, page, errors, wait, kill } = await openGame("screen-chamber-3");
+  const three = "screen-chamber-3";
+  expect(await page.$eval('[data-goto="screen-chamber-3"]', (button) => button.textContent.includes("CHAMBER 3")), "the menu has the entry of Chamber 3");
+  await wait(1500);
+  const counts = await page.evaluate(() => ({
+    frame: state.frame,
+    jumpers: state.actors.filter((actor) => actor.type === "jumper").length,
+    biters: state.actors.filter((actor) => actor.type === "biter").length,
+  }));
+  expect(counts.frame > 0 && counts.jumpers === 4 && counts.biters >= 40, `Chamber 3 has its 4 Jumpers and the Biters of Chamber 2 (jumpers ${counts.jumpers}, biters ${counts.biters})`);
+
+  // Wait for a Jumper to come into the open part of the screen, then pause so the picture holds still and read its pixels.
+  let seen = null;
+  for (let i = 0; i < 80 && seen === null; i++) {
+    await page.keyboard.press("p");
+    seen = await page.evaluate(() => {
+      const avatar = state.actors.find((actor) => actor.id === AVATAR_ID);
+      const canvas = document.getElementById("canvas-3");
+      const onScreen = (actor) => ({ x: actor.position.x - avatar.position.x + canvas.width / 2, y: actor.position.y - avatar.position.y + canvas.height / 2 });
+      const free = (actor) => state.actors.every((other) => other === actor || Math.hypot(other.position.x - actor.position.x, other.position.y - actor.position.y) > actor.radius * 2 + other.radius + 4);
+      const jumper = state.actors.find((actor) => {
+        const at = onScreen(actor);
+        return actor.type === "jumper" && free(actor) && at.x > 300 && at.x < canvas.width - 300 && at.y > 200 && at.y < canvas.height - 300;
+      });
+      if (!jumper) return null;
+      const at = onScreen(jumper);
+      const pixel = (x, y) => Array.from(canvas.getContext("2d").getImageData(Math.round(x), Math.round(y), 1, 1).data).slice(0, 3);
+      return { radius: jumper.radius, center: pixel(at.x, at.y), corner: pixel(at.x + jumper.radius - 3, at.y + jumper.radius - 3) };
+    });
+    if (seen === null) { await page.keyboard.press("p"); await wait(250); }
+  }
+  expect(seen !== null, "a Jumper came into the open part of the screen to be looked at");
+  if (seen !== null) {
+    const green = (rgb) => Math.abs(rgb[0] - 79) < 6 && Math.abs(rgb[1] - 209) < 6 && Math.abs(rgb[2] - 122) < 6;
+    expect(green(seen.center), "the center of the Jumper is green: " + seen.center.join(","));
+    expect(green(seen.corner), "the corner of its square is green too (a circle would be black there): " + seen.corner.join(","));
+    expect(seen.radius > 18, "the Jumper is bigger than a Biter (radius " + seen.radius + " against 18 or less)");
+  }
+
+  await page.keyboard.press("p"); // play again (the loop above paused it)
+  const paused = await page.evaluate(() => paused);
+  if (paused) await page.keyboard.press("p");
+  await kill();
+  await wait(400);
+  const dead = await page.evaluate((id) => {
+    const alert = document.querySelector(`#${id} [data-control="aborted"]`);
+    return { mission: state.mission, alert: alert === null ? "none" : alert.hidden ? "hidden" : "shown", status: document.querySelector(`#${id} [data-control="status"]`).textContent, backOff: document.querySelector(`#${id} [data-control="back"]`).disabled };
+  }, three);
+  expect(dead.mission === "aborted" && dead.alert === "shown" && dead.status.includes("ABORTED"), "Chamber 3: the death aborts the mission and shows ABORT MISSION");
+  await page.click(`#${three} [data-control="back"]`);
+  expect(await page.evaluate(() => viewIndex < runHistory.snaps.length - 1), "Chamber 3: back walks the history after the death");
+  expect(errors.length === 0, "no error on the page" + (errors.length ? ": " + errors[0] : ""));
+  await browser.close();
+}
+
+const CHECKS = { T1: checkT1, T2: checkT2, T3: checkT3, T4: checkT4, T5: checkT5 };
 const which = process.argv[2];
 if (!CHECKS[which]) {
-  console.log("usage: node tests/screen/check.js T1|T2|T3|T4");
+  console.log("usage: node tests/screen/check.js T1|T2|T3|T4|T5");
   process.exit(2);
 }
 Promise.resolve()

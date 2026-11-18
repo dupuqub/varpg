@@ -1,4 +1,4 @@
-// Screen navigation and the loop of the chambers that are played (1 and 2).
+// Screen navigation and the loop of the chambers that are played (1, 2 and 3).
 
 const screens = document.querySelectorAll(".screen");
 
@@ -31,6 +31,7 @@ document.addEventListener("keydown", (event) => {
 const CHAMBERS = {
   "screen-chamber-1": { canvasId: "canvas", blueprint: DEFINITIONS.starterBlueprint, create: createChamber1State },
   "screen-chamber-2": { canvasId: "canvas-2", blueprint: DEFINITIONS.combatBlueprint, create: createChamber2State },
+  "screen-chamber-3": { canvasId: "canvas-3", blueprint: DEFINITIONS.combatBlueprint, create: createChamber3State }, // Chamber 2 plus Jumpers (issue 78)
 };
 
 const STEP_MS = 1000 / 60; // 60 steps per second
@@ -198,7 +199,7 @@ function updateControls() {
   part("toggle").disabled = aborted;
   part("back").disabled = viewIndex === 0;
   part("forward").disabled = aborted && shownIsNewest;
-  const alert = part("aborted"); // only Chamber 2 has one
+  const alert = part("aborted"); // only Chambers 2 and 3 have one
   if (alert) alert.hidden = !aborted;
   // FRAME is the frame of the game; HISTORY is the place of the shown snap among the saved ones (1 is the oldest).
   part("status").textContent = (aborted ? "ABORTED \u00B7 " : "") + (paused ? "PAUSED \u00B7 " : "") + "FRAME " + state.frame + " \u00B7 HISTORY " + (viewIndex + 1) + "/" + runHistory.snaps.length;
